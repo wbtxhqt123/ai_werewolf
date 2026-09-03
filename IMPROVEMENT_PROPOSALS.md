@@ -21,31 +21,50 @@ The codebase was split between two competing paradigms:
 
 ---
 
-## 2. LLM Controller Robustness & Context Formatting [PENDING]
+## 2. LLM Controller Robustness & Context Formatting [COMPLETED]
 
 ### Current Issues
 1. **Fragile JSON Extraction (`llm_player/controller.py`):**
    - Directly calls `json.loads(response_str)`.
    - When modern LLMs wrap output in markdown fences (````json ... ````) or include conversational preambles, parsing crashes.
    - The retry mechanism (3 attempts) blindly repeats the exact same prompt with no error feedback.
-2. **Context Serialization Bug:**
+2. **Context Serialization Bug [RESOLVED]:**
    - In `_build_status_prompt()`:
      ```python
      visible_log = "\n".join([f"- {log_entry.message}" for log_entry in player.logs])
      ```
-   - Since `LogEntry.message` is stored as a dictionary `{"en": "...", "zh": "..."}`, LLMs receive raw Python dictionary string representations (`"- {'en': '...', 'zh': '...'}"`) instead of clean localized text.
-3. **Hardcoded Fallbacks:**
-   - `RandomController.get_speech()` always outputs Chinese (`"我是AI玩家。我在努力寻找狼人。"`) regardless of the game language configuration.
+   - Since `LogEntry.message` is stored as a dictionary `{"en": "...", "zh": "..."}`, LLMs received raw Python dictionary string representations (`"- {'en': '...', 'zh': '...'}"`) instead of clean localized text.
+   - **Fixed:** Added `LogEntry.get_text(language)` and updated prompt builders to deliver clean language-matched strings.
+3. **Hardcoded Fallbacks [RESOLVED]:**
+   - `RandomController.get_speech()` always output Chinese (`"我是AI玩家。我在努力寻找狼人。"`) regardless of the game language configuration.
 
 ### Proposed Improvements
-- [ ] Implement markdown fence stripping and regex JSON extraction (`re.search(r"\{[\s\S]*\}", text)`).
-- [ ] Provide feedback to the LLM upon decode failure (e.g., "Your previous output was not valid JSON. Please return strictly valid JSON.").
-- [ ] Extract localized text matching `controller.language` when building prompt contexts.
-- [ ] Localize fallback speeches in `RandomController`.
+- [x] Implement markdown fence stripping, regex JSON extraction, and balanced brace scanner (`extract_json()`).
+- [x] Provide corrective error feedback to the LLM upon decode failure in subsequent retry attempts.
+- [x] Extract localized text matching `controller.language` when building prompt contexts (`LogEntry.get_text()`).
+- [x] Localize fallback speeches in `RandomController` according to controller or game language.
 
 ---
 
-## 3. Dependency Decoupling & Server Startup Performance [PENDING]
+## 3. Log System, Memory Synchronization & Information Privacy [COMPLETED]
+
+### Issues Resolved
+1. **Dusk Reflection Race Condition (Night Amnesia):**
+   - Previously, `DayEndState` cleared `player.logs` immediately and launched background summarization without waiting. AI players acting on Night 2 had empty logs and stale memories.
+   - **Fixed (Option B):** Implemented synchronized parallel summarization with a bounded barrier (`concurrent.futures.wait`). Day logs are only purged after successful summarization, with graceful fallback to retain raw logs if LLM calls timeout.
+2. **AI Thought Privacy in Live Play:**
+   - Enforced privacy in `_is_visible()` so `LogType.THOUGHT` is never leaked to human players during matches, while preserving all thoughts in `game_log` and JSONL archives for post-game debriefing and evaluation.
+   - Added `PLAYER_THINKING` and `PLAYER_DONE_THINKING` events to power card animation indicators without revealing thought text.
+3. **Web Controller Log Delivery & Slicing:**
+   - Connected `game_instance.add_log_listener(web_controller.add_log)` so web players reliably receive initial and live logs.
+   - Replaced raw log slicing with a synchronized `visible_logs` queue to prevent duplicate or skipped entries during long-polling.
+4. **Single Source of Truth for Deaths and Votes:**
+   - Added deduplication to `record_death()` and unified domain event dispatches (`PlayerDied`, `PlayerVoted`).
+   - Covered all behaviors in `test_logging_system.py`.
+
+---
+
+## 4. Dependency Decoupling & Server Startup Performance [PENDING]
 
 ### Current Issues
 - `requirements.txt` only declares:
@@ -69,7 +88,7 @@ The codebase was split between two competing paradigms:
 
 ---
 
-## 4. Web Concurrency & Session Management [PENDING]
+## 5. Web Concurrency & Session Management [PENDING]
 
 ### Current Issues
 1. **Unbounded Blocking:**
@@ -86,7 +105,7 @@ The codebase was split between two competing paradigms:
 
 ---
 
-## 5. Game Logic Consistency & Automated Testing [IN PROGRESS]
+## 6. Game Logic Consistency & Automated Testing [IN PROGRESS]
 
 ### Current Issues & Progress
 1. **Subclass Polymorphism Discrepancy:**

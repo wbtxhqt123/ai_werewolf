@@ -251,6 +251,9 @@ class RandomController(Controller):
     more natural.
     """
 
+    def __init__(self, language: str = "zh"):
+        self.language = language
+
     def _think(self):
         """Simulates a short delay to make the AI's actions less instantaneous."""
         think_time = random.uniform(1, 3)
@@ -259,7 +262,11 @@ class RandomController(Controller):
 
     def get_speech(self, player: Player) -> str:
         self._think()
-        # Simple placeholder speech
+        lang = getattr(self, "language", "zh")
+        if hasattr(self, "game") and getattr(self.game, "language", None):
+            lang = self.game.language
+        if lang == "en":
+            return "I am an AI player. I'm trying to find the werewolves."
         return "我是AI玩家。我在努力寻找狼人。"
 
     def get_vote(self, player: Player, potential_targets: list[Player]) -> Player | None:

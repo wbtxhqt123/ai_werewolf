@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import random
+import re
 from typing import TYPE_CHECKING, Any
 import os
 from openai import OpenAI
@@ -130,6 +131,94 @@ class MockLLMClient:
         return json.dumps(response)
 
 
+def extract_json(response_str: str) -> dict:
+    """Extracts and parses a JSON dictionary from an LLM response string.
+
+    Handles markdown code fences (```json ... ```), conversational preambles/postambles,
+    and embedded JSON objects.
+
+    Args:
+        response_str: The raw string response from the LLM.
+
+    Returns:
+        The parsed dictionary.
+
+    Raises:
+        json.JSONDecodeError: If no valid JSON dictionary can be extracted.
+    """
+    if not response_str or not isinstance(response_str, str):
+        raise json.JSONDecodeError("Response is empty or not a string", str(response_str), 0)
+
+    text = response_str.strip()
+
+    # 1. Try direct parsing
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Extract from markdown code fences: ```json ... ``` or ``` ... ```
+    fence_pattern = r"```(?:json)?\s*([\s\S]*?)\s*```"
+    fence_matches = re.findall(fence_pattern, text, re.IGNORECASE)
+    for block in fence_matches:
+        try:
+            parsed = json.loads(block.strip())
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+    # 3. Regex extraction: search for outermost JSON object candidate
+    brace_match = re.search(r"\{[\s\S]*\}", text)
+    if brace_match:
+        try:
+            parsed = json.loads(brace_match.group(0))
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+    # 4. Balanced brace scan for embedded JSON objects (handles commentary around braces)
+    start = -1
+    depth = 0
+    in_string = False
+    escape = False
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            if in_string:
+                escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start != -1:
+                    candidate = text[start : i + 1]
+                    try:
+                        parsed = json.loads(candidate)
+                        if isinstance(parsed, dict):
+                            return parsed
+                    except json.JSONDecodeError:
+                        pass
+                    start = -1
+
+    raise json.JSONDecodeError(f"Could not extract valid JSON object from response: {text[:100]}...", text, 0)
+
+
 class LLMController(Controller):
     """A sophisticated controller that uses an LLM to drive player decisions.
 
@@ -229,7 +318,8 @@ class LLMController(Controller):
         """Retrieves and parses a JSON response from the LLM.
 
         This method includes a retry mechanism to handle cases where the LLM returns
-        malformed JSON. If parsing fails after multiple attempts, it returns a default
+        malformed JSON. If parsing fails, it sends corrective feedback on subsequent
+        attempts. If parsing fails after multiple attempts, it returns a default
         error dictionary.
 
         Args:
@@ -239,14 +329,35 @@ class LLMController(Controller):
             A dictionary parsed from the LLM's JSON response.
         """
         max_retries = 3
+        current_prompt = prompt
+        last_error = ""
+
         for attempt in range(max_retries):
-            response_str = self.llm_client.get_completion(prompt)
+            response_str = self.llm_client.get_completion(current_prompt)
             try:
-                return json.loads(response_str)
-            except json.JSONDecodeError:
+                return extract_json(response_str)
+            except (json.JSONDecodeError, ValueError) as e:
+                last_error = str(e)
                 print(f"Attempt {attempt + 1}/{max_retries} failed: LLM returned invalid JSON: {response_str}")
                 if attempt == max_retries - 1:
                     return {"thought": "Invalid JSON response from LLM after retries.", "action": {}}
+
+                # Construct corrective feedback for the next retry attempt
+                snippet = response_str[:200] if response_str else ""
+                if self.language == "en":
+                    feedback = (
+                        f"\n\n[Correction Notice: Your previous output was not valid JSON ({last_error}). "
+                        f"Previous raw output: {snippet!r}. "
+                        "Please return strictly valid JSON matching the required format, without markdown fences or extraneous text.]"
+                    )
+                else:
+                    feedback = (
+                        f"\n\n[修正提示：您上一次的输出不是合法的 JSON 格式（错误：{last_error}）。"
+                        f"原输出片段：{snippet!r}。"
+                        "请严格仅返回符合格式要求的有效 JSON 对象，不要添加 markdown 代码块标记或无关的文字。]"
+                    )
+                current_prompt = prompt + feedback
+
         return {"thought": "Failed to get valid response.", "action": {}}
 
     def _build_status_prompt(self, player: Player) -> str:

@@ -23,6 +23,7 @@ class Game:
         self,
         players_with_controllers: dict[str, "Controller"],
         player_role: str | None = None,
+        language: str = "zh",
     ):
         """
         Initializes the game with players and their controllers.
@@ -30,7 +31,9 @@ class Game:
         Args:
             players_with_controllers: A dictionary mapping player names to their Controller instances.
             player_role: The role selected by the human player, if any.
+            language: Game language ('zh' or 'en').
         """
+        self.language = language
         self.event_bus = EventBus()
         self.round = 0
         self.day = 1
