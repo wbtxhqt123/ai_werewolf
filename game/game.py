@@ -1,3 +1,4 @@
+from __future__ import annotations
 import random
 import os
 import datetime
@@ -7,50 +8,10 @@ from config import ROLE_CONFIG, HISTORY_DIR
 from .player import Player, Villager, Werewolf, Witch, Seer, Guard, Hunter, BlackWerewolfKing
 from .states.state_machine import StateMachine
 from .log import LogEntry, LogType
-from .controllers import HumanController
+from .controllers import Controller, HumanController
 from .event_bus import EventBus
-from .events.game_flow import GameStarted, NightPhaseStarted, NightEnd, DayStart
-from .events.day_events import AnnounceDeaths, SheriffElectionStarted, SheriffDecideSpeechOrder, SpeechPhaseStarted, PlayerVoted, ExecutionComplete, PlayerDied
-from .handlers.game_flow import handle_game_started, handle_night_phase_started, handle_night_end, handle_day_start
-from .events.special_events import (
-    HunterShoot,
-    BlackWerewolfKingShoot,
-)
-from .handlers.special_handlers import (
-    handle_player_died,
-    handle_hunter_shoot,
-    handle_black_werewolf_king_shoot,
-)
-from .handlers.day_handlers import (
-    handle_announce_deaths,
-    handle_sheriff_election_started,
-    handle_sheriff_decide_speech_order,
-    handle_speech_phase_started,
-    handle_player_voted,
-    handle_execution_complete
-)
-from .events.night_events import (
-    GuardTurnStarted,
-    GuardProtect,
-    WerewolfTurnStarted,
-    WerewolfTargetSelected,
-    WitchTurnStarted,
-    WitchSave,
-    WitchPoison,
-    SeerTurnStarted,
-    SeerCheck,
-)
-from .handlers.night_handlers import (
-    handle_guard_turn_started,
-    handle_guard_protect,
-    handle_werewolf_turn_started,
-    handle_werewolf_target_selected,
-    handle_witch_turn_started,
-    handle_witch_save,
-    handle_witch_poison,
-    handle_seer_turn_started,
-    handle_seer_check,
-)
+from .events.game_flow import GameStarted, PhaseChanged, GameOver
+from .events.day_events import PlayerDied, PlayerVoted, ExecutionComplete
 
 
 class Game:
@@ -102,66 +63,6 @@ class Game:
         # Set the game instance for each controller
         for player in self.players:
             player.controller.game = self
-
-        self._register_handlers()
-
-    def _register_handlers(self):
-        self.event_bus.subscribe(
-            GameStarted, lambda event: handle_game_started(self, event)
-        )
-        self.event_bus.subscribe(
-            NightPhaseStarted, lambda event: handle_night_phase_started(self, event)
-        )
-        self.event_bus.subscribe(NightEnd, lambda event: handle_night_end(self, event))
-        self.event_bus.subscribe(DayStart, lambda event: handle_day_start(self, event))
-        self.event_bus.subscribe(
-            AnnounceDeaths, lambda event: handle_announce_deaths(self, event)
-        )
-        self.event_bus.subscribe(
-            SheriffElectionStarted,
-            lambda event: handle_sheriff_election_started(self, event),
-        )
-        self.event_bus.subscribe(
-            SheriffDecideSpeechOrder,
-            lambda event: handle_sheriff_decide_speech_order(self, event),
-        )
-        self.event_bus.subscribe(
-            SpeechPhaseStarted, lambda event: handle_speech_phase_started(self, event)
-        )
-        self.event_bus.subscribe(PlayerVoted, lambda event: handle_player_voted(self, event))
-        self.event_bus.subscribe(
-            ExecutionComplete, lambda event: handle_execution_complete(self, event)
-        )
-        self.event_bus.subscribe(PlayerDied, lambda event: handle_player_died(self, event))
-        self.event_bus.subscribe(HunterShoot, lambda event: handle_hunter_shoot(self, event))
-        self.event_bus.subscribe(
-            BlackWerewolfKingShoot,
-            lambda event: handle_black_werewolf_king_shoot(self, event),
-        )
-        self.event_bus.subscribe(
-            GuardTurnStarted, lambda event: handle_guard_turn_started(self, event)
-        )
-        self.event_bus.subscribe(
-            GuardProtect, lambda event: handle_guard_protect(self, event)
-        )
-        self.event_bus.subscribe(
-            WerewolfTurnStarted, lambda event: handle_werewolf_turn_started(self, event)
-        )
-        self.event_bus.subscribe(
-            WerewolfTargetSelected,
-            lambda event: handle_werewolf_target_selected(self, event),
-        )
-        self.event_bus.subscribe(
-            WitchTurnStarted, lambda event: handle_witch_turn_started(self, event)
-        )
-        self.event_bus.subscribe(WitchSave, lambda event: handle_witch_save(self, event))
-        self.event_bus.subscribe(
-            WitchPoison, lambda event: handle_witch_poison(self, event)
-        )
-        self.event_bus.subscribe(
-            SeerTurnStarted, lambda event: handle_seer_turn_started(self, event)
-        )
-        self.event_bus.subscribe(SeerCheck, lambda event: handle_seer_check(self, event))
 
     def add_log_listener(self, listener: Callable[[LogEntry], None]):
         """Adds a listener that will be called whenever a log entry is added."""
@@ -343,7 +244,7 @@ class Game:
         self, player: Player, reason: str, phase: str = "day", update_status: bool = True, **kwargs
     ):
         """
-        Records a player's death with detailed information.
+        Records a player's death with detailed information and emits a PlayerDied event.
         """
         death_info = {
             "player": player.name,
@@ -359,10 +260,11 @@ class Game:
             player.is_alive = False
 
         player.death_reason = reason
+        self.event_bus.publish(PlayerDied(player=player, reason=reason))
 
     def record_vote(self, phase: str, votes: dict, result: str):
         """
-        Records a voting session.
+        Records a voting session and emits PlayerVoted events.
         """
         # Convert Player objects to names in the votes dict
         votes_by_name = {}
@@ -370,6 +272,7 @@ class Game:
             voter_name = voter.name if isinstance(voter, Player) else str(voter)
             target_name = target.name if isinstance(target, Player) else str(target)
             votes_by_name[voter_name] = target_name
+            self.event_bus.publish(PlayerVoted(voter=voter, target=target))
 
         vote_info = {
             "day": self.day,
@@ -382,8 +285,9 @@ class Game:
         self.vote_history.append(vote_info)
 
     def set_state(self, state_name: str, **kwargs):
-        """Sets the current game state using a state identifier."""
+        """Sets the current game state using a state identifier and emits PhaseChanged event."""
         self.state = StateMachine.create_state(state_name, self, **kwargs)
+        self.event_bus.publish(PhaseChanged(phase_name=state_name, day=self.day))
 
     def check_win_condition(self) -> str | None:
         """
@@ -411,6 +315,7 @@ class Game:
         """
         Starts the main game loop and continues until a win condition is met or the game is stopped.
         """
+        self.event_bus.publish(GameStarted(game=self))
         self.log(
             LogEntry(
                 log_type=LogType.GAME_START,
@@ -428,6 +333,8 @@ class Game:
                 self.set_state(next_state_name, **next_state_kwargs)
             else:
                 self.state = None
+        if self.winner:
+            self.event_bus.publish(GameOver(winner=self.winner))
         self._write_log_to_file()
 
     def stop(self):

@@ -3,8 +3,11 @@ from typing import TYPE_CHECKING
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ..log import LogEntry, LogType
-from ..player import Hunter, BlackWerewolfKing
+from ..player import Hunter, BlackWerewolfKing, Player
+from ..utils import state_handler
 from .base import GameState
+from ..events.game_flow import DayStart
+from ..events.day_events import ExecutionComplete
 from ..utils import state_handler
 
 if TYPE_CHECKING:
@@ -20,6 +23,7 @@ class DayStartState(GameState):
 
     @state_handler
     def handle(self):
+        self.game.event_bus.publish(DayStart(day_number=self.game.day))
         self.game.log(LogEntry(log_type=LogType.DAY_BREAKS, message={"en": f"--- Day {self.game.day} ---", "zh": f"--- 第 {self.game.day} 天 ---"}, camps=["All"]))
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "A new day begins.", "zh": "天亮了。"}, camps=["All"]))
 
@@ -236,6 +240,7 @@ class ExecutionState(GameState):
             player.is_alive = False
             self.game.log(LogEntry(log_type=LogType.PLAYER_ELIMINATED, message={"en": f"With the most votes, {player.name} has been executed.", "zh": f"{player.name} 被放逐出局。"}, target=player, camps=["All"]))
             self.game.record_death(player, "execution", phase="day")
+            self.game.event_bus.publish(ExecutionComplete(player=player))
             
             if isinstance(player.role, (Hunter, BlackWerewolfKing)):
                 self.game.shoot_triggers.append(player)

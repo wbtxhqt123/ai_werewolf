@@ -1,12 +1,20 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+import random
 
 from ..log import LogEntry, LogType
 from ..player import Witch, Seer, Guard, Werewolf, BlackWerewolfKing
 from ..utils import state_handler
 from .base import GameState
+from ..events.game_flow import NightPhaseStarted, NightEnd
+from ..events.night_events import (
+    GuardProtect,
+    WerewolfTargetSelected,
+    WitchSave,
+    WitchPoison,
+    SeerCheckResult,
+)
 from config import GAME_RULES
-import random
 
 if TYPE_CHECKING:
     from ..game import Game
@@ -25,6 +33,7 @@ class NightBeginState(GameState):
     @state_handler
     def handle(self):
         self.game.day = self.day
+        self.game.event_bus.publish(NightPhaseStarted(night_number=self.day))
         self.game.log(LogEntry(log_type=LogType.NIGHT_FALLS, message={"en": f"--- Night {self.game.day} ---", "zh": f"--- 第 {self.game.day} 夜 ---"}, camps=["All"]))
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "The sun sets, and a new night begins...", "zh": "太阳落山了，一个新的夜晚开始了..."}, camps=["All"]))
 
@@ -64,6 +73,7 @@ class GuardNightState(GameState):
         if target:
             self.game.protected_this_night = target
             guard_role.last_protected = target
+            self.game.event_bus.publish(GuardProtect(player=guard_player, target=target))
             self.game.log(LogEntry(
                 log_type=LogType.GUARD_PROTECT,
                 message={"en": f"You have protected {target.name}.", "zh": f"你守护了 {target.name}。"},
@@ -136,6 +146,7 @@ class WerewolfNightState(GameState):
         
         if target:
             self.game.night_kill_target = target
+            self.game.event_bus.publish(WerewolfTargetSelected(target=target))
             self.game.log(LogEntry(
                 log_type=LogType.WEREWOLF_TARGET,
                 message={"en": f"The werewolves have targeted {target.name}.", "zh": f"狼人选择了袭击 {target.name}。"},
@@ -185,6 +196,7 @@ class WitchNightState(GameState):
                     witch_role.save_player(target)
                     self.game.saved_this_night = target
                     used_save = True
+                    self.game.event_bus.publish(WitchSave(player=witch_player))
                     self.game.log(LogEntry(log_type=LogType.WITCH_ACTION, message={"en": f"You have saved {target.name}.", "zh": f"你使用解药救了 {target.name}。"}, source=witch_player, target=target, data={"action": "save"}, visible_to_roles=["Witch"], camps=["Villagers"]))
             else:
                 self.game.log(LogEntry(log_type=LogType.ACTION, message={"en": "You have no save potion left.", "zh": "你没有解药了。"}, visible_to_roles=["Witch"], camps=["Villagers"]))
@@ -199,6 +211,7 @@ class WitchNightState(GameState):
                 if poison_target:
                     witch_role.poison_player(poison_target)
                     self.game.night_poison_target = poison_target
+                    self.game.event_bus.publish(WitchPoison(player=witch_player, target=poison_target))
                     self.game.log(LogEntry(log_type=LogType.WITCH_ACTION, message={"en": f"You have poisoned {poison_target.name}.", "zh": f"你毒死了 {poison_target.name}。"}, source=witch_player, target=poison_target, data={"action": "poison"}, visible_to_roles=["Witch"], camps=["Villagers"]))
             else:
                 self.game.log(LogEntry(log_type=LogType.ACTION, message={"en": "You have no poison potion left.", "zh": "你没有毒药了。"}, visible_to_roles=["Witch"], camps=["Villagers"]))
@@ -237,6 +250,9 @@ class SeerNightState(GameState):
             
             result = "Werewolf" if target.role.camp == "Werewolves" else "Villager"
             
+            self.game.event_bus.publish(
+                SeerCheckResult(player=seer_player, target=target, is_werewolf=(result == "Werewolf"))
+            )
             self.game.log(LogEntry(
                 log_type=LogType.SEER_CHECK,
                 message={"en": f"You checked {target.name}. They are in {result} camp.", "zh": f"你查验了 {target.name}，他是 {result} 阵营。"},
@@ -305,6 +321,7 @@ class NightEndState(GameState):
             self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "A peaceful night... no one was eliminated.", "zh": "昨晚是平安夜，无人死亡。"}, camps=["All"]))
 
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "The night is over, and dawn is approaching.", "zh": "长夜已过，黎明将至。"}, camps=["All"]))
+        self.game.event_bus.publish(NightEnd(night_number=self.game.day))
 
     def transition(self):
         # Always transition to DayStartState to announce the day

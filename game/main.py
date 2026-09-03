@@ -1,6 +1,6 @@
+from __future__ import annotations
 from .game import Game
 from .controllers import HumanController, RandomController
-from .events.game_flow import GameStarted
 
 def setup_game(players_with_controllers: dict, player_role: str | None = None) -> Game:
     """Initializes and configures a new game instance.
@@ -19,18 +19,21 @@ def setup_game(players_with_controllers: dict, player_role: str | None = None) -
 def run_game():
     """Sets up and runs a standard command-line game.
 
-    This function defines a default player configuration with one human player and
-    three AI players, then starts the game loop.
+    This function defines a default player configuration with AI players,
+    then starts the game loop.
     """
     players_with_controllers = {
         "Player 1 (AI)": RandomController(),
         "Player 2 (AI)": RandomController(),
         "Player 3 (AI)": RandomController(),
         "Player 4 (AI)": RandomController(),
+        "Player 5 (AI)": RandomController(),
+        "Player 6 (AI)": RandomController(),
     }
     game = setup_game(players_with_controllers)
-    game.event_bus.publish(GameStarted())
     game.start()
 
+main = run_game
+
 if __name__ == "__main__":
-    run_game()
+    main()

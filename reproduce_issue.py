@@ -6,8 +6,8 @@ from game.player import Player, Villager
 from game.controllers import RandomController
 
 class MockController(RandomController):
-    def get_vote_for_sheriff(self, player, candidates):
-        return candidates[0] # Always vote for the first candidate
+    def get_vote_for_sheriff(self, player, potential_targets):
+        return potential_targets[0] # Always vote for the first candidate
 
 class TestSheriffTie(unittest.TestCase):
     def setUp(self):
@@ -38,8 +38,7 @@ class TestSheriffTie(unittest.TestCase):
         # Player 4 votes for Player 2
         self.game.players[3].controller.get_vote_for_sheriff = MagicMock(return_value=self.candidates[1])
         
-        state = SheriffVoteState()
-        state.game = self.game
+        state = SheriffVoteState(self.game)
         state.handle()
         
         # Check if vote was recorded
@@ -51,8 +50,7 @@ class TestSheriffTie(unittest.TestCase):
         self.game.tie_context = "sheriff"
         self.game.tied_players = self.candidates
         
-        tie_state = TieVoteState()
-        tie_state.game = self.game
+        tie_state = TieVoteState(self.game)
         
         # Mock voters to create another tie
         # Player 3 votes for Player 1
@@ -67,30 +65,17 @@ class TestSheriffTie(unittest.TestCase):
         self.assertEqual(self.game.vote_history[-1]['result'], "Tie")
         self.assertEqual(self.game.vote_history[-1]['phase'], "Tie Breaker")
         
-        # Now check what happens after second tie
-        # In TieVoteState.handle:
-        # if tie remains:
-        # self.game.record_vote("Tie Breaker", raw_votes, "Tie")
-        # self.game.player_to_execute = None
-        # self.game.tied_players = []
-        
-        # And transition:
-        tie_state.transition()
-        
-        # If tie_context was sheriff, it goes to DayAnnouncementState
-        # self.game.tie_context = None
-        # self.game.set_state(DayAnnouncementState())
-        
+        # Transition after second tie
+        next_state, _ = tie_state.transition()
+        self.assertEqual(next_state, "day_announcement")
         self.assertIsNone(self.game.tie_context)
-        # self.assertIsInstance(self.game.state, DayAnnouncementState) # Can't check class easily without import, but logic holds
 
     def test_sheriff_vote_tie_then_winner(self):
         # Mock voters to create a tie first
         self.game.players[2].controller.get_vote_for_sheriff = MagicMock(return_value=self.candidates[0])
         self.game.players[3].controller.get_vote_for_sheriff = MagicMock(return_value=self.candidates[1])
         
-        state = SheriffVoteState()
-        state.game = self.game
+        state = SheriffVoteState(self.game)
         state.handle()
         
         self.assertEqual(self.game.vote_history[-1]['result'], "Tie")
@@ -99,8 +84,7 @@ class TestSheriffTie(unittest.TestCase):
         self.game.tie_context = "sheriff"
         self.game.tied_players = self.candidates
         
-        tie_state = TieVoteState()
-        tie_state.game = self.game
+        tie_state = TieVoteState(self.game)
         
         # Mock voters to create a winner (both vote for Player 1)
         self.game.players[2].controller.get_vote_for_sheriff = MagicMock(return_value=self.candidates[0])

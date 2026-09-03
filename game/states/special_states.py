@@ -6,6 +6,7 @@ from ..log import LogEntry, LogType
 from ..player import Hunter, BlackWerewolfKing
 from .base import GameState
 from ..utils import state_handler
+from ..events.game_flow import GameOver
 
 if TYPE_CHECKING:
     from ..game import Game
@@ -21,6 +22,7 @@ class GameOverState(GameState):
     @state_handler
     def handle(self):
         self.game.winner = self.winner
+        self.game.event_bus.publish(GameOver(winner=self.winner))
         winner_zh = "村民" if self.winner == "Villagers" else "狼人"
         self.game.log(LogEntry(log_type=LogType.GAME_OVER, message={"en": f"The {self.winner} have won!", "zh": f"{winner_zh}阵营胜利！"}, camps=["All"]))
 
