@@ -1,0 +1,366 @@
+/* Debug Log Styling */
+.message.debug {
+    font-size: 0.75rem;
+    color: #b2bec3;
+    background: transparent;
+    border: 1px dashed #dfe6e9;
+    padding: 4px 8px;
+    margin: 2px 0;
+    opacity: 0.7;
+    font-family: monospace;
+    align-self: center;
+    width: 100%;
+    text-align: center;
+    display: none; /* Hidden by default, toggled via JS if needed */
+}
+
+.message.debug.visible {
+    display: block;
+}
+
+/* Toggle Debug Button */
+#toggle-debug-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    background: rgba(0,0,0,0.1);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #636e72;
+}
+
+
+/* Action Buttons */
+.choice-btn {
+    padding: 10px 20px;
+    background: #FFE66D;
+    border: 2px solid var(--text-dark);
+    color: var(--text-dark);
+    border-radius: 15px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 800;
+    font-family: var(--font-main);
+    box-shadow: 3px 3px 0px var(--text-dark);
+    transition: all 0.1s;
+}
+
+.choice-btn:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 5px 5px 0px var(--text-dark);
+}
+
+.choice-btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 0px 0px 0px var(--text-dark);
+}
+
+/* Ghost & Sheriff */
+.player-card.dead {
+    opacity: 0.6;
+    filter: grayscale(100%);
+}
+
+.player-card.dead .player-avatar {
+    border-color: #636e72;
+    background: #dfe6e9;
+}
+
+.sheriff-badge {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    font-size: 1.8rem;
+    filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.2));
+    z-index: 20;
+    animation: shine 2s infinite;
+}
+
+@keyframes shine {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+/* Fixed Language Toggle */
+.lang-toggle-fixed {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid var(--text-dark);
+    border-radius: 25px;
+    font-family: var(--font-main);
+    font-weight: 800;
+    color: var(--text-dark);
+    cursor: pointer;
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
+    transition: all 0.2s;
+}
+
+.lang-toggle-fixed:hover {
+    transform: translateY(-2px);
+    box-shadow: 5px 5px 0px rgba(0,0,0,0.1);
+    background: #fff;
+}
+
+.lang-toggle-fixed:active {
+    transform: translateY(2px);
+    box-shadow: 0px 0px 0px rgba(0,0,0,0.1);
+}
+
+/* Secondary Button (Settings) */
+.secondary-btn {
+    width: 100%;
+    padding: 12px;
+    background: #fff;
+    color: var(--text-dark);
+    border: 2px solid #dfe6e9;
+    border-radius: 50px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    font-family: var(--font-main);
+    cursor: pointer;
+    transition: all 0.1s;
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.secondary-btn:hover {
+    border-color: var(--accent-secondary);
+    color: var(--accent-secondary);
+    transform: translateY(-2px);
+    box-shadow: 5px 5px 0px rgba(0,0,0,0.1);
+}
+
+.secondary-btn:active {
+    transform: translateY(2px);
+    box-shadow: 0px 0px 0px rgba(0,0,0,0.1);
+}
+
+input[type="text"],
+input[type="password"],
+select {
+    width: 100%;
+    padding: 12px 15px;
+    border-radius: var(--border-radius-md);
+    border: 2px solid #dfe6e9;
+    background: #f1f2f6;
+    color: var(--text-dark);
+    font-size: 16px;
+    font-family: var(--font-main);
+    font-weight: 600;
+    transition: all 0.2s;
+    appearance: none; /* Remove default arrow */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%232d3436%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 15px top 50%;
+    background-size: 12px auto;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+select:focus {
+    background-color: #fff;
+    border-color: var(--accent-secondary);
+    box-shadow: var(--shadow-pop);
+    outline: none;
+    transform: translateY(-2px);
+}
+
+/* Remove background image for inputs that are not select */
+input[type="text"],
+input[type="password"] {
+    background-image: none;
+}
+
+.primary-btn {
+    width: 100%;
+    padding: 15px;
+    background: var(--accent-secondary);
+    color: white;
+    border: 3px solid var(--text-dark);
+    border-radius: 50px;
+    font-size: 1.4rem;
+    font-weight: 900;
+    font-family: var(--font-main);
+    cursor: pointer;
+    transition: all 0.1s;
+    box-shadow: 4px 4px 0px var(--text-dark);
+    margin-top: 15px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    animation: pulse-btn 2s infinite;
+}
+
+@keyframes pulse-btn {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); box-shadow: 6px 6px 0px var(--text-dark); }
+    100% { transform: scale(1); }
+}
+
+.primary-btn:hover {
+    animation: none;
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px var(--text-dark);
+}
+
+.primary-btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 0px 0px 0px var(--text-dark);
+}
+
+.icon-btn {
+    background: #fff;
+    border: 2px solid var(--text-dark);
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    font-size: 1.4rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
+}
+
+.icon-btn:hover {
+    transform: translateY(-3px) rotate(10deg);
+    background: var(--accent-purple);
+    color: white;
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
+}
+
+.toggle-btn {
+    flex: 1;
+    padding: 12px 10px;
+    background: #fff;
+    border: 2px solid #dfe6e9;
+    color: #636e72;
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 18px;
+    font-family: var(--font-main);
+    transition: all 0.2s;
+    position: relative;
+    overflow: visible;
+}
+
+.toggle-btn:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-pop);
+}
+
+.toggle-btn.active {
+    background: var(--accent-primary);
+    border: 2px solid var(--text-dark);
+    color: white;
+    box-shadow: var(--shadow-pop);
+    transform: translateY(-3px);
+}
+
+#send-action-btn {
+    background: var(--accent-secondary);
+    color: white;
+    width: 50px;
+    height: 40px;
+    padding: 0;
+    border: 2px solid var(--text-dark);
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 900;
+    box-shadow: 2px 2px 0px var(--text-dark);
+    transition: all 0.1s;
+}
+
+#send-action-btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: none;
+}
+
+#send-action-btn:disabled {
+    background: #b2bec3;
+    border-color: #636e72;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Voice Input Button */
+#voice-input-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--text-dark);
+    background: #fff;
+    cursor: pointer;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    box-shadow: 2px 2px 0px var(--text-dark);
+}
+
+#voice-input-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 4px 4px 0px var(--text-dark);
+}
+
+#voice-input-btn:active {
+    transform: translateY(2px);
+    box-shadow: none;
+}
+
+#voice-input-btn.recording {
+    background: var(--accent-primary);
+    color: white;
+    animation: pulse-recording 1.5s infinite;
+    border-color: var(--accent-primary);
+}
+
+@keyframes pulse-recording {
+    0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
+}
+
+.tab-btn {
+    background: #fff;
+    border: 2px solid var(--text-dark);
+    font-family: var(--font-main);
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--text-dark);
+    cursor: pointer;
+    padding: 10px 25px;
+    border-radius: 20px;
+    transition: all 0.2s;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.1);
+}
+
+.tab-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 5px 5px 0 rgba(0,0,0,0.1);
+}
+
+.tab-btn.active {
+    background: var(--accent-secondary);
+    color: #fff;
+    transform: translateY(-2px);
+    box-shadow: 5px 5px 0 rgba(0,0,0,0.1);
+}

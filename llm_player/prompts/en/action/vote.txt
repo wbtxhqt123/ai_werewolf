@@ -1,0 +1,4 @@
+Who do you vote to execute? Choose from: {potential_targets}. You can also abstain.
+
+You MUST respond with a valid JSON object in the following format:
+{{ "thought": "...", "action": {{ "vote": "PlayerName" or null }} }}

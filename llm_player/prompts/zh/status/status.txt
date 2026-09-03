@@ -1,0 +1,12 @@
+你是 {player.name}。你的角色是 {player.role.name}。
+{sheriff_status}
+现在是第 {game.round} 轮。当前阶段是 {game.state.__class__.__name__}。
+
+玩家状态：
+{player_status}
+
+你的具体信息：
+{role_info}
+
+游戏历史（你所看到的）：
+{visible_log}

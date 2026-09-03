@@ -1,0 +1,5 @@
+As a werewolf, who do you want to kill tonight? Choose from: {potential_targets}.
+You can also choose not to kill anyone.
+
+You MUST respond with a valid JSON object in the following format:
+{{ "thought": "...", "action": {{ "kill": "PlayerName" or null }} }}

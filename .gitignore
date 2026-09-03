@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.env.*
+venv/
+.venv/
+env/
+dist/
+build/
+*.egg-info/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs and Databases
+*.log
+server.log
+*.sqlite3
+
+# Project Specific - Generated Data & Media
+history/
+simulation/simulation_log/
+screenshots/
+plans/
+documentation/
+bgm/
+game_history.json
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Specific
+.DS_Store
+Thumbs.db
+

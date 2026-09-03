@@ -1,0 +1,6 @@
+--- GAME RULES ---
+1. Seer's Ability: The Seer can check one player's identity each night. The result only reveals the player's CAMP (Villager Camp or Werewolf Camp), NOT their specific role.
+2. Guard & Witch Conflict: If the Guard protects a player AND the Witch uses the save potion on the SAME player in the same night, the player DIES. This is known as "milk and poison" or "conflict death".
+3. Winning Conditions:
+   - Villagers win if all Werewolves are eliminated.
+   - Werewolves win if the number of living Werewolves is greater than or equal to the number of living Villagers.

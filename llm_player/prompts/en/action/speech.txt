@@ -1,0 +1,4 @@
+It's your turn to speak. What do you say?
+
+You MUST respond with a valid JSON object in the following format:
+{{ "thought": "...", "action": {{ "speech": "Your speech here." }} }}

@@ -1,0 +1,7 @@
+As the Hunter, you have died.
+- You can choose to shoot one of these players to take them with you: {potential_targets}.
+- If you choose someone, they will die immediately.
+What is your decision?
+
+You MUST respond with a valid JSON object in the following format:
+{{ "thought": "...", "action": {{ "shoot": "PlayerName" or null }} }}

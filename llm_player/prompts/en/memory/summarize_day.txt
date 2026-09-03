@@ -1,0 +1,20 @@
+The day has ended. You need to update your long-term memory.
+Combine your existing long-term memory (if any) with the events of today (visible in logs).
+Discard irrelevant details but keep track of:
+- Confirmed roles (dead players, revealed roles).
+- Voting patterns.
+- Suspicious behaviors.
+- Your alliances and enemies.
+
+Current Logs (Today's events):
+{visible_log}
+
+Existing Long Term Memory (Previous days):
+{long_term_memory}
+
+Provide a NEW, consolidated long-term memory that summarizes everything important up to now.
+JSON Format:
+{{
+    "thought": "Reasoning about what to keep...",
+    "summary": "Updated Long Term Memory..."
+}}

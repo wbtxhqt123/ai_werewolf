@@ -1,0 +1,9 @@
+你是警长。你需要决定今天的发言顺序。
+选项：
+1. 顺时针（从你左边开始）
+2. 逆时针（从你右边开始）
+
+你必须以以下格式回复一个有效的 JSON 对象：
+{{ "thought": "...", "action": {{ "speech_order": "clockwise" }} }}
+或
+{{ "thought": "...", "action": {{ "speech_order": "counter_clockwise" }} }}

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Werewolf Game V2</title>
+    <link rel="preconnect" href="https://fonts.loli.net">
+    <link rel="preconnect" href="https://gstatic.loli.net" crossorigin>
+    <link href="https://fonts.loli.net/css2?family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/base.css?v=7">
+    <link rel="stylesheet" href="/static/css/layout.css?v=7">
+    <link rel="stylesheet" href="/static/css/components.css?v=7">
+    <link rel="stylesheet" href="/static/css/setup.css?v=7">
+    <link rel="stylesheet" href="/static/css/game.css?v=7">
+    <link rel="stylesheet" href="/static/css/modals.css?v=7">
+</head>
+<body>
+    <div id="app">
+        <!-- Background Scenery -->
+        <div class="scenery-layer">
+            <div class="stars"></div>
+            <div class="moon"></div>
+            <div class="cloud"></div>
+            <div class="cloud"></div>
+            <div class="cloud"></div>
+            <div class="forest-silhouette"></div>
+        </div>
+
+        <!-- Login / Setup Screen -->
+        <div id="setup-screen" class="screen active">
+            <button id="lobby-lang-btn" class="lang-toggle-fixed">中文/EN</button>
+            <div class="setup-container" role="main">
+                <h1>Werewolf</h1>
+                <div class="form-group">
+                    <label>Select Avatar</label>
+                    <div class="avatar-grid" id="avatar-selection">
+                        <!-- Avatars injected by JS -->
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Number of Players</label>
+                    <div class="toggle-group" id="player-count-group">
+                        <button class="toggle-btn" data-value="6">6</button>
+                        <button class="toggle-btn active" data-value="9">9</button>
+                        <button class="toggle-btn" data-value="12">12</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Select Role</label>
+                    <div class="role-grid" id="role-selection">
+                        <!-- Roles injected by JS -->
+                    </div>
+                </div>
+                
+                <button id="open-settings-btn" class="secondary-btn">⚙️ Advanced Settings</button>
+
+                <button id="start-game-btn" class="primary-btn">Start Game</button>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal">
+            <div class="modal-content settings-content">
+                <span class="close-modal" id="close-settings-btn">&times;</span>
+                <h2>Advanced Settings</h2>
+                <div class="form-group">
+                    <label>Provider</label>
+                    <select id="provider-select">
+                        <option value="openai">OpenAI</option>
+                        <option value="doubao">Doubao (Volcengine)</option>
+                        <option value="gemini">Gemini (Google)</option>
+                        <option value="qwen">Qwen (Aliyun)</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>API Key</label>
+                    <input type="password" id="api-key" placeholder="API Key">
+                </div>
+                <div class="form-group">
+                    <label>Base URL (Optional)</label>
+                    <input type="text" id="base-url" placeholder="e.g. https://api.openai.com/v1">
+                </div>
+                <div class="form-group">
+                    <label>Model Name (Optional)</label>
+                    <input type="text" id="model-name" placeholder="e.g. gpt-4o">
+                </div>
+                <button id="save-settings-btn" class="primary-btn">Save & Close</button>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen">
+            <header class="game-header">
+                <div class="header-left">
+                    <div class="phase-indicator" id="phase-indicator">Day 1</div>
+                </div>
+                <div class="header-right">
+                    <button id="game-lang-btn" class="icon-btn" style="font-size: 0.9rem; width: auto; padding: 0 12px; border-radius: 20px; font-weight: 800;">中文/EN</button>
+                    <button id="toggle-debug-btn" title="Toggle Debug Logs" aria-label="Toggle Debug Logs">🐞</button>
+
+                    <button id="quit-btn" class="icon-btn" aria-label="Quit Game">✕</button>
+                </div>
+            </header>
+
+            <main class="game-board" role="main">
+                <div class="game-layout">
+                    <!-- Left Column -->
+                    <div class="side-column" id="players-left">
+                        <!-- Players injected by JS -->
+                    </div>
+                    
+                    <!-- Center Stage -->
+                    <div class="center-area">
+                        <div class="chat-box" id="chat-box" aria-live="polite">
+                            <!-- Chat messages -->
+                        </div>
+                        <div id="new-messages-indicator" class="new-messages-indicator hidden">⬇️ 新消息</div>
+                    </div>
+
+                    <!-- Right Column -->
+                    <div class="side-column" id="players-right">
+                        <!-- Players injected by JS -->
+                    </div>
+                </div>
+            </main>
+
+            <footer class="game-controls">
+                <div class="my-info">
+                    <div class="my-avatar">👤</div>
+                    <div class="my-details">
+                        <div class="my-role" id="my-role">Villager</div>
+                        <div class="my-status">Alive</div>
+                    </div>
+                    <div class="my-status-icons"></div>
+                </div>
+                <div class="action-area" id="action-area">
+                    <div id="action-prompt" aria-live="polite">Waiting...</div>
+                    <div class="input-wrapper">
+                        <input type="text" id="game-input" placeholder="Type a message..." disabled>
+                        <button id="voice-input-btn" class="icon-btn" title="Voice Input" aria-label="Voice Input">🎤</button>
+                        <button id="send-action-btn" disabled>Send</button>
+                    </div>
+                    <div id="choice-buttons" class="choice-buttons"></div>
+                </div>
+            </footer>
+        </div>
+
+
+
+        <!-- Evaluation Modal -->
+        <div id="evaluation-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-modal">&times;</span>
+                <h2 id="eval-title">Game Evaluation</h2>
+                
+                <div id="eval-setup">
+                    <p id="eval-intro">Choose a personality for the AI evaluator:</p>
+                    <div class="eval-modes">
+                        <button class="eval-mode-btn" data-mode="mild">😊 Mild</button>
+                        <button class="eval-mode-btn" data-mode="neutral">😐 Neutral</button>
+                        <button class="eval-mode-btn" data-mode="mean">😈 Sneer</button>
+                    </div>
+                    <div id="eval-api-key-section" style="display: none;">
+                        <p class="warning-text">API Key required for evaluation</p>
+                        <input type="password" id="eval-api-key" placeholder="Enter API Key">
+                    </div>
+                    <button id="start-eval-btn" class="primary-btn" disabled>Start Evaluation</button>
+                </div>
+
+                <div id="eval-chat-section" style="display: none;">
+                    <div class="eval-chat-box" id="eval-chat-box">
+                        <!-- Evaluation chat messages -->
+                    </div>
+                    <div class="eval-input-area">
+                        <input type="text" id="eval-input" placeholder="Argue with the AI...">
+                        <button id="send-eval-btn">Send</button>
+                    </div>
+                    <button id="new-game-btn" class="primary-btn" style="margin-top: 10px;">New Game</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Operations History Modal -->
+        <div id="op-history-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-modal">&times;</span>
+                <h2 id="op-history-title">Operations History</h2>
+                <div id="op-history-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Templates -->
+    <template id="player-card-template">
+        <div class="player-card">
+            <div class="player-me-label">ME</div>
+            <div class="player-sheriff-label">SHERIFF</div>
+            <div class="player-candidate-label">CANDIDATE</div>
+            <div class="player-tie-label">TIE</div>
+            <div class="player-dead-label">DEAD</div>
+            <div class="player-avatar"></div>
+            <div class="player-name"></div>
+            <div class="player-status-icons"></div>
+            <div class="player-speech-bubble"></div>
+        </div>
+    </template>
+
+    <script src="/static/js/app.js?v=7"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+你投票选谁当警长？从以下玩家中选择：{potential_targets}。你也可以弃票。
+
+你必须以以下格式回复一个有效的 JSON 对象：
+{{ "thought": "...", "action": {{ "vote_for_sheriff": "玩家名字" or null }} }}

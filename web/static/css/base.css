@@ -1,0 +1,53 @@
+:root {
+    /* Original Cute Palette */
+    --bg-day-top: #87CEEB;
+    --bg-day-bottom: #E0F7FA;
+    --bg-night-top: #2c3e50;
+    --bg-night-bottom: #4ca1af;
+    
+    --accent-primary: #FF6B6B; /* Soft Red */
+    --accent-secondary: #4ECDC4; /* Teal */
+    --accent-yellow: #FFE66D; /* Sunny Yellow */
+    --accent-purple: #a29bfe; /* Soft Purple */
+    
+    --text-dark: #2d3436;
+    --text-light: #f5f6fa;
+    
+    --card-bg: rgba(255, 255, 255, 0.9);
+    --dashboard-bg: rgba(255, 255, 255, 0.95);
+    
+    /* Cartoon Fonts - Prioritize Fredoka */
+    --font-main: 'Fredoka', 'Comic Sans MS', 'Chalkboard SE', 'Nunito', sans-serif;
+    
+    --border-radius-lg: 25px;
+    --border-radius-md: 15px;
+    --border-radius-sm: 10px;
+    
+    --shadow-pop: 4px 4px 0px rgba(0,0,0,0.2);
+    --shadow-soft: 0 10px 20px rgba(0,0,0,0.1);
+    
+    --border-thick: 3px solid #2d3436;
+    --status-me-color: #00bfff;
+    --status-sheriff-color: #ffd700;
+    --status-candidate-color: #ffa600;
+    --status-tie-color: #ff0000;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-main);
+    background: linear-gradient(to bottom, var(--bg-day-top), var(--bg-day-bottom));
+    color: var(--text-dark);
+    height: 100vh;
+    overflow: hidden;
+    transition: background 2s ease;
+}
+
+body.night-mode {
+    background: linear-gradient(to bottom, var(--bg-night-top), var(--bg-night-bottom));
+}

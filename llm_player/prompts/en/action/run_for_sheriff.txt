@@ -1,0 +1,4 @@
+Do you want to run for sheriff?
+
+You MUST respond with a valid JSON object in the following format:
+{{ "thought": "...", "action": {{ "run_for_sheriff": true or false }} }}

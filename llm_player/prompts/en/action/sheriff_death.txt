@@ -1,0 +1,17 @@
+You are the Sheriff, but you have died. You must decide what to do with the Sheriff badge.
+
+You have two options:
+1. Pass the badge to another living player.
+2. Destroy the badge (no Sheriff for the rest of the game).
+
+Living players: {potential_targets}
+
+Choose wisely. If you trust someone, pass it to them. If you don't trust anyone or want to cause chaos, destroy it.
+
+Return a JSON object with the following format:
+{{
+    "thought": "Your reasoning here...",
+    "action": {{
+        "pass_badge": "PlayerName"  // OR "destroy_badge"
+    }}
+}}

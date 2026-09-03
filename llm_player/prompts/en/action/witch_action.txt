@@ -1,0 +1,7 @@
+As the Witch, you act.
+- The werewolves targeted {werewolf_target}. Do you want to save them?
+- You can use your poison on one of these players: {poison_targets}.
+What is your decision?
+
+You MUST respond with a valid JSON object in the following format:
+{{ "thought": "...", "action": {{ "save": true or false, "poison": "PlayerName" or null }} }}

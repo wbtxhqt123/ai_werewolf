@@ -1,0 +1,250 @@
+/* Setup Screen */
+.setup-container {
+    max-width: 500px;
+    margin: auto;
+    padding: 30px;
+    background: var(--card-bg);
+    border-radius: var(--border-radius-lg);
+    border: var(--border-thick);
+    box-shadow: var(--shadow-pop);
+    width: 90%;
+    animation: bounceIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes bounceIn {
+    0% { transform: scale(0.3); opacity: 0; }
+    50% { transform: scale(1.05); opacity: 1; }
+    70% { transform: scale(0.9); }
+    100% { transform: scale(1); }
+}
+
+.setup-container h1 {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: var(--text-dark);
+    font-size: 42px;
+    font-weight: 900;
+    text-shadow: 2px 2px 0px var(--accent-secondary);
+    letter-spacing: 1px;
+}
+
+.form-group {
+    margin-bottom: 1.2rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-dark);
+    font-weight: 800;
+    font-size: 18px;
+}
+
+.role-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 12px;
+}
+
+.avatar-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.avatar-option {
+    background: #fff;
+    border: 2px solid #dfe6e9;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 1.5rem;
+}
+
+.avatar-option:hover {
+    transform: scale(1.1);
+    border-color: var(--accent-yellow);
+    box-shadow: var(--shadow-pop);
+}
+
+.avatar-option.selected {
+    border: 3px solid var(--accent-secondary);
+    box-shadow: var(--shadow-pop);
+    transform: scale(1.1);
+}
+
+.role-option {
+    background: #fff;
+    border: 2px solid #dfe6e9;
+    border-radius: var(--border-radius-md);
+    padding: 10px 5px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+    overflow: visible; /* Ensure tooltip is not clipped */
+}
+
+.role-option:hover {
+    transform: translateY(-5px) rotate(2deg);
+    border-color: var(--accent-yellow);
+    box-shadow: var(--shadow-pop);
+}
+
+/* Tooltip for Role Description */
+.role-option:hover::after {
+    content: attr(data-description);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #FFF9C4; /* Light Yellow */
+    color: var(--text-dark);
+    padding: 10px 15px;
+    border-radius: 15px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    white-space: normal;
+    z-index: 1000;
+    pointer-events: none;
+    margin-bottom: 12px;
+    width: max-content;
+    max-width: 220px;
+    text-align: center;
+    box-shadow: 4px 4px 0px #FF6B6B; /* Soft Red Shadow */
+    border: 2px solid var(--text-dark);
+    display: block;
+    visibility: visible;
+    opacity: 1;
+    animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Tooltip Arrow */
+.role-option:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 8px 8px 0;
+    border-style: solid;
+    border-color: var(--text-dark) transparent transparent transparent;
+    margin-bottom: 5px;
+    z-index: 1000;
+    display: block;
+    visibility: visible;
+    opacity: 1;
+    animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popIn {
+    from { transform: translateX(-50%) scale(0.5); opacity: 0; }
+    to { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+.role-option.selected {
+    background: #fff;
+    border: 3px solid var(--accent-secondary);
+    box-shadow: 0 0 15px var(--accent-secondary), var(--shadow-pop);
+    transform: translateY(-5px) scale(1.05);
+}
+
+.role-icon {
+    font-size: 2.2rem;
+    margin-bottom: 5px;
+    filter: drop-shadow(2px 2px 0px rgba(0,0,0,0.1));
+}
+
+.role-name {
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: var(--text-dark);
+}
+
+.toggle-group {
+    display: flex;
+    gap: 10px;
+}
+
+.role-distribution-info {
+    margin-top: 15px;
+    display: flex;
+    justify-content: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.distribution-bubble {
+    background: #fff;
+    border: 2px solid var(--text-dark);
+    border-radius: 15px;
+    padding: 10px 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: var(--shadow-pop);
+    max-width: 100%;
+}
+
+.info-icon {
+    font-size: 1.2rem;
+}
+
+.dist-text {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-dark);
+    line-height: 1.4;
+}
+
+/* Hover Bubble for Player Count Buttons */
+.toggle-btn {
+    position: relative;
+    overflow: visible; /* Ensure tooltip is not clipped */
+}
+
+.toggle-btn:hover .count-tooltip {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+    visibility: visible;
+    pointer-events: auto; /* Allow interaction if needed, but mainly ensures it's "there" */
+    z-index: 1001; /* Ensure it's above other elements */
+}
+
+.count-tooltip {
+    position: absolute;
+    bottom: 120%; /* Moved up slightly to avoid overlap */
+    left: 50%;
+    transform: translateX(-50%) scale(0.5);
+    background: #FFF9C4; /* Light Yellow */
+    color: var(--text-dark);
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-bottom: 0; /* Reset margin */
+    box-shadow: 4px 4px 0px #FF6B6B; /* Soft Red Shadow */
+    border: 2px solid var(--text-dark);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    pointer-events: none;
+}
+
+.count-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 6px 6px 0;
+    border-style: solid;
+    border-color: var(--text-dark) transparent transparent transparent;
+}

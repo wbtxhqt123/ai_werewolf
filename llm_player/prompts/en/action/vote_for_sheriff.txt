@@ -1,0 +1,4 @@
+Who do you vote for to be sheriff? Choose from: {potential_targets}. You can also abstain.
+
+You MUST respond with a valid JSON object in the following format:
+{{ "thought": "...", "action": {{ "vote_for_sheriff": "PlayerName" or null }} }}

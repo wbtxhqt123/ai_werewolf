@@ -1,0 +1,9 @@
+You are the Sheriff. You need to decide the order of speeches for today.
+Options:
+1. Clockwise (starting from your left)
+2. Counter-clockwise (starting from your right)
+
+You MUST respond with a valid JSON object in the following format:
+{{ "thought": "...", "action": {{ "speech_order": "clockwise" }} }}
+or
+{{ "thought": "...", "action": {{ "speech_order": "counter_clockwise" }} }}

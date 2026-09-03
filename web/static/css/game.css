@@ -1,0 +1,467 @@
+/* Game Screen */
+.game-header {
+    height: 70px;
+    background: rgba(255, 255, 255, 0.9);
+    border-bottom: var(--border-thick);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 100;
+}
+
+.phase-indicator {
+    font-weight: 900;
+    padding: 8px 20px;
+    background: var(--accent-yellow);
+    color: var(--text-dark);
+    border: 2px solid var(--text-dark);
+    border-radius: 20px;
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
+    font-size: 1.1rem;
+    text-transform: uppercase;
+}
+
+#game-status-message {
+    font-weight: 800;
+    color: var(--text-dark);
+    background: #fff;
+    padding: 5px 15px;
+    border-radius: 15px;
+    border: 2px solid #dfe6e9;
+    text-shadow: none;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* Add gap between buttons */
+}
+
+.game-board {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    padding: 15px;
+}
+
+.player-card {
+    width: 100%;
+    height: 80px; /* Fixed height */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.2s;
+    cursor: pointer;
+    position: relative;
+    gap: 0;
+    padding: 0;
+}
+
+.player-card:hover {
+    transform: scale(1.05) translateY(-5px);
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    z-index: 10;
+}
+
+.player-avatar {
+    width: 50px;
+    height: 50px;
+    background: #fff;
+    border: 2px solid var(--text-dark);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
+    position: relative;
+    flex-shrink: 0;
+}
+
+.player-name {
+    margin-top: -8px;
+    background: #fff;
+    border: 2px solid var(--text-dark);
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: bold;
+    z-index: 2;
+    position: relative;
+    bottom: auto;
+    right: auto;
+    transform: none;
+    box-shadow: none;
+    color: var(--text-dark);
+    text-align: center;
+    display: block;
+    width: auto;
+    max-width: 90%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.player-me-label,
+.player-sheriff-label,
+.player-candidate-label,
+.player-tie-label,
+.player-dead-label {
+    display: none; /* Hidden by default */
+    position: absolute;
+    top: -10px;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    z-index: 10;
+}
+
+.player-card.dead .player-dead-label {
+    display: block;
+    background-color: var(--text-dark);
+}
+
+.player-card.me .player-avatar {
+    border-color: var(--status-me-color);
+}
+.player-card.me .player-me-label {
+    background-color: var(--status-me-color);
+}
+.player-card.me .player-name {
+    border-color: var(--status-me-color);
+    color: var(--status-me-color);
+}
+
+.player-card.sheriff .player-sheriff-label {
+    display: block;
+    background-color: var(--status-sheriff-color);
+}
+
+.player-card.sheriff-candidate .player-candidate-label {
+    display: block;
+    background-color: var(--status-candidate-color);
+}
+
+.player-card.tie .player-tie-label {
+    display: block;
+    background-color: var(--status-tie-color);
+}
+
+.player-card.tie .player-avatar {
+    animation: glowing 1.5s infinite;
+}
+
+@keyframes glowing {
+    0% { box-shadow: 0 0 5px var(--status-tie-color), 0 0 10px var(--status-tie-color); }
+    50% { box-shadow: 0 0 20px var(--status-tie-color), 0 0 30px var(--status-tie-color); }
+    100% { box-shadow: 0 0 5px var(--status-tie-color), 0 0 10px var(--status-tie-color); }
+}
+
+.player-card.sheriff-candidate .player-avatar {
+    border-color: var(--status-candidate-color);
+}
+.player-card.sheriff-candidate.me .player-me-label {
+    background-color: var(--status-candidate-color);
+}
+.player-card.sheriff-candidate .player-name {
+    border-color: var(--status-candidate-color);
+    color: var(--status-candidate-color);
+}
+
+.player-card.sheriff .player-avatar {
+    border-color: var(--status-sheriff-color);
+}
+.player-card.sheriff.me .player-me-label {
+    background-color: var(--status-sheriff-color);
+}
+.player-card.sheriff .player-name {
+    border-color: var(--status-sheriff-color);
+    color: var(--status-sheriff-color);
+}
+
+.player-card.tie .player-avatar {
+    border-color: var(--status-tie-color);
+}
+.player-card.tie.me .player-me-label {
+    background-color: var(--status-tie-color);
+}
+.player-card.tie .player-name {
+    border-color: var(--status-tie-color);
+    color: var(--status-tie-color);
+}
+
+.player-card.me {
+    transform: none;
+    margin: 0;
+}
+
+.player-card.me:hover {
+    transform: scale(1.05) translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+}
+
+.player-card.me .player-avatar {
+    width: 55px;
+    height: 55px;
+    border: 3px solid #00bfff; /* Deep Sky Blue */
+    box-shadow: 0 0 10px #00bfff, 2px 2px 0 rgba(0,0,0,0.1);
+}
+
+.player-card.sheriff .player-avatar {
+    border: 3px solid #ffd700; /* Gold */
+    box-shadow: 0 0 10px #ffd700, 2px 2px 0 rgba(0,0,0,0.1);
+}
+
+.player-card.sheriff-candidate .player-avatar {
+    border: 3px solid #ffa600; /* Orange */
+    box-shadow: 0 0 10px #ffa600, 2px 2px 0 rgba(0,0,0,0.1);
+}
+
+.player-status-icons {
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin-left: 0;
+    font-size: 1rem;
+    animation: none;
+    opacity: 1;
+}
+
+.new-messages-indicator {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--accent-secondary);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    z-index: 100;
+    transition: opacity 0.3s, transform 0.3s;
+    border: 2px solid var(--text-dark);
+}
+
+.new-messages-indicator:hover {
+    transform: translateX(-50%) scale(1.05);
+}
+
+.new-messages-indicator.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(10px);
+}
+
+.chat-box {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.message-container {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    margin-bottom: 15px;
+    max-width: 85%;
+}
+
+.message-container.user {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+}
+
+.message-container.ai {
+    align-self: flex-start;
+}
+
+.message-container.system {
+    align-self: center;
+    max-width: 100%;
+}
+
+.chat-avatar {
+    width: 40px;
+    height: 40px;
+    background: #fff;
+    border: 2px solid var(--text-dark);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
+}
+
+.chat-bubble {
+    padding: 12px 18px;
+    border-radius: 18px;
+    font-size: 1rem;
+    line-height: 1.4;
+    font-weight: 600;
+    position: relative;
+    border: 2px solid var(--text-dark);
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
+    background: #fff;
+    color: var(--text-dark);
+}
+
+.message-container.user .chat-bubble {
+    background: var(--accent-secondary);
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.message-container.ai .chat-bubble {
+    background: #fff;
+    border-bottom-left-radius: 4px;
+}
+
+.chat-bubble.system {
+    background: #dfe6e9;
+    color: #636e72;
+    font-size: 0.85rem;
+    font-weight: 800;
+    border: 2px dashed #b2bec3;
+    text-align: center;
+    box-shadow: none;
+}
+
+.game-controls {
+    background: #fff;
+    padding: 15px 20px;
+    border-top: var(--border-thick);
+    box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    justify-content: flex-start;
+    z-index: 100;
+    position: relative;
+}
+
+.my-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 130px;
+    background: #f1f2f6;
+    padding: 8px 12px;
+    border-radius: 15px;
+    border: 2px solid #dfe6e9;
+    position: relative;
+    left: auto;
+    bottom: auto;
+    box-shadow: none;
+}
+
+.my-status-icons {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    font-size: 1.8rem;
+    filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.2));
+    z-index: 20;
+    animation: shine 2s infinite;
+}
+
+.my-avatar {
+    font-size: 2rem;
+    width: auto;
+    height: auto;
+    display: block;
+}
+
+.my-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.my-role {
+    font-weight: 900;
+    color: var(--accent-primary);
+    font-size: 1rem;
+    text-transform: uppercase;
+}
+
+.my-status {
+    font-size: 0.8rem;
+    color: #636e72;
+    font-weight: 700;
+}
+
+.action-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#action-prompt {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--text-dark);
+    text-align: center;
+    text-shadow: 1px 1px 0px #fff;
+}
+
+.input-wrapper {
+    display: flex;
+    gap: 10px;
+    background: #fff;
+    padding: 5px;
+    border-radius: 25px;
+    border: 2px solid var(--text-dark);
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
+}
+
+#game-input {
+    flex: 1;
+    padding: 10px 15px;
+    border: none;
+    background: transparent;
+    font-size: 16px;
+    font-family: var(--font-main);
+    font-weight: 600;
+    outline: none;
+    color: var(--text-dark);
+}
+
+.choice-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    .game-controls {
+        flex-direction: column;
+        align-items: stretch;
+        padding-bottom: 20px;
+    }
+    
+    .my-info {
+        margin-bottom: 10px;
+        justify-content: center;
+    }
+}

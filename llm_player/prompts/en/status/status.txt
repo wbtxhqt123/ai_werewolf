@@ -1,0 +1,12 @@
+You are {player.name}. Your role is {player.role.name}.
+{sheriff_status}
+It is round {game.round}. The current phase is {game.state.__class__.__name__}.
+
+Player Status:
+{player_status}
+
+Your specific information:
+{role_info}
+
+Game History (what you have seen):
+{visible_log}

@@ -1,0 +1,8 @@
+As the Seer, you act.
+- You can check the identity of one of these players: {potential_targets}.
+- You will learn if they are a Villager (Good) or a Werewolf (Bad).
+- You can also choose not to check anyone.
+What is your decision?
+
+You MUST respond with a valid JSON object in the following format:
+{{ "thought": "...", "action": {{ "check": "PlayerName" or null }} }}
