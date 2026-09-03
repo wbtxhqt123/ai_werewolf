@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 
 from ..log import LogEntry, LogType
 from ..player import Hunter, BlackWerewolfKing, Player
@@ -290,20 +290,31 @@ class DayEndState(GameState):
 
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "The day is over, and dusk is approaching.", "zh": "天黑了，黄昏降临。"}, camps=["All"]))
 
-        # Trigger background summarization for all players
+        # Trigger synchronized dusk reflection for all AI players (Option B)
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "Players are reflecting on the day...", "zh": "玩家们正在回顾今天发生的事情..."}, camps=["All"]))
         
-        executor = ThreadPoolExecutor(max_workers=len(self.game.players))
-        for player in self.game.players:
-            if hasattr(player.controller, 'summarize_history'):
-                # Snapshot logs and clear them immediately to avoid race conditions
-                logs_snapshot = list(player.logs)
-                player.logs.clear()
-                executor.submit(player.controller.summarize_history, player, logs_snapshot)
-        
-        # We do NOT wait for the futures to complete. The game proceeds to NightBeginState.
-        # The executor will continue running in background threads.
-        executor.shutdown(wait=False)
+        candidates = [
+            p for p in self.game.players
+            if hasattr(p.controller, 'summarize_history') and callable(getattr(p.controller, 'summarize_history'))
+        ]
+
+        if candidates:
+            futures = {}
+            with ThreadPoolExecutor(max_workers=len(candidates)) as executor:
+                for player in candidates:
+                    logs_snapshot = list(player.logs)
+                    f = executor.submit(player.controller.summarize_history, player, logs_snapshot)
+                    futures[f] = player
+                
+                done, not_done = wait(futures.keys(), timeout=6.0)
+
+            for f, player in futures.items():
+                if f in done and f.exception() is None:
+                    # Summarization succeeded: clear day logs safely
+                    player.logs.clear()
+                else:
+                    # Summarization timed out or failed: retain logs so context is not lost tonight
+                    print(f"Warning: Summarization did not complete for {player.name}. Retaining logs.")
 
     def transition(self):
         winner = self.game.check_win_condition()

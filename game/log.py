@@ -49,6 +49,9 @@ class LogType(Enum):
     HUNTER_SHOOT = auto()
     BLACKWEREWOLFKING_SHOOT = auto()
 
+    PLAYER_THINKING = auto()
+    PLAYER_DONE_THINKING = auto()
+
 
 @dataclass
 class LogEntry:
@@ -85,3 +88,18 @@ class LogEntry:
     timestamp: datetime = field(default_factory=datetime.now)
     day: Optional[int] = None
     state: Optional[str] = None
+
+    def get_text(self, language: str = "zh") -> str:
+        """Returns the localized string message for this log entry."""
+        if isinstance(self.message, dict):
+            # Prefer requested language, then fallback to Chinese, English, or first available string
+            if language in self.message:
+                return str(self.message[language])
+            elif "zh" in self.message:
+                return str(self.message["zh"])
+            elif "en" in self.message:
+                return str(self.message["en"])
+            elif self.message:
+                return str(next(iter(self.message.values())))
+            return ""
+        return str(self.message)

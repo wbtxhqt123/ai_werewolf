@@ -266,7 +266,12 @@ class LLMController(Controller):
 
         visible_log = "Nothing has happened yet."
         if player.logs:
-            visible_log = "\n".join([f"- {log_entry.message}" for log_entry in player.logs])
+            filtered_entries = [
+                entry for entry in player.logs
+                if entry.log_type not in (LogType.PLAYER_THINKING, LogType.PLAYER_DONE_THINKING, LogType.THOUGHT)
+            ]
+            if filtered_entries:
+                visible_log = "\n".join([f"- {log_entry.get_text(self.language)}" for log_entry in filtered_entries])
 
         long_term_memory = ""
         if player.long_term_memory:
@@ -316,42 +321,59 @@ class LLMController(Controller):
         Returns:
             A dictionary representing the action to be taken, parsed from the LLM response.
         """
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                base_rules = self._load_prompt("", "base_rules")
-                characteristic_prompt = self._load_prompt("characteristic", self.personality)
-                status_prompt = self._build_status_prompt(player)
-                action_prompt_template = self._load_prompt("action", action_name)
-                action_prompt = action_prompt_template.format(**format_kwargs)
+        if self.game:
+            self.game.log(LogEntry(
+                log_type=LogType.PLAYER_THINKING,
+                message={"en": f"{player.name} is thinking...", "zh": f"{player.name} 正在思考..."},
+                source=player,
+                camps=["All"]
+            ))
 
-                prompt = f"{base_rules}\n\n{characteristic_prompt}\n\n--- CURRENT STATUS ---\n{status_prompt}\n\n--- ACTION REQUIRED ---\n{action_prompt}"
-                
-                response = self._get_llm_response(prompt)
-                thought = response.get('thought')
-                print(f"LLM ({player.name}) thought: {thought}")
-                
-                # Log the thought process for debugging and transparency.
-                if thought and self.game:
-                    self.game.log(LogEntry(
-                        log_type=LogType.THOUGHT,
-                        message={"en": f"({player.name} thought): {thought}", "zh": f"({player.name} 思考): {thought}"},
-                        source=player,
-                        visible_to_players=[player]
-                    ))
+        try:
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    base_rules = self._load_prompt("", "base_rules")
+                    characteristic_prompt = self._load_prompt("characteristic", self.personality)
+                    status_prompt = self._build_status_prompt(player)
+                    action_prompt_template = self._load_prompt("action", action_name)
+                    action_prompt = action_prompt_template.format(**format_kwargs)
 
-                action = response.get("action", {})
-                if not action:
-                     raise ValueError("Empty action received from LLM")
-                return action
+                    prompt = f"{base_rules}\n\n{characteristic_prompt}\n\n--- CURRENT STATUS ---\n{status_prompt}\n\n--- ACTION REQUIRED ---\n{action_prompt}"
+                    
+                    response = self._get_llm_response(prompt)
+                    thought = response.get('thought')
+                    print(f"LLM ({player.name}) thought: {thought}")
+                    
+                    # Log the thought process for debugging and transparency.
+                    if thought and self.game:
+                        self.game.log(LogEntry(
+                            log_type=LogType.THOUGHT,
+                            message={"en": f"({player.name} thought): {thought}", "zh": f"({player.name} 思考): {thought}"},
+                            source=player,
+                            visible_to_players=[player]
+                        ))
 
-            except Exception as e:
-                print(f"Attempt {attempt + 1}/{max_retries} failed for {player.name}: {e}")
-                if attempt == max_retries - 1:
-                    print(f"All attempts failed. Falling back to SafeController.")
-                    return self._get_fallback_decision(player, action_name, format_kwargs)
-        
-        return self._get_fallback_decision(player, action_name, format_kwargs)
+                    action = response.get("action", {})
+                    if not action:
+                         raise ValueError("Empty action received from LLM")
+                    return action
+
+                except Exception as e:
+                    print(f"Attempt {attempt + 1}/{max_retries} failed for {player.name}: {e}")
+                    if attempt == max_retries - 1:
+                        print(f"All attempts failed. Falling back to SafeController.")
+                        return self._get_fallback_decision(player, action_name, format_kwargs)
+            
+            return self._get_fallback_decision(player, action_name, format_kwargs)
+        finally:
+            if self.game:
+                self.game.log(LogEntry(
+                    log_type=LogType.PLAYER_DONE_THINKING,
+                    message={"en": f"{player.name} finished thinking.", "zh": f"{player.name} 思考完毕。"},
+                    source=player,
+                    camps=["All"]
+                ))
 
     def _get_fallback_decision(self, player: Player, action_name: str, format_kwargs: dict) -> dict:
         """Generates a safe, default action when the LLM fails.
@@ -495,7 +517,12 @@ class LLMController(Controller):
         """
         visible_log = "Nothing has happened yet."
         if logs_to_summarize:
-            visible_log = "\n".join([f"- {log_entry.message}" for log_entry in logs_to_summarize])
+            filtered_entries = [
+                entry for entry in logs_to_summarize
+                if entry.log_type not in (LogType.PLAYER_THINKING, LogType.PLAYER_DONE_THINKING, LogType.THOUGHT)
+            ]
+            if filtered_entries:
+                visible_log = "\n".join([f"- {log_entry.get_text(self.language)}" for log_entry in filtered_entries])
 
         prompt_template = self._load_prompt("memory", "summarize_day")
         prompt = prompt_template.format(

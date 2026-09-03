@@ -69,7 +69,8 @@ class ShootState(GameState):
             self.target = target
             log_type = LogType.HUNTER_SHOOT if isinstance(self.shooter.role, Hunter) else LogType.BLACKWEREWOLFKING_SHOOT
             self.game.log(LogEntry(log_type=log_type, message={"en": f"{self.shooter.name} shoots {target.name}!", "zh": f"{self.shooter.name} 开枪带走了 {target.name}！"}, source=self.shooter, target=target, camps=["All"]))
-            self.game.record_death(target, "hunter_shot", phase="day")
+            reason = "hunter_shot" if isinstance(self.shooter.role, Hunter) else "black_werewolf_king_shot"
+            self.game.record_death(target, reason, phase="day")
             self.game.log(LogEntry(log_type=LogType.PLAYER_ELIMINATED, message={"en": f"{target.name} has been eliminated.", "zh": f"{target.name} 死亡。"}, target=target, camps=["All"]))
             
             # Check if the target is also a shooter (Hunter/King)

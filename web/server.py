@@ -228,6 +228,7 @@ async def start_game(request: StartGameRequest):
         role_to_assign = random.choice(["Villager", "Werewolf", "Witch", "Seer", "Guard", "Hunter", "Black Werewolf King"])
 
     game_instance = Game(players_with_controllers, player_role=role_to_assign)
+    game_instance.add_log_listener(web_controller.add_log)
     
     ui_event_handler = UIEventHandler(game_instance, websocket_manager)
     game_instance.event_bus.subscribe(PlayerDied, ui_event_handler.handle_event)

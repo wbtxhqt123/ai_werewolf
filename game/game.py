@@ -67,6 +67,9 @@ class Game:
     def add_log_listener(self, listener: Callable[[LogEntry], None]):
         """Adds a listener that will be called whenever a log entry is added."""
         self.log_listeners.append(listener)
+        # Replay any prior logs (such as game setup logs from __init__) to the new listener
+        for entry in self.game_log:
+            listener(entry)
 
     def _create_players(
         self, players_with_controllers: dict[str, "Controller"]
@@ -246,6 +249,14 @@ class Game:
         """
         Records a player's death with detailed information and emits a PlayerDied event.
         """
+        # Deduplicate death records to avoid repeated recordings
+        existing = next((d for d in self.death if d["player"] == player.name), None)
+        if existing:
+            if update_status:
+                player.is_alive = False
+            player.death_reason = reason
+            return
+
         death_info = {
             "player": player.name,
             "day": self.day,
@@ -381,6 +392,13 @@ class Game:
         """
         if not player.role:
             return False
+
+        # AI Thought Privacy: Thoughts are private to the AI player and never visible to human players in-game
+        if entry.log_type == LogType.THOUGHT:
+            is_human = bool(player.controller and getattr(player.controller, "is_human", False))
+            if is_human:
+                return False
+            return bool(entry.visible_to_players and player in entry.visible_to_players)
 
         # 1. Public Log Check
         if "All" in entry.camps:

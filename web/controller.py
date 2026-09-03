@@ -36,19 +36,38 @@ class WebController(Controller):
         self.input_data: Any | None = None
         self.pending_request: dict | None = None
         self.logs: list[LogEntry] = []
+        self.visible_logs: list[dict] = []
         self.log_lock = threading.Lock()
 
     def add_log(self, entry: LogEntry):
-        """Adds a log entry to the player's log queue in a thread-safe manner."""
+        """Adds a log entry and filters it for the player in a thread-safe manner."""
         with self.log_lock:
             self.logs.append(entry)
 
+            my_player = None
+            if self.game:
+                my_player = next((p for p in self.game.players if p.controller == self), None)
+
+            is_visible = False
+            if my_player and self.game:
+                is_visible = self.game._is_visible(entry, my_player)
+            else:
+                if "All" in entry.camps:
+                    is_visible = True
+
+            if is_visible:
+                self.visible_logs.append({
+                    "id": entry.id,
+                    "type": entry.log_type.name,
+                    "message": entry.message,
+                    "source": entry.source.name if entry.source else None,
+                    "target": entry.target.name if entry.target else None,
+                    "data": entry.data,
+                    "camps": entry.camps
+                })
+
     def get_logs(self, start_index: int = 0) -> list[dict]:
         """Retrieves logs for the web client, filtered by visibility.
-
-        This method is called by the web server to get new logs for the player.
-        It uses the game's internal visibility rules to ensure the player only sees
-        the information they are supposed to.
 
         Args:
             start_index: The index from which to start retrieving logs.
@@ -57,32 +76,9 @@ class WebController(Controller):
             A list of serialized log dictionaries.
         """
         with self.log_lock:
-            filtered_logs = []
-            
-            my_player = None
-            if self.game:
-                my_player = next((p for p in self.game.players if p.controller == self), None)
-
-            for entry in self.logs[start_index:]:
-                is_visible = False
-                
-                if my_player and self.game:
-                    is_visible = self.game._is_visible(entry, my_player)
-                else:
-                    if "All" in entry.camps:
-                        is_visible = True
-
-                if is_visible:
-                    filtered_logs.append({
-                        "type": entry.log_type.name,
-                        "message": entry.message,
-                        "source": entry.source.name if entry.source else None,
-                        "target": entry.target.name if entry.target else None,
-                        "data": entry.data,
-                        "camps": entry.camps
-                    })
-            
-            return filtered_logs
+            if start_index >= len(self.visible_logs):
+                return []
+            return list(self.visible_logs[start_index:])
 
     def _wait_for_input(self, request_type: str, prompt: str, options: list[str] | None = None) -> Any:
         """Blocks the game thread and waits for user input from the web interface.
