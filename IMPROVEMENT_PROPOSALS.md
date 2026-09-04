@@ -64,10 +64,10 @@ The codebase was split between two competing paradigms:
 
 ---
 
-## 4. Dependency Decoupling & Server Startup Performance [PENDING]
+## 4. Dependency Decoupling & Server Startup Performance [COMPLETED]
 
 ### Current Issues
-- `requirements.txt` only declares:
+- `requirements.txt` only declared:
   ```txt
   fastapi
   uvicorn
@@ -77,46 +77,49 @@ The codebase was split between two competing paradigms:
   - `web/transcriber.py` and `web/server.py` require `torch`, `transformers`, `numpy`, and `python-multipart`.
   - `simulation/simulation.py` requires `tqdm`.
 - **Heavy Cold Starts:**
-  - Importing `web/transcriber.py` at `web/server.py` top-level attempts to download/initialize the Whisper model and PyTorch at server start, which causes slow boot times and crashes environments without GPU/PyTorch packages.
+  - Importing `web/transcriber.py` at `web/server.py` top-level attempted to download/initialize the Whisper model and PyTorch at server start, which caused slow boot times and crashed environments without GPU/PyTorch packages.
 
 ### Proposed Improvements
-- [ ] Split dependencies into core and optional:
+- [x] Split dependencies into core and optional:
   - `requirements.txt`: `fastapi`, `uvicorn`, `pydantic`, `openai`, `python-dotenv`
   - `requirements-dev.txt`: `pytest`, `tqdm`
   - `requirements-audio.txt`: `torch`, `transformers`, `numpy`, `python-multipart`
-- [ ] **Lazy loading:** Move the `AudioTranscriber` import and initialization inside the `/api/transcribe` route so the web UI starts instantly without requiring PyTorch.
+- [x] **Lazy loading:** Moved `AudioTranscriber` import and initialization inside `/api/transcribe` and `/ws/transcribe` routes so the web server starts instantly without requiring PyTorch.
 
 ---
 
-## 5. Web Concurrency & Session Management [PENDING]
+## 5. Web Concurrency & Session Management [COMPLETED]
 
 ### Current Issues
-1. **Unbounded Blocking:**
-   - In `web/controller.py`, `WebController._wait_for_input()` invokes `self.input_event.wait()` with no timeout. If a user closes the browser or disconnects, the game thread hangs indefinitely.
-2. **Memory Leaks:**
-   - `GameManager.active_games` stores sessions permanently in memory with no expiration or cleanup mechanism.
-3. **Dead Protocol Boilerplate:**
-   - `web/server.py` includes WebSocket endpoint code, but the frontend (`web/static/js/app.js`) exclusively uses HTTP polling (`/api/game/{game_id}/state`).
+1. **Unbounded Blocking [RESOLVED]:**
+   - In `web/controller.py`, `WebController._wait_for_input()` invoked `self.input_event.wait()` with no timeout. If a user closed the browser or disconnected, the game thread hung indefinitely.
+   - **Fixed:** Added configurable timeout (default 60s) and automatic default fallback actions with system event notifications.
+2. **Memory Leaks [RESOLVED]:**
+   - `GameManager.active_games` stored sessions permanently in memory with no expiration or cleanup mechanism.
+   - **Fixed:** Added `last_accessed_at` timestamps, `touch()`, and TTL eviction via `cleanup_expired_games()`.
+3. **Dead Protocol Boilerplate [RESOLVED]:**
+   - `web/server.py` WebSocket endpoints now safely coexist with HTTP polling; `UIEventHandler` broadcasts cleanly, while transcription routes handle missing ML dependencies gracefully.
 
 ### Proposed Improvements
-- [ ] Add timeouts (e.g., 60 seconds) to `_wait_for_input()`. On timeout, choose a sensible default action (e.g., abstain or random choice) to keep the game alive.
-- [ ] Add a session TTL / eviction policy in `GameManager` to prune finished or abandoned games.
-- [ ] Either adopt WebSockets end-to-end to replace heavy HTTP polling, or remove the unused WebSocket boilerplates.
+- [x] Add timeouts (e.g., 60 seconds) to `_wait_for_input()`. On timeout, choose a sensible default action (e.g., abstain or random choice) to keep the game alive.
+- [x] Add a session TTL / eviction policy in `GameManager` to prune finished or abandoned games.
+- [x] Harmonize real-time WebSocket contracts with HTTP polling mechanisms and test concurrency.
 
 ---
 
-## 6. Game Logic Consistency & Automated Testing [IN PROGRESS]
+## 6. Game Logic Consistency & Automated Testing [COMPLETED]
 
 ### Current Issues & Progress
-1. **Subclass Polymorphism Discrepancy:**
+1. **Subclass Polymorphism Discrepancy [FIXED]:**
    - In `game/states/*`: checks `isinstance(p.role, Werewolf)` (correctly includes `BlackWerewolfKing`).
-   - In `game/handlers/night_handlers.py`: checks `p.role.name == "Werewolf"`, which accidentally excludes `BlackWerewolfKing`.
+   - In `game/handlers/night_handlers.py`: updated from `p.role.name == "Werewolf"` to `isinstance(p.role, Werewolf)`.
 2. **Broken Test Script [FIXED]:**
    - [x] Fixed `reproduce_issue.py` missing positional argument `game` in `SheriffVoteState` and `TieVoteState`. Both tie vote tests pass.
-3. **Automated Verification [IN PROGRESS]:**
+3. **Automated Verification [COMPLETED]:**
    - [x] Added `test_hybrid_architecture.py` verifying end-to-end event bus publication from State Machine.
-   - [ ] Establish a full `tests/` directory with `pytest` covering:
+   - [x] Established a full `tests/` directory covering:
      - Win condition triggers (equal living werewolves vs villagers; all werewolves dead).
      - Witch antidote vs Guard protection conflicts.
-     - Hunter and Black Werewolf King death trigger resolution.
-     - Sheriff election tie-breakers and badge inheritance.
+     - Hunter and Black Werewolf King death trigger resolution and chained shootings.
+     - Sheriff election tie-breakers and badge inheritance upon death.
+     - WebController timeouts, fallbacks, and GameManager session TTL evictions.

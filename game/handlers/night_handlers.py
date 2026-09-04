@@ -9,6 +9,8 @@ from game.events.night_events import (
     WitchSave,
     WitchTurnStarted,
 )
+from game.events.game_flow import NightEnd
+from game.player import Werewolf
 
 
 def handle_guard_turn_started(game, event):
@@ -27,12 +29,12 @@ def handle_guard_protect(game, event):
 
 
 def handle_werewolf_turn_started(game, event):
-    werewolves = [p for p in game.players if p.role.name == "Werewolf" and p.is_alive]
+    werewolves = [p for p in game.players if isinstance(p.role, Werewolf) and p.is_alive]
     if werewolves:
         # For simplicity, let the first werewolf decide
         acting_werewolf = werewolves[0]
         potential_targets = [
-            p for p in game.players if p.is_alive and p.role.name != "Werewolf"
+            p for p in game.players if p.is_alive and not isinstance(p.role, Werewolf)
         ]
         target = acting_werewolf.controller.get_werewolf_target(
             acting_werewolf, potential_targets
@@ -95,7 +97,7 @@ def handle_seer_turn_started(game, event):
 
 
 def handle_seer_check(game, event):
-    is_werewolf = event.target.role.name == "Werewolf"
+    is_werewolf = isinstance(event.target.role, Werewolf)
     game.event_bus.publish(
         SeerCheckResult(
             player=event.player, target=event.target, is_werewolf=is_werewolf

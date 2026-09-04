@@ -1,7 +1,4 @@
-import torch
-from transformers import pipeline
 import logging
-import numpy as np
 import io
 
 # Configure logging
@@ -21,8 +18,18 @@ class AudioTranscriber:
         Args:
             model_name: The name of the Hugging Face model to use for transcription.
         """
+        try:
+            import torch
+            from transformers import pipeline
+        except ImportError as e:
+            logger.error("torch or transformers not installed. Install via requirements-audio.txt.")
+            raise RuntimeError(
+                "Audio transcription requires 'torch' and 'transformers'. "
+                "Please install them via: pip install -r requirements-audio.txt"
+            ) from e
+
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        if torch.backends.mps.is_available():
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             self.device = "mps"
             
         logger.info(f"Initializing AudioTranscriber with model {model_name} on {self.device}")
@@ -50,7 +57,6 @@ class AudioTranscriber:
             The transcribed text as a string, or an empty string if an error occurs.
         """
         try:
-            # `generate_kwargs` are passed to the model to control the transcription process.
             generate_kwargs = {}
             if language:
                 generate_kwargs["language"] = language

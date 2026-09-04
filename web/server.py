@@ -1,4 +1,5 @@
 import threading
+import time
 import uvicorn
 import random
 import uuid
@@ -11,8 +12,6 @@ from typing import Any, List, Optional, Dict
 import shutil
 import os
 import asyncio
-import numpy as np
-from web.transcriber import get_transcriber
 
 from game.game import Game
 from game.controllers import RandomController
@@ -36,7 +35,7 @@ class GameSession:
 
     This class encapsulates all the objects associated with a single game instance,
     including the game logic, the web controller for the human player, the game
-    thread, and an optional evaluator.
+    thread, and an optional evaluator. Tracks creation and access timestamps for TTL.
     """
     def __init__(self, game_id: str, game_instance: Game, web_controller: WebController, game_thread: threading.Thread):
         self.game_id = game_id
@@ -44,20 +43,34 @@ class GameSession:
         self.web_controller = web_controller
         self.game_thread = game_thread
         self.game_evaluator: GameEvaluator | None = None
+        self.created_at = time.time()
+        self.last_accessed_at = time.time()
+
+    def touch(self):
+        """Updates last accessed timestamp."""
+        self.last_accessed_at = time.time()
+
+    def is_finished(self) -> bool:
+        """Determines if the game is over or the thread has terminated."""
+        if self.game_instance and getattr(self.game_instance, "state", None):
+            from game.states.special_states import GameOverState
+            if isinstance(self.game_instance.state, GameOverState):
+                return True
+        return not self.game_thread.is_alive()
 
 class GameManager:
-    """Manages all active game sessions on the server.
+    """Manages all active game sessions on the server with TTL eviction.
 
     This thread-safe class is responsible for creating, retrieving, and removing
-    game sessions. It uses a dictionary to store sessions by their unique ID and a
-    lock to prevent race conditions.
+    game sessions. It tracks session activity and prunes abandoned or finished games.
     """
     def __init__(self):
         self.active_games: Dict[str, GameSession] = {}
         self.lock = threading.Lock()
 
     def create_game(self, game_instance: Game, web_controller: WebController, game_thread: threading.Thread) -> str:
-        """Creates a new game session and returns its ID."""
+        """Creates a new game session and returns its ID, pruning expired sessions first."""
+        self.cleanup_expired_games()
         game_id = str(uuid.uuid4())
         session = GameSession(game_id, game_instance, web_controller, game_thread)
         with self.lock:
@@ -65,15 +78,39 @@ class GameManager:
         return game_id
 
     def get_game(self, game_id: str) -> GameSession | None:
-        """Retrieves a game session by its ID."""
+        """Retrieves a game session by its ID and refreshes its last access time."""
         with self.lock:
-            return self.active_games.get(game_id)
+            session = self.active_games.get(game_id)
+            if session:
+                session.touch()
+            return session
 
     def remove_game(self, game_id: str):
         """Removes a game session from the manager."""
         with self.lock:
             if game_id in self.active_games:
                 del self.active_games[game_id]
+
+    def cleanup_expired_games(self, active_ttl_seconds: float = 7200.0, finished_ttl_seconds: float = 600.0) -> list[str]:
+        """Prunes finished or abandoned game sessions to prevent memory leaks.
+
+        Args:
+            active_ttl_seconds: Max idle duration for active games (default 2 hours).
+            finished_ttl_seconds: Max retention for completed games (default 10 minutes).
+
+        Returns:
+            List of pruned game_ids.
+        """
+        now = time.time()
+        expired_ids = []
+        with self.lock:
+            for game_id, session in list(self.active_games.items()):
+                idle_time = now - session.last_accessed_at
+                is_done = session.is_finished()
+                if (is_done and idle_time > finished_ttl_seconds) or (idle_time > active_ttl_seconds):
+                    expired_ids.append(game_id)
+                    del self.active_games[game_id]
+        return expired_ids
 
 game_manager = GameManager()
 game_history = GameHistory()
@@ -493,19 +530,26 @@ async def transcribe_audio(file: UploadFile = File(...), language: Optional[str]
     This endpoint saves the uploaded audio file to a temporary location, uses the
     `Transcriber` to convert the speech to text, and then deletes the temporary file.
     """
+    temp_filename = None
+    try:
+        from web.transcriber import get_transcriber
+        transcriber = get_transcriber()
+    except (RuntimeError, ImportError) as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
     try:
         temp_filename = f"temp_{uuid.uuid4()}_{file.filename}"
         with open(temp_filename, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        transcriber = get_transcriber()
         text = transcriber.transcribe(temp_filename, language=language)
         
         os.remove(temp_filename)
+        temp_filename = None
         
         return {"text": text}
     except Exception as e:
-        if 'temp_filename' in locals() and os.path.exists(temp_filename):
+        if temp_filename and os.path.exists(temp_filename):
             os.remove(temp_filename)
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -518,7 +562,12 @@ async def websocket_transcribe(websocket: WebSocket):
     This allows for a more interactive speech-to-text experience.
     """
     await websocket.accept()
-    transcriber = get_transcriber()
+    try:
+        from web.transcriber import get_transcriber
+        transcriber = get_transcriber()
+    except (RuntimeError, ImportError) as e:
+        await websocket.close(code=1011, reason=str(e))
+        return
     
     session_id = str(uuid.uuid4())
     temp_filename = f"temp_stream_{session_id}.webm"
