@@ -211,6 +211,115 @@
     box-shadow: 0 5px 15px rgba(0,0,0,0.1);
 }
 
+/* AI Thinking State */
+.player-card.thinking .player-avatar {
+    border-color: var(--accent-purple);
+    animation: thinkingGlow 1.5s ease-in-out infinite;
+}
+
+.player-card.thinking .player-avatar::after {
+    content: '💭';
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    font-size: 1.1rem;
+    background: #fff;
+    border: 2px solid var(--text-dark);
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.15);
+    animation: bounceThinking 1s ease-in-out infinite alternate;
+    z-index: 15;
+}
+
+@keyframes thinkingGlow {
+    0%, 100% { box-shadow: 0 0 5px var(--accent-purple), 2px 2px 0 rgba(0,0,0,0.1); }
+    50% { box-shadow: 0 0 16px var(--accent-purple), 0 0 8px #a29bfe; }
+}
+
+@keyframes bounceThinking {
+    from { transform: translateY(0) scale(0.9); }
+    to { transform: translateY(-4px) scale(1.1); }
+}
+
+/* Speaking State & Floating Speech Bubble */
+.player-card.speaking .player-avatar {
+    border-color: var(--accent-secondary);
+    animation: speakingPulse 0.8s infinite alternate;
+}
+
+@keyframes speakingPulse {
+    from { transform: scale(1); box-shadow: 0 0 5px var(--accent-secondary); }
+    to { transform: scale(1.08); box-shadow: 0 0 14px var(--accent-secondary); }
+}
+
+.player-speech-bubble {
+    display: none;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #fff;
+    color: var(--text-dark);
+    border: 2px solid var(--text-dark);
+    border-radius: 14px;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    max-width: 140px;
+    white-space: normal;
+    word-break: break-word;
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.15);
+    z-index: 100;
+    pointer-events: none;
+    line-height: 1.3;
+}
+
+#players-left .player-speech-bubble {
+    left: calc(100% + 8px);
+    right: auto;
+}
+
+#players-left .player-speech-bubble::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    transform: translateY(-50%);
+    border-width: 6px 7px 6px 0;
+    border-style: solid;
+    border-color: transparent var(--text-dark) transparent transparent;
+}
+
+#players-right .player-speech-bubble {
+    right: calc(100% + 8px);
+    left: auto;
+}
+
+#players-right .player-speech-bubble::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    transform: translateY(-50%);
+    border-width: 6px 0 6px 7px;
+    border-style: solid;
+    border-color: transparent transparent transparent var(--text-dark);
+}
+
+.player-speech-bubble.visible {
+    display: block;
+    animation: bubblePop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes bubblePop {
+    from { opacity: 0; transform: translateY(-50%) scale(0.7); }
+    to { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+
 .player-card.me .player-avatar {
     width: 55px;
     height: 55px;
@@ -276,7 +385,7 @@
 
 .message-container {
     display: flex;
-    align-items: flex-end;
+    align-items: flex-start;
     gap: 10px;
     margin-bottom: 15px;
     max-width: 85%;
@@ -294,6 +403,25 @@
 .message-container.system {
     align-self: center;
     max-width: 100%;
+}
+
+.chat-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.chat-sender {
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: #636e72;
+    padding: 0 4px;
+}
+
+.message-container.user .chat-sender {
+    text-align: right;
+    color: #0984e3;
 }
 
 .chat-avatar {

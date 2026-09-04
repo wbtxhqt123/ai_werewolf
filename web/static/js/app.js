@@ -284,7 +284,7 @@ const gameUI = {
 /** @const {object} evalUI - References to DOM elements in the evaluation modal. */
 const evalUI = {
     modal: document.getElementById('evaluation-modal'),
-    closeBtn: document.querySelector('.close-modal'),
+    closeBtn: document.querySelector('#evaluation-modal .close-modal'),
     setupSection: document.getElementById('eval-setup'),
     chatSection: document.getElementById('eval-chat-section'),
     modeBtns: document.querySelectorAll('.eval-mode-btn'),
@@ -1150,12 +1150,29 @@ function processLog(log) {
         avatarDiv.className = 'chat-avatar';
         avatarDiv.innerText = avatar;
         
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'chat-content';
+
+        const senderDiv = document.createElement('div');
+        senderDiv.className = 'chat-sender';
+        
+        const playerNum = log.source.replace('Player ', '');
+        const isMe = log.source === 'Player 1';
+        if (gameState.lang === 'zh') {
+            senderDiv.innerText = isMe ? `${playerNum}号玩家 (我)` : `${playerNum}号玩家`;
+        } else {
+            senderDiv.innerText = isMe ? `Player ${playerNum} (Me)` : `Player ${playerNum}`;
+        }
+
         const bubbleDiv = document.createElement('div');
         bubbleDiv.className = 'chat-bubble';
         bubbleDiv.innerText = text;
         
+        contentDiv.appendChild(senderDiv);
+        contentDiv.appendChild(bubbleDiv);
+
         msgContainer.appendChild(avatarDiv);
-        msgContainer.appendChild(bubbleDiv);
+        msgContainer.appendChild(contentDiv);
     } else {
         const bubbleDiv = document.createElement('div');
         bubbleDiv.className = 'chat-bubble system';
