@@ -16,7 +16,7 @@ The web module follows a modern client-server architecture:
 *   **`controller.py`**: Implements the `WebController`, a crucial component that queues user input and retrieves game logs to be sent to the client.
 *   **`static/`**: Contains all frontend assets.
     *   **`index.html`**: The main HTML file that defines the structure of the game interface.
-    *   **`css/style.css`**: The stylesheet responsible for the visual theme, including dynamic day/night cycle effects and player status indicators.
+    *   **`css/`**: Modular stylesheets organized by concerns (`base.css`, `layout.css`, `components.css`, `setup.css`, `game.css`, `modals.css`).
     *   **`js/app.js`**: The client-side JavaScript that handles all frontend logic: polling for game state, rendering updates, and sending user inputs back to the server.
 
 ## Frontend Features
