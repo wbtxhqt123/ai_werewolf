@@ -5,6 +5,7 @@ __pycache__/
 *.so
 .env
 .env.*
+!.env.example
 venv/
 .venv/
 env/
@@ -22,14 +23,13 @@ htmlcov/
 server.log
 *.sqlite3
 
-# Project Specific - Generated Data & Media
+# Project Specific - Generated Data & Logs
 history/
 simulation/simulation_log/
-screenshots/
-plans/
-documentation/
-bgm/
 game_history.json
+
+# Notebook Checkpoints
+.ipynb_checkpoints/
 
 # IDE / Editor
 .vscode/
