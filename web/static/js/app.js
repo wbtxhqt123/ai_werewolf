@@ -382,6 +382,10 @@ function setupVoiceInput() {
     let isRecording = false;
 
     gameUI.voiceInputBtn.addEventListener('click', async () => {
+        if (!isRecording && (!gameState.pendingAction || gameState.pendingAction.type !== 'speech')) {
+            return;
+        }
+
         if (isRecording) {
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
@@ -448,9 +452,12 @@ async function sendAudioForTranscription(audioBlob) {
         console.error("Error sending audio:", error);
         alert(gameState.lang === 'zh' ? "网络错误。" : "Network error.");
     } finally {
-        gameUI.input.disabled = false;
+        const isSpeechAction = gameState.pendingAction && gameState.pendingAction.type === 'speech';
+        gameUI.input.disabled = !isSpeechAction;
         gameUI.input.placeholder = originalPlaceholder;
-        gameUI.input.focus();
+        if (isSpeechAction) {
+            gameUI.input.focus();
+        }
     }
 }
 
@@ -1292,6 +1299,31 @@ function updatePlayers(playersData, justDied = new Set()) {
             }
         }
     });
+
+    if (gameState.pendingAction && (gameState.pendingAction.type === 'vote' || gameState.pendingAction.type === 'choice')) {
+        const validTargets = (gameState.pendingAction.options || []).filter(opt => typeof opt === 'string' && opt.startsWith('Player '));
+        updatePlayerSelectableState(validTargets);
+    }
+}
+
+/**
+ * Updates player card visuals to indicate which players can be targeted.
+ * @param {Array<string>} targetPlayerNames - Array of selectable player names e.g. ['Player 2', 'Player 3']
+ */
+function updatePlayerSelectableState(targetPlayerNames = []) {
+    const cards = document.querySelectorAll('.player-card');
+    cards.forEach(card => {
+        const name = card.dataset.name;
+        if (targetPlayerNames.length === 0) {
+            card.classList.remove('selectable-target', 'non-target');
+        } else if (targetPlayerNames.includes(name)) {
+            card.classList.add('selectable-target');
+            card.classList.remove('non-target');
+        } else {
+            card.classList.remove('selectable-target');
+            card.classList.add('non-target');
+        }
+    });
 }
 
 /**
@@ -1304,8 +1336,10 @@ function handleInputRequest(req) {
     if (!req) {
         gameUI.input.disabled = true;
         gameUI.sendBtn.disabled = true;
+        if (gameUI.voiceInputBtn) gameUI.voiceInputBtn.disabled = true;
         gameUI.choiceButtons.innerHTML = '';
         gameUI.actionPrompt.innerText = I18N[gameState.lang].waiting;
+        updatePlayerSelectableState([]);
         return;
     }
 
@@ -1318,13 +1352,18 @@ function handleInputRequest(req) {
     if (req.type === 'speech') {
         gameUI.input.disabled = false;
         gameUI.sendBtn.disabled = false;
+        if (gameUI.voiceInputBtn) gameUI.voiceInputBtn.disabled = false;
         gameUI.input.focus();
         gameUI.choiceButtons.innerHTML = '';
+        updatePlayerSelectableState([]);
     } else if (req.type === 'vote' || req.type === 'choice') {
         gameUI.input.disabled = true;
         gameUI.sendBtn.disabled = true;
+        if (gameUI.voiceInputBtn) gameUI.voiceInputBtn.disabled = true;
         
         const options = [...req.options];
+        const validTargets = options.filter(opt => typeof opt === 'string' && opt.startsWith('Player '));
+        updatePlayerSelectableState(validTargets);
         
         const noActionText = gameState.lang === 'zh' ? "不行动 / 弃票" : "No Action / Abstain";
         
@@ -1376,7 +1415,10 @@ function renderChoiceButtons(options, addNoAction) {
  */
 function handlePlayerClick(playerName) {
     if (gameState.pendingAction && (gameState.pendingAction.type === 'vote' || gameState.pendingAction.type === 'choice')) {
-        sendAction(playerName);
+        const options = gameState.pendingAction.options || [];
+        if (options.includes(playerName)) {
+            sendAction(playerName);
+        }
     }
 }
 

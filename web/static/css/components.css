@@ -326,6 +326,14 @@ input[type="password"] {
     box-shadow: none;
 }
 
+#voice-input-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    pointer-events: none;
+}
+
 #voice-input-btn.recording {
     background: var(--accent-primary);
     color: white;

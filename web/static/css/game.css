@@ -61,14 +61,42 @@
     border-radius: 15px;
     border: 1px solid var(--player-card-border);
     transition: all 0.2s;
-    cursor: pointer;
+    cursor: default;
     position: relative;
     gap: 0;
     padding: 0;
 }
 
+.player-card.selectable-target {
+    cursor: pointer;
+    border: 2px solid var(--accent-secondary);
+    animation: targetPulse 1.4s ease-in-out infinite alternate;
+}
+
+.player-card.selectable-target:hover {
+    transform: scale(1.08) translateY(-4px);
+    border-color: var(--accent-yellow);
+    box-shadow: 0 0 16px var(--accent-yellow), var(--shadow-pop);
+    z-index: 10;
+}
+
+.player-card.non-target {
+    opacity: 0.45;
+    filter: grayscale(50%);
+    pointer-events: none;
+}
+
+@keyframes targetPulse {
+    from {
+        box-shadow: 0 0 4px var(--accent-secondary);
+    }
+    to {
+        box-shadow: 0 0 14px var(--accent-secondary), 0 0 8px rgba(78, 205, 196, 0.6);
+    }
+}
+
 .player-card:hover {
-    transform: scale(1.05) translateY(-5px);
+    transform: scale(1.03) translateY(-2px);
     background: rgba(255, 255, 255, 0.2);
     border-color: rgba(255, 255, 255, 0.3);
     box-shadow: 0 5px 15px rgba(0,0,0,0.1);
@@ -272,8 +300,9 @@
     border: 2px solid var(--text-dark);
     border-radius: 14px;
     padding: 6px 10px;
+    font-family: var(--font-body);
     font-size: 0.8rem;
-    font-weight: 700;
+    font-weight: 600;
     max-width: 140px;
     white-space: normal;
     word-break: break-word;
@@ -418,8 +447,9 @@
 }
 
 .chat-sender {
+    font-family: var(--font-body);
     font-size: 0.8rem;
-    font-weight: 800;
+    font-weight: 700;
     color: #636e72;
     padding: 0 4px;
 }
@@ -447,9 +477,10 @@
 .chat-bubble {
     padding: 12px 18px;
     border-radius: 18px;
-    font-size: 1rem;
-    line-height: 1.4;
-    font-weight: 600;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    font-weight: 500;
     position: relative;
     border: 2px solid var(--panel-border);
     box-shadow: 3px 3px 0px rgba(0,0,0,0.15);
@@ -579,9 +610,9 @@
     padding: 10px 15px;
     border: none;
     background: transparent;
-    font-size: 16px;
-    font-family: var(--font-main);
-    font-weight: 600;
+    font-size: 15px;
+    font-family: var(--font-body);
+    font-weight: 500;
     outline: none;
     color: var(--input-text);
     transition: color 0.5s ease;
