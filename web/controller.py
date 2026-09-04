@@ -21,7 +21,7 @@ class WebController(Controller):
     """
     is_human = True
 
-    def __init__(self, timeout: float = 60.0):
+    def __init__(self, timeout: float = 120.0):
         """Initializes the WebController.
 
         Attributes:
@@ -41,6 +41,12 @@ class WebController(Controller):
         self.visible_logs: list[dict] = []
         self.log_lock = threading.Lock()
         self.timeout = timeout
+
+    def set_timeout(self, timeout: float):
+        """Updates the input timeout for this controller."""
+        self.timeout = max(1.0, float(timeout))
+        if self.pending_request is not None:
+            self.pending_request["timeout"] = self.timeout
 
     def add_log(self, entry: LogEntry):
         """Adds a log entry and filters it for the player in a thread-safe manner."""
@@ -122,7 +128,17 @@ class WebController(Controller):
         self.input_event.clear()
         self.input_data = None
         
-        signaled = self.input_event.wait(timeout=self.timeout)
+        start_time = time.time()
+        signaled = False
+        while True:
+            remaining = self.timeout - (time.time() - start_time)
+            if remaining <= 0:
+                break
+            step_wait = min(0.2, remaining)
+            if self.input_event.wait(timeout=step_wait):
+                signaled = True
+                break
+
         self.pending_request = None
         
         if not signaled:

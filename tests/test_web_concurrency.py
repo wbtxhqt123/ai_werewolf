@@ -86,6 +86,64 @@ class TestWebConcurrency(unittest.TestCase):
         self.assertIsNone(gm.get_game(id_done))
         self.assertIsNotNone(gm.get_game(id_active))
 
+    def test_web_controller_set_timeout(self):
+        ctrl = WebController(timeout=60.0)
+        self.assertEqual(ctrl.timeout, 60.0)
+        ctrl.set_timeout(180.0)
+        self.assertEqual(ctrl.timeout, 180.0)
+
+    def test_web_controller_dynamic_timeout_extension(self):
+        ctrl = WebController(timeout=0.08)
+        p1 = Player("Player 1", Villager())
+
+        def extend_and_input():
+            time.sleep(0.04)
+            ctrl.set_timeout(0.3)
+            time.sleep(0.08)  # at ~0.12s, which exceeds initial 0.08s
+            ctrl.set_input("Survived timeout extension!")
+
+        threading.Thread(target=extend_and_input).start()
+        speech = ctrl.get_speech(p1)
+        self.assertEqual(speech, "Survived timeout extension!")
+
+    def test_api_update_settings(self):
+        from starlette.testclient import TestClient
+        from web.server import app, game_manager
+
+        mock_game = MagicMock()
+        mock_ctrl = WebController(timeout=60.0)
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = True
+
+        game_id = game_manager.create_game(mock_game, mock_ctrl, mock_thread)
+        client = TestClient(app)
+
+        response = client.post("/api/game/settings", json={"game_id": game_id, "turn_timeout": 180.0})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["turn_timeout"], 180.0)
+        self.assertEqual(mock_ctrl.timeout, 180.0)
+
+    def test_api_start_game_with_turn_timeout(self):
+        from starlette.testclient import TestClient
+        from web.server import app, game_manager
+
+        client = TestClient(app)
+        start_payload = {
+            "num_players": 6,
+            "user_role": "Villager",
+            "turn_timeout": 300.0,
+            "language": "en"
+        }
+        response = client.post("/api/game/start", json=start_payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("game_id", data)
+        game_id = data["game_id"]
+
+        session = game_manager.get_game(game_id)
+        self.assertIsNotNone(session)
+        self.assertEqual(session.web_controller.timeout, 300.0)
+
 
 if __name__ == "__main__":
     unittest.main()

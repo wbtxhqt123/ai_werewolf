@@ -148,6 +148,7 @@
 
 input[type="text"],
 input[type="password"],
+input[type="number"],
 select {
     width: 100%;
     padding: 12px 15px;
@@ -170,6 +171,7 @@ select {
 
 input[type="text"]:focus,
 input[type="password"]:focus,
+input[type="number"]:focus,
 select:focus {
     background-color: #fff;
     border-color: var(--accent-secondary);
@@ -180,7 +182,8 @@ select:focus {
 
 /* Remove background image for inputs that are not select */
 input[type="text"],
-input[type="password"] {
+input[type="password"],
+input[type="number"] {
     background-image: none;
 }
 

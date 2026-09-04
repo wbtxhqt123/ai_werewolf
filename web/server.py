@@ -131,6 +131,12 @@ class StartGameRequest(BaseModel):
     provider: Optional[str] = None
     player_configs: Optional[dict] = None
     language: str = "zh"
+    turn_timeout: Optional[float] = 120.0
+
+class UpdateSettingsRequest(BaseModel):
+    """Defines the structure for updating runtime game settings."""
+    game_id: str
+    turn_timeout: Optional[float] = None
 
 class EvaluationRequest(BaseModel):
     """Defines the structure for a request to evaluate a completed game."""
@@ -217,7 +223,8 @@ async def start_game(request: StartGameRequest):
     rest of the game with AI players. It supports both a global LLM configuration
     and per-player configurations.
     """
-    web_controller = WebController()
+    timeout = float(request.turn_timeout) if request.turn_timeout and request.turn_timeout > 0 else 120.0
+    web_controller = WebController(timeout=timeout)
     
     players_with_controllers = {
         "Player 1": web_controller,
@@ -461,6 +468,16 @@ async def post_action(request: ActionRequest):
     web_controller = session.web_controller
     web_controller.set_input(request.action)
     return {"status": "ok"}
+
+@app.post("/api/game/settings")
+async def update_settings(request: UpdateSettingsRequest):
+    """Updates runtime settings for an active game session."""
+    session = game_manager.get_game(request.game_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if request.turn_timeout is not None and request.turn_timeout > 0:
+        session.web_controller.set_timeout(request.turn_timeout)
+    return {"status": "ok", "turn_timeout": session.web_controller.timeout}
 
 @app.post("/api/game/evaluate")
 async def evaluate_game(request: EvaluationRequest):

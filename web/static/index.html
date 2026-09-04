@@ -7,12 +7,12 @@
     <link rel="preconnect" href="https://fonts.loli.net">
     <link rel="preconnect" href="https://gstatic.loli.net" crossorigin>
     <link href="https://fonts.loli.net/css2?family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/base.css?v=8">
-    <link rel="stylesheet" href="/static/css/layout.css?v=8">
-    <link rel="stylesheet" href="/static/css/components.css?v=8">
-    <link rel="stylesheet" href="/static/css/setup.css?v=8">
-    <link rel="stylesheet" href="/static/css/game.css?v=8">
-    <link rel="stylesheet" href="/static/css/modals.css?v=8">
+    <link rel="stylesheet" href="/static/css/base.css?v=9">
+    <link rel="stylesheet" href="/static/css/layout.css?v=9">
+    <link rel="stylesheet" href="/static/css/components.css?v=9">
+    <link rel="stylesheet" href="/static/css/setup.css?v=9">
+    <link rel="stylesheet" href="/static/css/game.css?v=9">
+    <link rel="stylesheet" href="/static/css/modals.css?v=9">
 </head>
 <body>
     <div id="app">
@@ -62,9 +62,26 @@
         <div id="settings-modal" class="modal">
             <div class="modal-content settings-content">
                 <span class="close-modal" id="close-settings-btn">&times;</span>
-                <h2>Advanced Settings</h2>
+                <h2 id="settings-modal-title">Advanced Settings</h2>
                 <div class="form-group">
-                    <label>Provider</label>
+                    <label id="setting-timer-label">Turn Timer</label>
+                    <div class="timer-setting-row">
+                        <select id="turn-timer-select">
+                            <option value="60" data-i18n="min1">1 Minute (60s)</option>
+                            <option value="120" data-i18n="min2" selected>2 Minutes (120s)</option>
+                            <option value="180" data-i18n="min3">3 Minutes (180s)</option>
+                            <option value="300" data-i18n="min5">5 Minutes (300s)</option>
+                            <option value="600" data-i18n="min10">10 Minutes (600s)</option>
+                            <option value="custom" data-i18n="custom">Custom...</option>
+                        </select>
+                        <div id="custom-timer-container" class="custom-timer-container" style="display: none;">
+                            <input type="number" id="custom-timer-input" min="1" max="60" placeholder="Mins">
+                            <span id="custom-timer-unit" class="custom-timer-unit">min</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label id="setting-provider-label">Provider</label>
                     <select id="provider-select">
                         <option value="openai">OpenAI</option>
                         <option value="doubao">Doubao (Volcengine)</option>
@@ -75,15 +92,15 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>API Key</label>
+                    <label id="setting-apikey-label">API Key</label>
                     <input type="password" id="api-key" placeholder="API Key">
                 </div>
                 <div class="form-group">
-                    <label>Base URL (Optional)</label>
+                    <label id="setting-baseurl-label">Base URL (Optional)</label>
                     <input type="text" id="base-url" placeholder="e.g. https://api.openai.com/v1">
                 </div>
                 <div class="form-group">
-                    <label>Model Name (Optional)</label>
+                    <label id="setting-modelname-label">Model Name (Optional)</label>
                     <input type="text" id="model-name" placeholder="e.g. gpt-4o">
                 </div>
                 <button id="save-settings-btn" class="primary-btn">Save & Close</button>
@@ -100,7 +117,7 @@
                     <button id="records-btn" class="icon-btn header-pill-btn" style="font-size: 0.9rem; width: auto; padding: 0 14px; border-radius: 20px; font-weight: 800;" title="Game Records" aria-label="Game Records">📖 记录</button>
                     <button id="game-lang-btn" class="icon-btn" style="font-size: 0.9rem; width: auto; padding: 0 12px; border-radius: 20px; font-weight: 800;">中文/EN</button>
                     <button id="toggle-debug-btn" title="Toggle Debug Logs" aria-label="Toggle Debug Logs">🐞</button>
-
+                    <button id="game-settings-btn" class="icon-btn" title="Settings" aria-label="Settings">⚙️</button>
                     <button id="quit-btn" class="icon-btn" aria-label="Quit Game">✕</button>
                 </div>
             </header>
@@ -255,6 +272,6 @@
         </div>
     </template>
 
-    <script src="/static/js/app.js?v=8"></script>
+    <script src="/static/js/app.js?v=9"></script>
 </body>
 </html>

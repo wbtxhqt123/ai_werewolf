@@ -51,6 +51,17 @@ const I18N = {
         selectRole: "选择身份",
         playerCount: "玩家人数",
         advancedSettings: "高级设置",
+        turnTimer: "回合倒计时",
+        timerOptions: {
+            min1: "1 分钟 (60秒)",
+            min2: "2 分钟 (120秒)",
+            min3: "3 分钟 (180秒)",
+            min5: "5 分钟 (300秒)",
+            min10: "10 分钟 (600秒)",
+            custom: "自定义..."
+        },
+        customMinPlaceholder: "分钟数",
+        minUnit: "分钟",
         provider: "提供商",
         apiKey: "API 密钥 (可选)",
         baseUrl: "接口地址 (可选)",
@@ -141,6 +152,18 @@ const I18N = {
         selectRole: "Select Role",
         playerCount: "Number of Players",
         advancedSettings: "Advanced Settings",
+        turnTimer: "Turn Timer",
+        timerOptions: {
+            min1: "1 Minute (60s)",
+            min2: "2 Minutes (120s)",
+            min3: "3 Minutes (180s)",
+            min5: "5 Minutes (300s)",
+            min10: "10 Minutes (600s)",
+            custom: "Custom..."
+        },
+        customMinPlaceholder: "Minutes",
+        minUnit: "min",
+        provider: "Provider",
         apiKey: "API Key (Optional)",
         baseUrl: "Base URL (Optional)",
         modelName: "Model Name (Optional)",
@@ -285,7 +308,7 @@ const setupUI = {
     openSettingsBtn: document.getElementById('open-settings-btn'),
     apiKeyInput: document.getElementById('api-key'),
     title: document.querySelector('.setup-container h1'),
-    labels: document.querySelectorAll('.form-group label'),
+    labels: document.querySelectorAll('.setup-container .form-group label'),
 };
 
 /** @const {object} gameUI - References to DOM elements on the game screen. */
@@ -303,6 +326,7 @@ const gameUI = {
     quitBtn: document.getElementById('quit-btn'),
     debugBtn: document.getElementById('toggle-debug-btn'),
     recordsBtn: document.getElementById('records-btn'),
+    gameSettingsBtn: document.getElementById('game-settings-btn'),
     gameLangBtn: document.getElementById('game-lang-btn'),
     lobbyLangBtn: document.getElementById('lobby-lang-btn'),
     newMessagesIndicator: document.getElementById('new-messages-indicator'),
@@ -333,7 +357,17 @@ const evalUI = {
 const settingsUI = {
     modal: document.getElementById('settings-modal'),
     closeBtn: document.getElementById('close-settings-btn'),
-    saveBtn: document.getElementById('save-settings-btn')
+    saveBtn: document.getElementById('save-settings-btn'),
+    timerSelect: document.getElementById('turn-timer-select'),
+    customTimerContainer: document.getElementById('custom-timer-container'),
+    customTimerInput: document.getElementById('custom-timer-input'),
+    customTimerUnit: document.getElementById('custom-timer-unit'),
+    timerLabel: document.getElementById('setting-timer-label'),
+    providerLabel: document.getElementById('setting-provider-label'),
+    apiKeyLabel: document.getElementById('setting-apikey-label'),
+    baseUrlLabel: document.getElementById('setting-baseurl-label'),
+    modelNameLabel: document.getElementById('setting-modelname-label'),
+    title: document.getElementById('settings-modal-title')
 };
 
 // --- INITIALIZATION ---
@@ -347,6 +381,7 @@ function init() {
     renderRoleSelection(defaultCount);
     renderAvatarSelection();
     setupEventListeners();
+    loadStoredSettings();
     updateLanguage();
     
     let debugVisible = false;
@@ -494,6 +529,48 @@ async function sendAudioForTranscription(audioBlob) {
     }
 }
 
+/** @type {number} - Selected turn timeout in seconds. Default 120s (2 minutes). */
+let selectedTurnTimeoutSeconds = 120;
+
+/**
+ * Loads stored settings from localStorage and applies them to UI state.
+ */
+function loadStoredSettings() {
+    try {
+        const savedTimeout = localStorage.getItem('werewolf_turn_timeout');
+        if (savedTimeout) {
+            const parsed = parseInt(savedTimeout, 10);
+            if (Number.isFinite(parsed) && parsed >= 10) {
+                selectedTurnTimeoutSeconds = parsed;
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to read settings from localStorage', e);
+    }
+    syncTimerUIFromState();
+}
+
+/**
+ * Syncs the settings modal timer controls with the current state.
+ */
+function syncTimerUIFromState() {
+    const timerSelect = settingsUI.timerSelect || document.getElementById('turn-timer-select');
+    const customContainer = settingsUI.customTimerContainer || document.getElementById('custom-timer-container');
+    const customInput = settingsUI.customTimerInput || document.getElementById('custom-timer-input');
+    if (!timerSelect) return;
+
+    const standardValues = ["60", "120", "180", "300", "600"];
+    const strVal = String(selectedTurnTimeoutSeconds);
+    if (standardValues.includes(strVal)) {
+        timerSelect.value = strVal;
+        if (customContainer) customContainer.style.display = 'none';
+    } else {
+        timerSelect.value = 'custom';
+        if (customContainer) customContainer.style.display = 'flex';
+        if (customInput) customInput.value = Math.max(1, Math.round(selectedTurnTimeoutSeconds / 60));
+    }
+}
+
 /**
  * Sets up event listeners for the advanced settings modal.
  */
@@ -525,11 +602,39 @@ function setupSettingsListeners() {
         }
     };
 
+    const openModal = () => {
+        syncTimerUIFromState();
+        settingsUI.modal.classList.add('active');
+        trapFocus(settingsUI.modal);
+        if (settingsUI.timerSelect) {
+            settingsUI.timerSelect.focus();
+        } else {
+            const firstSelect = settingsUI.modal.querySelector('select');
+            if (firstSelect) firstSelect.focus();
+        }
+    };
+
     if (setupUI.openSettingsBtn) {
-        setupUI.openSettingsBtn.addEventListener('click', () => {
-            settingsUI.modal.classList.add('active');
-            trapFocus(settingsUI.modal);
-            settingsUI.modal.querySelector('select').focus();
+        setupUI.openSettingsBtn.addEventListener('click', openModal);
+    }
+
+    if (gameUI.gameSettingsBtn) {
+        gameUI.gameSettingsBtn.addEventListener('click', openModal);
+    }
+
+    if (settingsUI.timerSelect) {
+        settingsUI.timerSelect.addEventListener('change', () => {
+            if (settingsUI.timerSelect.value === 'custom') {
+                if (settingsUI.customTimerContainer) settingsUI.customTimerContainer.style.display = 'flex';
+                if (settingsUI.customTimerInput) {
+                    if (!settingsUI.customTimerInput.value) {
+                        settingsUI.customTimerInput.value = Math.max(1, Math.round(selectedTurnTimeoutSeconds / 60));
+                    }
+                    settingsUI.customTimerInput.focus();
+                }
+            } else {
+                if (settingsUI.customTimerContainer) settingsUI.customTimerContainer.style.display = 'none';
+            }
         });
     }
 
@@ -557,7 +662,52 @@ function setupSettingsListeners() {
     }
 
     if (settingsUI.saveBtn) {
-        settingsUI.saveBtn.addEventListener('click', () => {
+        settingsUI.saveBtn.addEventListener('click', async () => {
+            if (settingsUI.timerSelect) {
+                if (settingsUI.timerSelect.value === 'custom') {
+                    const mins = parseFloat(settingsUI.customTimerInput ? settingsUI.customTimerInput.value : '');
+                    if (Number.isFinite(mins) && mins > 0) {
+                        selectedTurnTimeoutSeconds = Math.round(mins * 60);
+                    } else {
+                        selectedTurnTimeoutSeconds = 120;
+                    }
+                } else {
+                    selectedTurnTimeoutSeconds = parseInt(settingsUI.timerSelect.value, 10) || 120;
+                }
+            }
+            if (selectedTurnTimeoutSeconds < 10) {
+                selectedTurnTimeoutSeconds = 10;
+            }
+            try {
+                localStorage.setItem('werewolf_turn_timeout', String(selectedTurnTimeoutSeconds));
+            } catch (e) {
+                console.warn('Could not save turn timer to localStorage:', e);
+            }
+
+            // Sync with backend if a game is active
+            if (gameState.gameId) {
+                try {
+                    await fetch('/api/game/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            game_id: gameState.gameId,
+                            turn_timeout: selectedTurnTimeoutSeconds
+                        })
+                    });
+                } catch (err) {
+                    console.warn('Failed to update game settings on server:', err);
+                }
+
+                if (turnTimerInterval && gameState.pendingAction) {
+                    const timerEl = gameUI.turnTimer || document.getElementById('turn-timer');
+                    if (turnSecondsRemaining > selectedTurnTimeoutSeconds) {
+                        turnSecondsRemaining = selectedTurnTimeoutSeconds;
+                        if (timerEl) updateTimerDisplay(timerEl, turnSecondsRemaining);
+                    }
+                }
+            }
+
             settingsUI.modal.classList.remove('active');
         });
     }
@@ -674,18 +824,30 @@ function updateLanguage() {
     if (setupUI.labels[2]) setupUI.labels[2].innerText = t.selectRole;
     
     // Settings Modal
-    const settingsModal = document.getElementById('settings-modal');
-    if (settingsModal) {
-        const title = settingsModal.querySelector('h2');
-        if (title) title.innerText = t.advancedSettings;
+    if (settingsUI.title) settingsUI.title.innerText = t.advancedSettings;
+    if (settingsUI.timerLabel) settingsUI.timerLabel.innerText = t.turnTimer;
+    if (settingsUI.providerLabel) settingsUI.providerLabel.innerText = t.provider;
+    if (settingsUI.apiKeyLabel) settingsUI.apiKeyLabel.innerText = t.apiKey;
+    if (settingsUI.baseUrlLabel) settingsUI.baseUrlLabel.innerText = t.baseUrl;
+    if (settingsUI.modelNameLabel) settingsUI.modelNameLabel.innerText = t.modelName;
+    if (settingsUI.customTimerUnit) settingsUI.customTimerUnit.innerText = t.minUnit;
+    if (settingsUI.customTimerInput && t.customMinPlaceholder) {
+        settingsUI.customTimerInput.placeholder = t.customMinPlaceholder;
     }
-    const settingsLabels = document.querySelectorAll('#settings-modal label');
-    if (settingsLabels[0]) settingsLabels[0].innerText = t.provider;
-    if (settingsLabels[1]) settingsLabels[1].innerText = t.apiKey;
-    if (settingsLabels[2]) settingsLabels[2].innerText = t.baseUrl;
-    if (settingsLabels[3]) settingsLabels[3].innerText = t.modelName;
+    if (settingsUI.timerSelect && t.timerOptions) {
+        Array.from(settingsUI.timerSelect.options).forEach(opt => {
+            const key = opt.dataset.i18n;
+            if (key && t.timerOptions[key]) {
+                opt.text = t.timerOptions[key];
+            }
+        });
+    }
     if (settingsUI.saveBtn) settingsUI.saveBtn.innerText = t.saveSettings;
     if (setupUI.openSettingsBtn) setupUI.openSettingsBtn.innerText = "⚙️ " + t.advancedSettings;
+    if (gameUI.gameSettingsBtn) {
+        gameUI.gameSettingsBtn.title = t.advancedSettings;
+        gameUI.gameSettingsBtn.setAttribute('aria-label', t.advancedSettings);
+    }
     if (setupUI.startBtn) setupUI.startBtn.innerText = t.startGame;
     
     const selectedCountEl = document.querySelector('.toggle-btn.active');
@@ -935,7 +1097,8 @@ async function startGame() {
                 base_url: baseUrl,
                 model_name: modelName,
                 provider: provider,
-                language: gameState.lang
+                language: gameState.lang,
+                turn_timeout: selectedTurnTimeoutSeconds
             })
         });
 
@@ -1430,7 +1593,7 @@ function updatePlayerSelectableState(targetPlayerNames = []) {
 
 /** @type {number|null} - The timer ID for the turn countdown. */
 let turnTimerInterval = null;
-const TURN_TIMEOUT_SECONDS = 120; // 2 minutes default
+const TURN_TIMEOUT_SECONDS = 120; // 2 minutes default fallback
 let turnSecondsRemaining = TURN_TIMEOUT_SECONDS;
 let currentTurnRequestId = null;
 
@@ -1439,7 +1602,7 @@ let currentTurnRequestId = null;
  * @param {Function} onTimeout - Callback invoked when the countdown expires.
  * @param {number} totalSeconds - Total seconds for the countdown.
  */
-function startTurnTimer(onTimeout, totalSeconds = TURN_TIMEOUT_SECONDS) {
+function startTurnTimer(onTimeout, totalSeconds = selectedTurnTimeoutSeconds) {
     stopTurnTimer();
     const timerEl = gameUI.turnTimer || document.getElementById('turn-timer');
     if (!timerEl) return;
@@ -1532,7 +1695,7 @@ function handleInputRequest(req) {
     }
     currentTurnRequestId = reqId;
 
-    const timeoutSeconds = (req.timeout && Number.isFinite(req.timeout)) ? Math.round(req.timeout) : TURN_TIMEOUT_SECONDS;
+    const timeoutSeconds = (req.timeout && Number.isFinite(req.timeout)) ? Math.round(req.timeout) : selectedTurnTimeoutSeconds;
 
     if (req.type === 'speech') {
         gameUI.input.disabled = false;
