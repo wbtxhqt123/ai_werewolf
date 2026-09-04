@@ -1,35 +1,38 @@
 /* Game Screen */
 .game-header {
     height: 70px;
-    background: rgba(255, 255, 255, 0.9);
-    border-bottom: var(--border-thick);
+    background: var(--panel-header-bg);
+    border-bottom: 3px solid var(--panel-border);
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 20px;
     z-index: 100;
+    transition: background-color 0.5s ease, border-color 0.5s ease;
 }
 
 .phase-indicator {
     font-weight: 900;
     padding: 8px 20px;
-    background: var(--accent-yellow);
-    color: var(--text-dark);
-    border: 2px solid var(--text-dark);
+    background: var(--phase-badge-bg);
+    color: var(--phase-badge-text);
+    border: 2px solid var(--panel-border);
     border-radius: 20px;
-    box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.15);
     font-size: 1.1rem;
     text-transform: uppercase;
+    transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease;
 }
 
 #game-status-message {
     font-weight: 800;
-    color: var(--text-dark);
-    background: #fff;
+    color: var(--text-primary);
+    background: var(--panel-bg);
     padding: 5px 15px;
     border-radius: 15px;
-    border: 2px solid #dfe6e9;
+    border: 2px solid var(--panel-border);
     text-shadow: none;
+    transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease;
 }
 
 .header-right {
@@ -54,9 +57,9 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--player-card-bg);
     border-radius: 15px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--player-card-border);
     transition: all 0.2s;
     cursor: pointer;
     position: relative;
@@ -75,8 +78,8 @@
 .player-avatar {
     width: 50px;
     height: 50px;
-    background: #fff;
-    border: 2px solid var(--text-dark);
+    background: var(--player-avatar-bg);
+    border: 2px solid var(--panel-border);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -85,12 +88,13 @@
     box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
     position: relative;
     flex-shrink: 0;
+    transition: background-color 0.5s ease, border-color 0.5s ease;
 }
 
 .player-name {
     margin-top: -8px;
-    background: #fff;
-    border: 2px solid var(--text-dark);
+    background: var(--player-name-bg);
+    border: 2px solid var(--panel-border);
     padding: 1px 6px;
     border-radius: 8px;
     font-size: 0.9rem;
@@ -101,7 +105,7 @@
     right: auto;
     transform: none;
     box-shadow: none;
-    color: var(--text-dark);
+    color: var(--player-name-text);
     text-align: center;
     display: block;
     width: auto;
@@ -109,6 +113,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease;
 }
 
 .player-me-label,
@@ -427,8 +432,8 @@
 .chat-avatar {
     width: 40px;
     height: 40px;
-    background: #fff;
-    border: 2px solid var(--text-dark);
+    background: var(--player-avatar-bg);
+    border: 2px solid var(--panel-border);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -436,6 +441,7 @@
     font-size: 1.5rem;
     flex-shrink: 0;
     box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
+    transition: background-color 0.5s ease, border-color 0.5s ease;
 }
 
 .chat-bubble {
@@ -445,44 +451,48 @@
     line-height: 1.4;
     font-weight: 600;
     position: relative;
-    border: 2px solid var(--text-dark);
-    box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
-    background: #fff;
-    color: var(--text-dark);
+    border: 2px solid var(--panel-border);
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.15);
+    background: var(--chat-bubble-ai-bg);
+    color: var(--chat-bubble-ai-text);
+    transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease;
 }
 
 .message-container.user .chat-bubble {
-    background: var(--accent-secondary);
-    color: white;
+    background: var(--chat-bubble-user-bg);
+    color: var(--chat-bubble-user-text);
     border-bottom-right-radius: 4px;
 }
 
 .message-container.ai .chat-bubble {
-    background: #fff;
+    background: var(--chat-bubble-ai-bg);
+    color: var(--chat-bubble-ai-text);
     border-bottom-left-radius: 4px;
 }
 
 .chat-bubble.system {
-    background: #dfe6e9;
-    color: #636e72;
+    background: var(--chat-bubble-system-bg);
+    color: var(--chat-bubble-system-text);
     font-size: 0.85rem;
     font-weight: 800;
-    border: 2px dashed #b2bec3;
+    border: 2px dashed var(--chat-bubble-system-border);
     text-align: center;
     box-shadow: none;
+    transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease;
 }
 
 .game-controls {
-    background: #fff;
+    background: var(--controls-bg);
     padding: 15px 20px;
-    border-top: var(--border-thick);
-    box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+    border-top: 3px solid var(--panel-border);
+    box-shadow: 0 -5px 20px rgba(0,0,0,0.15);
     display: flex;
     gap: 20px;
     align-items: center;
     justify-content: flex-start;
     z-index: 100;
     position: relative;
+    transition: background-color 0.5s ease, border-color 0.5s ease;
 }
 
 .my-info {
@@ -490,14 +500,15 @@
     align-items: center;
     gap: 10px;
     min-width: 130px;
-    background: #f1f2f6;
+    background: var(--my-info-bg);
     padding: 8px 12px;
     border-radius: 15px;
-    border: 2px solid #dfe6e9;
+    border: 2px solid var(--panel-border);
     position: relative;
     left: auto;
     bottom: auto;
     box-shadow: none;
+    transition: background-color 0.5s ease, border-color 0.5s ease;
 }
 
 .my-status-icons {
@@ -531,8 +542,9 @@
 
 .my-status {
     font-size: 0.8rem;
-    color: #636e72;
+    color: var(--text-muted);
     font-weight: 700;
+    transition: color 0.5s ease;
 }
 
 .action-area {
@@ -545,19 +557,21 @@
 #action-prompt {
     font-size: 1.1rem;
     font-weight: 800;
-    color: var(--text-dark);
+    color: var(--text-primary);
     text-align: center;
-    text-shadow: 1px 1px 0px #fff;
+    text-shadow: none;
+    transition: color 0.5s ease;
 }
 
 .input-wrapper {
     display: flex;
     gap: 10px;
-    background: #fff;
+    background: var(--input-box-bg);
     padding: 5px;
     border-radius: 25px;
-    border: 2px solid var(--text-dark);
-    box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
+    border: 2px solid var(--panel-border);
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.15);
+    transition: background-color 0.5s ease, border-color 0.5s ease;
 }
 
 #game-input {
@@ -569,7 +583,12 @@
     font-family: var(--font-main);
     font-weight: 600;
     outline: none;
-    color: var(--text-dark);
+    color: var(--input-text);
+    transition: color 0.5s ease;
+}
+
+#game-input::placeholder {
+    color: var(--input-placeholder);
 }
 
 .choice-buttons {

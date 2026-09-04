@@ -144,14 +144,14 @@ body.night-mode .moon {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border: var(--border-thick);
+    background: var(--panel-bg);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 3px solid var(--panel-border);
     border-radius: var(--border-radius-lg);
     box-shadow: var(--shadow-pop);
     overflow: hidden;
     margin-bottom: 0;
     position: relative;
-    transition: all 0.3s ease;
+    transition: background-color 0.5s ease, border-color 0.5s ease;
 }

@@ -364,3 +364,40 @@ input[type="password"] {
     transform: translateY(-2px);
     box-shadow: 5px 5px 0 rgba(0,0,0,0.1);
 }
+
+/* Night Mode Components */
+body.night-mode .icon-btn {
+    background: var(--panel-header-bg);
+    border-color: var(--panel-border);
+    color: var(--text-primary);
+}
+
+body.night-mode #toggle-debug-btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+body.night-mode #send-action-btn:disabled {
+    background: #334155;
+    border-color: #475569;
+    color: #64748b;
+}
+
+body.night-mode .choice-btn {
+    background: var(--accent-yellow);
+    border-color: var(--panel-border);
+    color: #2d3436;
+    box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.4);
+}
+
+body.night-mode .choice-btn.no-action {
+    background: #334155;
+    color: #cbd5e1;
+    border-color: #475569;
+    box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.4);
+}
+
+body.night-mode .player-card.dead .player-avatar {
+    background: #0f172a;
+    border-color: #475569;
+}

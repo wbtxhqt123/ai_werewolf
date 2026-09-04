@@ -637,6 +637,18 @@ function updateLanguage() {
     if (gameUI.sendBtn) gameUI.sendBtn.innerText = t.send;
     if (gameUI.myStatus) gameUI.myStatus.innerText = gameState.isAlive ? t.alive : t.dead;
     if (gameUI.newMessagesIndicator) gameUI.newMessagesIndicator.innerText = t.newMessages;
+
+    if (gameUI.phaseIndicator && gameState.phase) {
+        const nightMatch = gameState.phase.match(/(?:Night|夜)\s*(\d+)|(\d+)\s*夜/i);
+        const dayMatch = gameState.phase.match(/(?:Day|天)\s*(\d+)|(\d+)\s*天/i);
+        if (nightMatch) {
+            const num = nightMatch[1] || nightMatch[2];
+            gameUI.phaseIndicator.innerText = t.night.replace('{n}', num);
+        } else if (dayMatch) {
+            const num = dayMatch[1] || dayMatch[2];
+            gameUI.phaseIndicator.innerText = t.day.replace('{n}', num);
+        }
+    }
     
     if (gameState.myRole) {
         if (t.roles[gameState.myRole]) {
@@ -1131,9 +1143,9 @@ function processLog(log) {
         return; // Don't display a message for this log type
     }
     if (log.type === 'NIGHT_FALLS') {
-        setPhase('Night');
+        setPhase('Night', log.message);
     } else if (log.type === 'DAY_BREAKS') {
-        setPhase('Day');
+        setPhase('Day', log.message);
     }
 
     const msgContainer = document.createElement('div');
@@ -1515,11 +1527,22 @@ function hideNewMessagesIndicator() {
 /**
  * Sets the game phase indicator and updates the UI theme (day/night).
  * @param {string} phase - The name of the phase (e.g., 'Day', 'Night').
+ * @param {object|string|null} rawMessage - Optional localized message from server log.
  */
-function setPhase(phase) {
-    gameUI.phaseIndicator.innerText = phase;
+function setPhase(phase, rawMessage = null) {
+    if (rawMessage) {
+        let text = typeof rawMessage === 'object' ? (rawMessage[gameState.lang] || rawMessage['zh'] || rawMessage['en'] || '') : rawMessage;
+        const clean = text.replace(/[-—]/g, '').trim();
+        if (clean) {
+            gameState.phase = clean;
+        }
+    } else if (!gameState.phase) {
+        gameState.phase = phase;
+    }
+
+    gameUI.phaseIndicator.innerText = gameState.phase || phase;
     
-    if (phase.toLowerCase().includes('night')) {
+    if (phase.toLowerCase().includes('night') || (gameState.phase && (gameState.phase.toLowerCase().includes('night') || gameState.phase.includes('夜')))) {
         document.body.classList.add('night-mode');
     } else {
         document.body.classList.remove('night-mode');

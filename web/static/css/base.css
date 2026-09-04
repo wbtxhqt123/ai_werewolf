@@ -31,6 +31,32 @@
     --status-sheriff-color: #ffd700;
     --status-candidate-color: #ffa600;
     --status-tie-color: #ff0000;
+
+    /* Theme Tokens - Day Mode Default */
+    --panel-bg: rgba(255, 255, 255, 0.85);
+    --panel-header-bg: rgba(255, 255, 255, 0.95);
+    --panel-border: #2d3436;
+    --text-primary: #2d3436;
+    --text-muted: #636e72;
+    --chat-bubble-ai-bg: #ffffff;
+    --chat-bubble-ai-text: #2d3436;
+    --chat-bubble-user-bg: var(--accent-secondary);
+    --chat-bubble-user-text: #ffffff;
+    --chat-bubble-system-bg: #dfe6e9;
+    --chat-bubble-system-text: #636e72;
+    --chat-bubble-system-border: #b2bec3;
+    --controls-bg: #ffffff;
+    --input-box-bg: #ffffff;
+    --input-text: #2d3436;
+    --input-placeholder: #a4b0be;
+    --my-info-bg: #f1f2f6;
+    --player-card-bg: rgba(255, 255, 255, 0.15);
+    --player-card-border: rgba(255, 255, 255, 0.25);
+    --player-avatar-bg: #ffffff;
+    --player-name-bg: #ffffff;
+    --player-name-text: #2d3436;
+    --phase-badge-bg: var(--accent-yellow);
+    --phase-badge-text: #2d3436;
 }
 
 * {
@@ -42,12 +68,39 @@
 body {
     font-family: var(--font-main);
     background: linear-gradient(to bottom, var(--bg-day-top), var(--bg-day-bottom));
-    color: var(--text-dark);
+    color: var(--text-primary);
     height: 100vh;
     overflow: hidden;
-    transition: background 2s ease;
+    transition: background 1.5s ease, color 0.5s ease;
 }
 
 body.night-mode {
     background: linear-gradient(to bottom, var(--bg-night-top), var(--bg-night-bottom));
+    color: #f1f2f6;
+
+    /* Theme Tokens - Night Mode */
+    --panel-bg: rgba(18, 26, 43, 0.9);
+    --panel-header-bg: rgba(15, 23, 42, 0.95);
+    --panel-border: #3b4d66;
+    --text-primary: #f5f6fa;
+    --text-muted: #95afc0;
+    --chat-bubble-ai-bg: #1e293b;
+    --chat-bubble-ai-text: #f1f2f6;
+    --chat-bubble-user-bg: #0984e3;
+    --chat-bubble-user-text: #ffffff;
+    --chat-bubble-system-bg: rgba(30, 41, 59, 0.75);
+    --chat-bubble-system-text: #94a3b8;
+    --chat-bubble-system-border: #475569;
+    --controls-bg: #0f172a;
+    --input-box-bg: #1e293b;
+    --input-text: #f1f2f6;
+    --input-placeholder: #64748b;
+    --my-info-bg: #1e293b;
+    --player-card-bg: rgba(15, 23, 42, 0.7);
+    --player-card-border: rgba(100, 116, 139, 0.45);
+    --player-avatar-bg: #1e293b;
+    --player-name-bg: #0f172a;
+    --player-name-text: #f1f2f6;
+    --phase-badge-bg: #6c5ce7;
+    --phase-badge-text: #ffffff;
 }
