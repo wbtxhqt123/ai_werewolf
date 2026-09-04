@@ -46,6 +46,10 @@ class DayAnnouncementState(GameState):
 
     @state_handler
     def handle(self):
+        # Ensure sheriff candidate status is cleared once day announcements begin
+        for p in self.game.players:
+            p.is_sheriff_candidate = False
+
         # This state is now primarily for setting up the consequences of night deaths.
         # The actual death announcements have been moved to NightEndState.
         if self.game.killed_this_night:
@@ -461,7 +465,11 @@ class TieVoteState(GameState):
             self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "There was another tie. No one will be elected or executed.", "zh": "再次平票。无人当选或被放逐。"}, camps=["All"]))
             self.game.player_to_execute = None
         
-        # Clear tie status for all players involved in the tie
+        # Clear tie and sheriff candidate status
+        if self.game.tie_context == "sheriff":
+            for p in self.game.players:
+                p.is_sheriff_candidate = False
+
         for p in self.game.players:
             if p.is_tie:
                 p.is_tie = False

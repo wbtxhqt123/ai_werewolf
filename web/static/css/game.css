@@ -165,28 +165,17 @@
     background-color: var(--text-dark);
 }
 
-.player-card.me .player-avatar {
-    border-color: var(--status-me-color);
-}
-.player-card.me .player-me-label {
-    background-color: var(--status-me-color);
-}
-.player-card.me .player-name {
-    border-color: var(--status-me-color);
-    color: var(--status-me-color);
-}
-
-.player-card.sheriff .player-sheriff-label {
+.player-card.sheriff:not(.me) .player-sheriff-label {
     display: block;
     background-color: var(--status-sheriff-color);
 }
 
-.player-card.sheriff-candidate .player-candidate-label {
+.player-card.sheriff-candidate:not(.me) .player-candidate-label {
     display: block;
     background-color: var(--status-candidate-color);
 }
 
-.player-card.tie .player-tie-label {
+.player-card.tie:not(.me) .player-tie-label {
     display: block;
     background-color: var(--status-tie-color);
 }
@@ -201,37 +190,55 @@
     100% { box-shadow: 0 0 5px var(--status-tie-color), 0 0 10px var(--status-tie-color); }
 }
 
-.player-card.sheriff-candidate .player-avatar {
+.player-card.sheriff-candidate:not(.me) .player-avatar {
     border-color: var(--status-candidate-color);
 }
-.player-card.sheriff-candidate.me .player-me-label {
-    background-color: var(--status-candidate-color);
-}
-.player-card.sheriff-candidate .player-name {
+.player-card.sheriff-candidate:not(.me) .player-name {
     border-color: var(--status-candidate-color);
     color: var(--status-candidate-color);
 }
 
-.player-card.sheriff .player-avatar {
+.player-card.sheriff:not(.me) .player-avatar {
     border-color: var(--status-sheriff-color);
 }
-.player-card.sheriff.me .player-me-label {
-    background-color: var(--status-sheriff-color);
-}
-.player-card.sheriff .player-name {
+.player-card.sheriff:not(.me) .player-name {
     border-color: var(--status-sheriff-color);
     color: var(--status-sheriff-color);
 }
 
-.player-card.tie .player-avatar {
+.player-card.tie:not(.me) .player-avatar {
     border-color: var(--status-tie-color);
 }
-.player-card.tie.me .player-me-label {
-    background-color: var(--status-tie-color);
-}
-.player-card.tie .player-name {
+.player-card.tie:not(.me) .player-name {
     border-color: var(--status-tie-color);
     color: var(--status-tie-color);
+}
+
+/* Unmistakable ME player styling */
+.player-card.me .player-avatar {
+    width: 54px;
+    height: 54px;
+    border: 3px solid #00bfff !important;
+    box-shadow: 0 0 0 2px #ffffff, 0 0 14px rgba(0, 191, 255, 0.8), 2px 2px 0 rgba(0,0,0,0.15) !important;
+}
+
+.player-card.me .player-me-label {
+    display: block !important;
+    background: linear-gradient(135deg, #00c6ff, #0072ff) !important;
+    color: #ffffff !important;
+    border: 1.5px solid #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 114, 255, 0.5);
+    font-weight: 800;
+    font-size: 0.72rem;
+    z-index: 20;
+    top: -12px;
+}
+
+.player-card.me .player-name {
+    background: #00bfff !important;
+    color: #ffffff !important;
+    border-color: #0099cc !important;
+    font-weight: 800;
 }
 
 .player-card.me {
@@ -357,16 +364,16 @@
 .player-card.me .player-avatar {
     width: 55px;
     height: 55px;
-    border: 3px solid #00bfff; /* Deep Sky Blue */
-    box-shadow: 0 0 10px #00bfff, 2px 2px 0 rgba(0,0,0,0.1);
+    border: 3px solid #00bfff !important; /* Deep Sky Blue */
+    box-shadow: 0 0 0 2px #ffffff, 0 0 14px rgba(0, 191, 255, 0.8), 2px 2px 0 rgba(0,0,0,0.1) !important;
 }
 
-.player-card.sheriff .player-avatar {
+.player-card.sheriff:not(.me) .player-avatar {
     border: 3px solid #ffd700; /* Gold */
     box-shadow: 0 0 10px #ffd700, 2px 2px 0 rgba(0,0,0,0.1);
 }
 
-.player-card.sheriff-candidate .player-avatar {
+.player-card.sheriff-candidate:not(.me) .player-avatar {
     border: 3px solid #ffa600; /* Orange */
     box-shadow: 0 0 10px #ffa600, 2px 2px 0 rgba(0,0,0,0.1);
 }

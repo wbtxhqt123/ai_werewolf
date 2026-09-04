@@ -7,12 +7,12 @@
     <link rel="preconnect" href="https://fonts.loli.net">
     <link rel="preconnect" href="https://gstatic.loli.net" crossorigin>
     <link href="https://fonts.loli.net/css2?family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/base.css?v=7">
-    <link rel="stylesheet" href="/static/css/layout.css?v=7">
-    <link rel="stylesheet" href="/static/css/components.css?v=7">
-    <link rel="stylesheet" href="/static/css/setup.css?v=7">
-    <link rel="stylesheet" href="/static/css/game.css?v=7">
-    <link rel="stylesheet" href="/static/css/modals.css?v=7">
+    <link rel="stylesheet" href="/static/css/base.css?v=8">
+    <link rel="stylesheet" href="/static/css/layout.css?v=8">
+    <link rel="stylesheet" href="/static/css/components.css?v=8">
+    <link rel="stylesheet" href="/static/css/setup.css?v=8">
+    <link rel="stylesheet" href="/static/css/game.css?v=8">
+    <link rel="stylesheet" href="/static/css/modals.css?v=8">
 </head>
 <body>
     <div id="app">
@@ -152,45 +152,67 @@
 
 
 
-        <!-- Evaluation Modal -->
+        <!-- Game Over & Evaluation Modal -->
         <div id="evaluation-modal" class="modal">
-            <div class="modal-content">
+            <div class="modal-content game-over-modal-content">
                 <span class="close-modal">&times;</span>
-                <h2 id="eval-title">Game Evaluation</h2>
+
+                <div class="game-over-tabs">
+                    <button id="tab-eval-btn" class="tab-btn active">🤖 Game Evaluation</button>
+                    <button id="tab-history-btn" class="tab-btn">📜 Operations History</button>
+                </div>
                 
-                <div id="eval-setup">
-                    <p id="eval-intro">Choose a personality for the AI evaluator:</p>
-                    <div class="eval-modes">
-                        <button class="eval-mode-btn" data-mode="mild">😊 Mild</button>
-                        <button class="eval-mode-btn" data-mode="neutral">😐 Neutral</button>
-                        <button class="eval-mode-btn" data-mode="mean">😈 Sneer</button>
+                <!-- Tab View: Evaluation -->
+                <div id="eval-tab-view" class="game-over-view active">
+                    <div id="eval-setup">
+                        <p id="eval-intro">Choose a personality for the AI evaluator:</p>
+                        <div class="eval-modes">
+                            <button class="eval-mode-btn" data-mode="mild">
+                                <span class="mode-emoji">😊</span>
+                                <span class="mode-title">Mild</span>
+                            </button>
+                            <button class="eval-mode-btn" data-mode="neutral">
+                                <span class="mode-emoji">😐</span>
+                                <span class="mode-title">Neutral</span>
+                            </button>
+                            <button class="eval-mode-btn" data-mode="mean">
+                                <span class="mode-emoji">😈</span>
+                                <span class="mode-title">Sneer</span>
+                            </button>
+                        </div>
+                        <div id="eval-api-key-section" style="display: none;">
+                            <p class="warning-text">API Key required for evaluation</p>
+                            <input type="password" id="eval-api-key" placeholder="Enter API Key">
+                        </div>
+                        <button id="start-eval-btn" class="primary-btn eval-start-btn" disabled>Start Evaluation</button>
                     </div>
-                    <div id="eval-api-key-section" style="display: none;">
-                        <p class="warning-text">API Key required for evaluation</p>
-                        <input type="password" id="eval-api-key" placeholder="Enter API Key">
+
+                    <div id="eval-chat-section" style="display: none;">
+                        <div class="eval-chat-box" id="eval-chat-box">
+                            <!-- Evaluation chat messages -->
+                        </div>
+                        <div class="eval-input-area">
+                            <input type="text" id="eval-input" placeholder="Argue with the AI...">
+                            <button id="send-eval-btn">Send</button>
+                        </div>
+                        <button id="new-game-btn" class="primary-btn eval-new-game-btn">New Game</button>
                     </div>
-                    <button id="start-eval-btn" class="primary-btn" disabled>Start Evaluation</button>
                 </div>
 
-                <div id="eval-chat-section" style="display: none;">
-                    <div class="eval-chat-box" id="eval-chat-box">
-                        <!-- Evaluation chat messages -->
+                <!-- Tab View: Operations History -->
+                <div id="history-tab-view" class="game-over-view" style="display: none;">
+                    <div id="op-history-content" class="op-history-container">
+                        <p class="op-history-loading">Loading operations...</p>
                     </div>
-                    <div class="eval-input-area">
-                        <input type="text" id="eval-input" placeholder="Argue with the AI...">
-                        <button id="send-eval-btn">Send</button>
-                    </div>
-                    <button id="new-game-btn" class="primary-btn" style="margin-top: 10px;">New Game</button>
                 </div>
             </div>
         </div>
 
-        <!-- Operations History Modal -->
-        <div id="op-history-modal" class="modal">
+        <!-- Operations History Modal (Preserved for compatibility) -->
+        <div id="op-history-modal" class="modal" style="display: none;">
             <div class="modal-content">
                 <span class="close-modal">&times;</span>
                 <h2 id="op-history-title">Operations History</h2>
-                <div id="op-history-content"></div>
             </div>
         </div>
     </div>
@@ -210,6 +232,6 @@
         </div>
     </template>
 
-    <script src="/static/js/app.js?v=7"></script>
+    <script src="/static/js/app.js?v=8"></script>
 </body>
 </html>

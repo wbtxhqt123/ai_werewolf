@@ -94,6 +94,24 @@ class TestSheriffTie(unittest.TestCase):
         
         self.assertEqual(self.game.vote_history[-1]['result'], self.candidates[0].name)
         self.assertEqual(self.game.sheriff, self.candidates[0])
+        # Check that is_sheriff_candidate is cleared for all players
+        for p in self.game.players:
+            self.assertFalse(p.is_sheriff_candidate)
+
+    def test_sheriff_candidate_cleared_on_direct_election(self):
+        for p in self.candidates:
+            p.is_sheriff_candidate = True
+
+        # Player 3 and 4 vote for Player 1
+        self.game.players[2].controller.get_vote_for_sheriff = MagicMock(return_value=self.candidates[0])
+        self.game.players[3].controller.get_vote_for_sheriff = MagicMock(return_value=self.candidates[0])
+
+        state = SheriffVoteState(self.game)
+        state.handle()
+
+        self.assertEqual(self.game.sheriff, self.candidates[0])
+        for p in self.game.players:
+            self.assertFalse(p.is_sheriff_candidate)
 
 if __name__ == '__main__':
     unittest.main()

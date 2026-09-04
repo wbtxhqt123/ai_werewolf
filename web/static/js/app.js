@@ -105,6 +105,13 @@ const I18N = {
         },
 
         newMessages: "⬇️ 新消息",
+        statusLabels: {
+            me: "我",
+            sheriff: "警长",
+            candidate: "竞选",
+            tie: "平票PK",
+            dead: "出局"
+        },
         operationsHistory: "操作历史",
         opHistory: {
             title: "操作历史",
@@ -179,6 +186,13 @@ const I18N = {
         },
 
         newMessages: "⬇️ New Messages",
+        statusLabels: {
+            me: "ME",
+            sheriff: "SHERIFF",
+            candidate: "CANDIDATE",
+            tie: "TIE PK",
+            dead: "DEAD"
+        },
         operationsHistory: "Operations History",
         opHistory: {
             title: "Operations History",
@@ -294,7 +308,8 @@ const evalUI = {
     startBtn: document.getElementById('start-eval-btn'),
     chatBox: document.getElementById('eval-chat-box'),
     input: document.getElementById('eval-input'),
-    sendBtn: document.getElementById('send-eval-btn')
+    sendBtn: document.getElementById('send-eval-btn'),
+    newGameBtn: document.getElementById('new-game-btn')
 };
 
 /** @const {object} settingsUI - References to DOM elements in the settings modal. */
@@ -539,6 +554,29 @@ function setupEvaluationListeners() {
         evalUI.modal.classList.remove('active');
     };
 
+    const tabEvalBtn = document.getElementById('tab-eval-btn');
+    const tabHistoryBtn = document.getElementById('tab-history-btn');
+    const evalTabView = document.getElementById('eval-tab-view');
+    const historyTabView = document.getElementById('history-tab-view');
+
+    if (tabEvalBtn && tabHistoryBtn) {
+        tabEvalBtn.onclick = () => {
+            tabEvalBtn.classList.add('active');
+            tabHistoryBtn.classList.remove('active');
+            if (evalTabView) evalTabView.style.display = 'block';
+            if (historyTabView) historyTabView.style.display = 'none';
+        };
+
+        tabHistoryBtn.onclick = () => {
+            tabHistoryBtn.classList.add('active');
+            tabEvalBtn.classList.remove('active');
+            if (historyTabView) historyTabView.style.display = 'block';
+            if (evalTabView) evalTabView.style.display = 'none';
+            loadOperationsHistory();
+        };
+    }
+
+    evalUI.modeBtns = document.querySelectorAll('.eval-mode-btn');
     evalUI.modeBtns.forEach(btn => {
         btn.onclick = () => {
             evalUI.modeBtns.forEach(b => b.classList.remove('selected'));
@@ -666,17 +704,35 @@ function updateLanguage() {
         }
     }
 
-    // Evaluation Modal
+    if (gameState.pendingAction && gameUI.actionPrompt) {
+        let promptText = gameState.pendingAction.prompt;
+        if (typeof promptText === 'object') {
+            promptText = promptText[gameState.lang] || promptText['zh'] || promptText['en'] || JSON.stringify(promptText);
+        }
+        gameUI.actionPrompt.innerText = promptText;
+    }
+
+    // Evaluation & Game Over Modal
     if (evalUI.modal) {
         const t_eval = I18N[gameState.lang].eval;
-        document.getElementById('eval-title').innerText = t_eval.title;
-        document.getElementById('eval-intro').innerText = t_eval.intro;
+        const tabEvalBtn = document.getElementById('tab-eval-btn');
+        const tabHistoryBtn = document.getElementById('tab-history-btn');
+        if (tabEvalBtn) tabEvalBtn.innerText = `🤖 ${t_eval.title}`;
+        if (tabHistoryBtn) tabHistoryBtn.innerText = `📜 ${I18N[gameState.lang].operationsHistory}`;
+
+        const evalIntro = document.getElementById('eval-intro');
+        if (evalIntro) evalIntro.innerText = t_eval.intro;
+
         const modeBtns = document.querySelectorAll('.eval-mode-btn');
-        if (modeBtns.length >= 3) {
-            modeBtns[0].innerText = t_eval.modes.mild;
-            modeBtns[1].innerText = t_eval.modes.neutral;
-            modeBtns[2].innerText = t_eval.modes.mean;
-        }
+        const modeKeys = ['mild', 'neutral', 'mean'];
+        modeBtns.forEach((btn, idx) => {
+            const key = btn.dataset.mode || modeKeys[idx];
+            const titleEl = btn.querySelector('.mode-title');
+            if (titleEl && t_eval.modes[key]) {
+                titleEl.innerText = t_eval.modes[key].replace(/^[^\s]+\s*/, '');
+            }
+        });
+
         const warningText = document.querySelector('.warning-text');
         if (warningText) warningText.innerText = t_eval.apiKeyWarning;
         if (evalUI.startBtn.disabled) {
@@ -686,6 +742,7 @@ function updateLanguage() {
         }
         evalUI.input.placeholder = t_eval.inputPlaceholder;
         evalUI.sendBtn.innerText = t_eval.send;
+        if (evalUI.newGameBtn) evalUI.newGameBtn.innerText = gameState.lang === 'zh' ? '再来一局' : 'New Game';
     }
 
     // Records Modal
@@ -980,31 +1037,20 @@ async function pollGameState() {
  * Displays the post-game evaluation modal.
  */
 function showEvaluationModal() {
-    const gameOverHTML = `
-        <div class="game-over-tabs">
-            <button id="operations-history-btn" class="tab-button">${I18N[gameState.lang].operationsHistory}</button>
-            <button id="evaluate-game-btn" class="tab-button">${I18N[gameState.lang].eval.title}</button>
-        </div>
-    `;
-    evalUI.modal.querySelector('.modal-content').insertAdjacentHTML('afterbegin', gameOverHTML);
+    const tabEvalBtn = document.getElementById('tab-eval-btn');
+    const tabHistoryBtn = document.getElementById('tab-history-btn');
+    const evalTabView = document.getElementById('eval-tab-view');
+    const historyTabView = document.getElementById('history-tab-view');
 
-    document.getElementById('evaluate-game-btn').addEventListener('click', () => {
-        evalUI.setupSection.style.display = 'block';
-        document.getElementById('operations-history-btn').classList.remove('active');
-        document.getElementById('evaluate-game-btn').classList.add('active');
-    });
-
-    document.getElementById('operations-history-btn').addEventListener('click', () => {
-        evalUI.setupSection.style.display = 'none';
-        document.getElementById('evaluate-game-btn').classList.remove('active');
-        document.getElementById('operations-history-btn').classList.add('active');
-        showOperationsHistory();
-    });
-
+    if (tabEvalBtn) tabEvalBtn.classList.add('active');
+    if (tabHistoryBtn) tabHistoryBtn.classList.remove('active');
+    if (evalTabView) evalTabView.style.display = 'block';
+    if (historyTabView) historyTabView.style.display = 'none';
 
     evalUI.modal.classList.add('active');
     trapFocus(evalUI.modal);
-    evalUI.modal.querySelector('.eval-mode-btn').focus();
+    const firstModeBtn = evalUI.modal.querySelector('.eval-mode-btn');
+    if (firstModeBtn) firstModeBtn.focus();
     evalUI.setupSection.style.display = 'block';
     evalUI.chatSection.style.display = 'none';
     
@@ -1269,26 +1315,60 @@ function updatePlayers(playersData, justDied = new Set()) {
             card.classList.remove('dead');
         }
 
-        if (p.is_tie) {
-            card.classList.add('tie');
-            card.querySelector('.player-tie-label').style.display = 'block';
-        } else if (p.is_sheriff) {
-            card.classList.add('sheriff');
-            card.querySelector('.player-sheriff-label').style.display = 'block';
-        } else if (p.is_sheriff_candidate) {
-            card.classList.add('sheriff-candidate');
-            card.querySelector('.player-candidate-label').style.display = 'block';
-        }
+        const statusTexts = I18N[gameState.lang]?.statusLabels || {
+            me: "ME",
+            sheriff: "SHERIFF",
+            candidate: "CANDIDATE",
+            tie: "TIE PK",
+            dead: "DEAD"
+        };
 
         if (p.name === 'Player 1') {
             card.classList.add('me');
             card.querySelector('.player-name').innerText = "1";
-            if (!p.is_tie && !p.is_sheriff && !p.is_sheriff_candidate) {
-                card.querySelector('.player-me-label').style.display = 'block';
+            const meLabel = card.querySelector('.player-me-label');
+            if (meLabel) {
+                meLabel.style.display = 'block';
+                if (p.is_sheriff) {
+                    meLabel.innerText = `${statusTexts.me} · 👮`;
+                } else if (p.is_sheriff_candidate) {
+                    meLabel.innerText = `${statusTexts.me} · 🎙️`;
+                } else if (p.is_tie) {
+                    meLabel.innerText = `${statusTexts.me} · ⚔️`;
+                } else {
+                    meLabel.innerText = `⭐ ${statusTexts.me}`;
+                }
             }
+
+            if (p.is_sheriff) card.classList.add('sheriff');
+            if (p.is_sheriff_candidate) card.classList.add('sheriff-candidate');
+            if (p.is_tie) card.classList.add('tie');
         } else {
             const num = p.name.replace('Player ', '');
             card.querySelector('.player-name').innerText = num;
+
+            if (p.is_tie) {
+                card.classList.add('tie');
+                const tieLabel = card.querySelector('.player-tie-label');
+                if (tieLabel) {
+                    tieLabel.innerText = `⚔️ ${statusTexts.tie}`;
+                    tieLabel.style.display = 'block';
+                }
+            } else if (p.is_sheriff) {
+                card.classList.add('sheriff');
+                const sheriffLabel = card.querySelector('.player-sheriff-label');
+                if (sheriffLabel) {
+                    sheriffLabel.innerText = `👮 ${statusTexts.sheriff}`;
+                    sheriffLabel.style.display = 'block';
+                }
+            } else if (p.is_sheriff_candidate) {
+                card.classList.add('sheriff-candidate');
+                const candidateLabel = card.querySelector('.player-candidate-label');
+                if (candidateLabel) {
+                    candidateLabel.innerText = `🎙️ ${statusTexts.candidate}`;
+                    candidateLabel.style.display = 'block';
+                }
+            }
         }
 
         card.onclick = () => handlePlayerClick(p.name);
@@ -1328,21 +1408,23 @@ function updatePlayerSelectableState(targetPlayerNames = []) {
     });
 }
 
-/** @type {number|null} - The timer ID for the 2-minute turn countdown. */
+/** @type {number|null} - The timer ID for the turn countdown. */
 let turnTimerInterval = null;
-const TURN_TIMEOUT_SECONDS = 120; // 2 minutes
+const TURN_TIMEOUT_SECONDS = 120; // 2 minutes default
 let turnSecondsRemaining = TURN_TIMEOUT_SECONDS;
+let currentTurnRequestId = null;
 
 /**
- * Starts a 2-minute countdown timer for the player's pending turn.
+ * Starts a countdown timer for the player's pending turn.
  * @param {Function} onTimeout - Callback invoked when the countdown expires.
+ * @param {number} totalSeconds - Total seconds for the countdown.
  */
-function startTurnTimer(onTimeout) {
+function startTurnTimer(onTimeout, totalSeconds = TURN_TIMEOUT_SECONDS) {
     stopTurnTimer();
     const timerEl = gameUI.turnTimer || document.getElementById('turn-timer');
     if (!timerEl) return;
 
-    turnSecondsRemaining = TURN_TIMEOUT_SECONDS;
+    turnSecondsRemaining = totalSeconds;
     timerEl.classList.remove('hidden', 'warning', 'urgent');
     updateTimerDisplay(timerEl, turnSecondsRemaining);
 
@@ -1399,9 +1481,9 @@ function updateTimerDisplay(el, seconds) {
  * @param {object|null} req - The input request object, or null to clear the prompt.
  */
 function handleInputRequest(req) {
-    gameState.pendingAction = req;
-
     if (!req) {
+        currentTurnRequestId = null;
+        gameState.pendingAction = null;
         stopTurnTimer();
         gameUI.input.disabled = true;
         gameUI.sendBtn.disabled = true;
@@ -1412,11 +1494,25 @@ function handleInputRequest(req) {
         return;
     }
 
+    // Generate stable request ID to avoid resetting countdown on every polling tick
+    const reqId = req.id || `${req.type}_${typeof req.prompt === 'object' ? JSON.stringify(req.prompt) : req.prompt}_${JSON.stringify(req.options)}`;
+    
+    // Keep pendingAction updated
+    gameState.pendingAction = req;
+
     let promptText = req.prompt;
     if (typeof promptText === 'object') {
         promptText = promptText[gameState.lang] || promptText['zh'] || promptText['en'] || JSON.stringify(promptText);
     }
     gameUI.actionPrompt.innerText = promptText;
+
+    // If this exact request is already active, don't restart the countdown
+    if (reqId === currentTurnRequestId) {
+        return;
+    }
+    currentTurnRequestId = reqId;
+
+    const timeoutSeconds = (req.timeout && Number.isFinite(req.timeout)) ? Math.round(req.timeout) : TURN_TIMEOUT_SECONDS;
 
     if (req.type === 'speech') {
         gameUI.input.disabled = false;
@@ -1430,7 +1526,7 @@ function handleInputRequest(req) {
             const fallback = gameState.lang === 'zh' ? "过" : "Pass";
             sendAction(text || fallback);
             gameUI.input.value = '';
-        });
+        }, timeoutSeconds);
     } else if (req.type === 'vote' || req.type === 'choice') {
         gameUI.input.disabled = true;
         gameUI.sendBtn.disabled = true;
@@ -1450,7 +1546,7 @@ function handleInputRequest(req) {
 
         startTurnTimer(() => {
             sendAction("Abstain");
-        });
+        }, timeoutSeconds);
     }
 }
 
@@ -1705,12 +1801,15 @@ function showSpeechBubble(playerName, text) {
 }
 
 async function showOperationsHistory() {
-    const modal = document.getElementById('op-history-modal');
+    loadOperationsHistory();
+}
+
+async function loadOperationsHistory() {
     const content = document.getElementById('op-history-content');
-    const title = document.getElementById('op-history-title');
+    if (!content) return;
 
     const t = I18N[gameState.lang].opHistory;
-    title.innerText = t.title;
+    content.innerHTML = `<p class="op-history-loading">${gameState.lang === 'zh' ? '正在加载操作记录...' : 'Loading operations history...'}</p>`;
 
     try {
         const response = await fetch(`/api/game/${gameState.gameId}/player/Player 1/operations`);
@@ -1719,49 +1818,112 @@ async function showOperationsHistory() {
         if (response.ok) {
             content.innerHTML = renderOperationsHistory(data, t);
         } else {
-            content.innerText = data.detail || 'Error fetching history.';
+            content.innerHTML = `<div class="op-empty-card"><p>${data.detail || (gameState.lang === 'zh' ? '获取历史记录失败' : 'Failed to load history.')}</p></div>`;
         }
     } catch (error) {
         console.error('Error fetching operations history:', error);
-        content.innerText = 'Network error.';
+        content.innerHTML = `<div class="op-empty-card"><p>${gameState.lang === 'zh' ? '网络错误，请稍后重试' : 'Network error. Please try again.'}</p></div>`;
     }
-
-    modal.classList.add('active');
-    modal.querySelector('.close-modal').onclick = () => modal.classList.remove('active');
 }
 
 function renderOperationsHistory(data, t) {
-    if (Object.keys(data).length === 0) {
-        return `<p>${t.noData}</p>`;
+    if (!data || Object.keys(data).length === 0) {
+        return `<div class="op-empty-card"><p>${t.noData}</p></div>`;
     }
 
-    let html = `<div class="op-history-role"><strong>${t.role}:</strong> ${I18N[gameState.lang].roles[data.role] || data.role}</div>`;
+    const roleName = data.role || 'Villager';
+    const roleConfig = ROLES.find(r => r.id === roleName) || { icon: '👱‍♀️' };
+    const localizedRole = I18N[gameState.lang].roles[roleName] || roleName;
 
-    if (data.teammates) {
-        html += `<p><strong>${t.teammates}:</strong> ${data.teammates.join(', ') || 'None'}</p>`;
+    let html = `
+        <div class="op-history-role">
+            <span><strong>${t.role}:</strong></span>
+            <span class="op-role-pill">${roleConfig.icon} ${localizedRole}</span>
+        </div>
+    `;
+
+    let hasOperations = false;
+
+    if (data.teammates && (data.teammates.length > 0 || data.king)) {
+        hasOperations = true;
+        html += `<div class="op-card">
+            <div class="op-card-title">🐺 ${t.teammates}</div>
+            <div class="op-badges-list">`;
+        if (data.teammates.length > 0) {
+            data.teammates.forEach(tm => {
+                html += `<span class="op-badge teammate">${getAvatar(tm)} ${tm}</span>`;
+            });
+        }
+        if (data.king) {
+            html += `<span class="op-badge teammate" style="background:#ffd200;">👑 ${t.king}: ${data.king}</span>`;
+        }
+        html += `</div></div>`;
     }
-    if (data.king) {
-        html += `<p><strong>${t.king}:</strong> ${data.king}</p>`;
+
+    if (data.saved !== undefined || data.poisoned !== undefined) {
+        hasOperations = true;
+        html += `<div class="op-card">
+            <div class="op-card-title">🧙‍♀️ ${gameState.lang === 'zh' ? '女巫用药' : 'Witch Potions'}</div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                <div class="op-badges-list" style="align-items:center;">
+                    <span style="font-size:0.9rem; font-weight:700;">💚 ${t.saved}:</span>
+                    ${(data.saved && data.saved.length > 0) 
+                        ? data.saved.map(p => `<span class="op-badge saved">${p}</span>`).join('') 
+                        : `<span style="color:var(--text-muted); font-size:0.85rem;">${gameState.lang === 'zh' ? '未使用' : 'None'}</span>`}
+                </div>
+                <div class="op-badges-list" style="align-items:center;">
+                    <span style="font-size:0.9rem; font-weight:700;">💜 ${t.poisoned}:</span>
+                    ${(data.poisoned && data.poisoned.length > 0) 
+                        ? data.poisoned.map(p => `<span class="op-badge poisoned">${p}</span>`).join('') 
+                        : `<span style="color:var(--text-muted); font-size:0.85rem;">${gameState.lang === 'zh' ? '未使用' : 'None'}</span>`}
+                </div>
+            </div>
+        </div>`;
     }
-    if (data.saved) {
-        html += `<p><strong>${t.saved}:</strong> ${data.saved.join(', ') || 'None'}</p>`;
-    }
-    if (data.poisoned) {
-        html += `<p><strong>${t.poisoned}:</strong> ${data.poisoned.join(', ') || 'None'}</p>`;
-    }
-    if (data.checked) {
-        html += `<h3>${t.checked}</h3>`;
-        html += '<ul>';
+
+    if (data.checked && data.checked.length > 0) {
+        hasOperations = true;
+        html += `<div class="op-card">
+            <div class="op-card-title">🔮 ${t.checked}</div>
+            <div style="display:flex; flex-direction:column; gap:6px;">`;
         data.checked.forEach(item => {
-            html += `<li>${item.player} (${t.camp}: ${item.camp})</li>`;
+            const isWerewolf = item.camp === 'Werewolves';
+            const campLabel = isWerewolf ? (gameState.lang === 'zh' ? '狼人阵营 🐺' : 'Werewolf 🐺') : (gameState.lang === 'zh' ? '好人阵营 👱' : 'Good 👱');
+            html += `
+                <div class="op-check-item">
+                    <span style="font-weight:700;">${getAvatar(item.player)} ${item.player}</span>
+                    <span class="op-camp-tag ${isWerewolf ? 'werewolf' : 'good'}">${campLabel}</span>
+                </div>
+            `;
         });
-        html += '</ul>';
+        html += `</div></div>`;
     }
-    if (data.protected) {
-        html += `<p><strong>${t.protected}:</strong> ${data.protected.join(', ') || 'None'}</p>`;
+
+    if (data.protected && data.protected.length > 0) {
+        hasOperations = true;
+        html += `<div class="op-card">
+            <div class="op-card-title">🛡️ ${t.protected}</div>
+            <div class="op-badges-list">
+                ${data.protected.map(p => `<span class="op-badge protected">${getAvatar(p)} ${p}</span>`).join('')}
+            </div>
+        </div>`;
     }
-    if (data.shot) {
-        html += `<p><strong>${t.shot}:</strong> ${data.shot.join(', ') || 'None'}</p>`;
+
+    if (data.shot && data.shot.length > 0) {
+        hasOperations = true;
+        html += `<div class="op-card">
+            <div class="op-card-title">🏹 ${t.shot}</div>
+            <div class="op-badges-list">
+                ${data.shot.map(p => `<span class="op-badge shot">${getAvatar(p)} ${p}</span>`).join('')}
+            </div>
+        </div>`;
+    }
+
+    if (!hasOperations) {
+        const villagerDesc = gameState.lang === 'zh'
+            ? '作为普通村民，夜间无需操作。请在白天的发言和投票中发挥你的智慧！'
+            : 'As a Villager, you had no special night actions. Your strength lies in daytime discussion and voting!';
+        html += `<div class="op-empty-card"><p>${villagerDesc}</p></div>`;
     }
 
     return html;

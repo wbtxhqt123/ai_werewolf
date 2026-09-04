@@ -128,6 +128,8 @@ class SheriffVoteState(GameState):
                 camps=["All"]
             ))
             self.game.record_vote("Sheriff Election", raw_votes, "None")
+            for p in self.game.players:
+                p.is_sheriff_candidate = False
             self.game.election_players = []
             return
 
@@ -145,7 +147,8 @@ class SheriffVoteState(GameState):
             sheriff = players_with_max_votes[0]
             self.game.sheriff = sheriff
             sheriff.is_sheriff = True
-            sheriff.is_sheriff_candidate = False
+            for p in self.game.players:
+                p.is_sheriff_candidate = False
             self.game.log(LogEntry(
                 log_type=LogType.VOTE_RESULT,
                 message={"en": f"{sheriff.name} elected Sheriff.", "zh": f"{sheriff.name} 当选警长。"},
@@ -156,6 +159,9 @@ class SheriffVoteState(GameState):
             self.game.log(LogEntry(log_type=LogType.SHERIFF_ELECTED, message={"en": f"{sheriff.name} has been elected as the new Sheriff!", "zh": f"{sheriff.name} 当选为新任警长！"}, target=sheriff, camps=["All"]))
         else:
             self.game.tied_players = players_with_max_votes
+            for p in self.game.players:
+                if p not in players_with_max_votes:
+                    p.is_sheriff_candidate = False
             for p in players_with_max_votes:
                 p.is_tie = True
             self.game.tie_context = "sheriff"

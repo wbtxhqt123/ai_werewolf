@@ -1,6 +1,7 @@
 from __future__ import annotations
 import threading
 import time
+import uuid
 from typing import Any, TYPE_CHECKING
 from game.controllers import Controller
 from game.player import Player
@@ -112,9 +113,11 @@ class WebController(Controller):
             The data provided by the user, or a safe default on timeout.
         """
         self.pending_request = {
+            "id": uuid.uuid4().hex,
             "type": request_type,
             "prompt": prompt,
-            "options": options
+            "options": options,
+            "timeout": self.timeout
         }
         self.input_event.clear()
         self.input_data = None
