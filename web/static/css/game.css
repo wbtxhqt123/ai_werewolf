@@ -68,32 +68,208 @@
     padding: 0;
 }
 
+/* --- Neo-Brutalist / Cartoon Pop Night & Vote Targeting --- */
 .player-card.selectable-target {
     cursor: pointer;
-    border: 2px solid var(--accent-secondary);
-    animation: targetPulse 1.4s ease-in-out infinite alternate;
+    border: 3px dashed var(--target-accent, #ff4757) !important;
+    background: #fffdf7 !important;
+    box-shadow: 4px 4px 0px var(--text-dark) !important;
+    transform: translateY(-2px);
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+                background 0.2s ease,
+                border-color 0.2s ease;
+    z-index: 5;
 }
 
+body.night-mode .player-card.selectable-target {
+    background: #1e293b !important;
+    box-shadow: 4px 4px 0px #0f172a !important;
+}
+
+/* Playful Comic Hover */
 .player-card.selectable-target:hover {
-    transform: scale(1.08) translateY(-4px);
-    border-color: var(--accent-yellow);
-    box-shadow: 0 0 16px var(--accent-yellow), var(--shadow-pop);
-    z-index: 10;
+    transform: translateY(-5px) scale(1.05) rotate(-1.5deg) !important;
+    box-shadow: 6px 6px 0px var(--text-dark) !important;
+    background: #ffffff !important;
+    z-index: 25 !important;
 }
 
-.player-card.non-target {
-    opacity: 0.45;
-    filter: grayscale(50%);
+body.night-mode .player-card.selectable-target:hover {
+    background: #28374f !important;
+    box-shadow: 6px 6px 0px #0f172a !important;
+}
+
+/* Tactile Active Click Depression */
+.player-card.selectable-target:active {
+    transform: translateY(1px) scale(0.98) rotate(0deg) !important;
+    box-shadow: 2px 2px 0px var(--text-dark) !important;
+}
+
+body.night-mode .player-card.selectable-target:active {
+    box-shadow: 2px 2px 0px #0f172a !important;
+}
+
+/* Sticker Badge Base */
+.player-card.selectable-target::after {
+    position: absolute;
+    top: -10px;
+    right: -8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--text-dark);
+    box-shadow: 2px 2px 0px var(--text-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    line-height: 1;
+    z-index: 30;
     pointer-events: none;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-@keyframes targetPulse {
-    from {
-        box-shadow: 0 0 4px var(--accent-secondary);
+.player-card.selectable-target:hover::after {
+    transform: scale(1.22) rotate(10deg);
+}
+
+/* Role-Specific Badges, Accents, and Animations */
+.player-card.selectable-target.target-werewolf {
+    --target-accent: #ff4757;
+}
+.player-card.selectable-target.target-werewolf::after {
+    content: '🐺';
+    background: #ff4757;
+    animation: stickerPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), werewolfHeartbeat 1.6s ease-in-out infinite alternate;
+}
+
+.player-card.selectable-target.target-witch {
+    --target-accent: #2ed573;
+}
+.player-card.selectable-target.target-witch::after {
+    content: '🧪';
+    background: #2ed573;
+    animation: stickerPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), witchPotionBob 1.8s ease-in-out infinite alternate;
+}
+
+.player-card.selectable-target.target-seer {
+    --target-accent: #9b59b6;
+}
+.player-card.selectable-target.target-seer::after {
+    content: '🔮';
+    background: #a29bfe;
+    animation: stickerPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), seerLensWobble 2s ease-in-out infinite alternate;
+}
+
+.player-card.selectable-target.target-guard {
+    --target-accent: #1e90ff;
+}
+.player-card.selectable-target.target-guard::after {
+    content: '🛡️';
+    background: #70a1ff;
+    animation: stickerPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), guardShieldBob 1.8s ease-in-out infinite alternate;
+}
+
+.player-card.selectable-target.target-hunter {
+    --target-accent: #ff7f50;
+}
+.player-card.selectable-target.target-hunter::after {
+    content: '🎯';
+    background: #ffa502;
+    animation: stickerPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), hunterArrowWiggle 2s ease-in-out infinite alternate;
+}
+
+.player-card.selectable-target.target-vote {
+    --target-accent: #e67e22;
+}
+.player-card.selectable-target.target-vote::after {
+    content: '🗳️';
+    background: #f39c12;
+    animation: stickerPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.player-card.selectable-target.target-sheriff {
+    --target-accent: #f1c40f;
+}
+.player-card.selectable-target.target-sheriff::after {
+    content: '⭐';
+    background: #f1c40f;
+    animation: stickerPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), sheriffGleam 1.5s ease-in-out infinite alternate;
+}
+
+.player-card.selectable-target.target-default {
+    --target-accent: var(--accent-secondary);
+}
+.player-card.selectable-target.target-default::after {
+    content: '🎯';
+    background: var(--accent-secondary);
+    animation: stickerPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Clean Non-Target Card Recession */
+.player-card.non-target {
+    opacity: 0.65;
+    transform: scale(0.96);
+    filter: saturate(70%);
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s ease, filter 0.3s ease;
+}
+
+/* Animations for Badges */
+@keyframes stickerPop {
+    0% {
+        transform: scale(0) rotate(-20deg);
+        opacity: 0;
     }
-    to {
-        box-shadow: 0 0 14px var(--accent-secondary), 0 0 8px rgba(78, 205, 196, 0.6);
+    70% {
+        transform: scale(1.25) rotate(10deg);
     }
+    100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+    }
+}
+
+@keyframes werewolfHeartbeat {
+    0% { transform: scale(1); }
+    15% { transform: scale(1.15) rotate(-5deg); }
+    30% { transform: scale(1); }
+    45% { transform: scale(1.08) rotate(3deg); }
+    100% { transform: scale(1); }
+}
+
+@keyframes witchPotionBob {
+    0% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-3px) rotate(6deg); }
+    100% { transform: translateY(0) rotate(-6deg); }
+}
+
+@keyframes seerLensWobble {
+    0% { transform: rotate(-8deg) scale(1); }
+    50% { transform: rotate(8deg) scale(1.06); }
+    100% { transform: rotate(-8deg) scale(1); }
+}
+
+@keyframes guardShieldBob {
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+    100% { transform: translateY(0); }
+}
+
+@keyframes hunterArrowWiggle {
+    0% { transform: rotate(0deg); }
+    20% { transform: rotate(-12deg); }
+    40% { transform: rotate(10deg); }
+    60% { transform: rotate(-5deg); }
+    80% { transform: rotate(3deg); }
+    100% { transform: rotate(0deg); }
+}
+
+@keyframes sheriffGleam {
+    0% { transform: scale(1) rotate(0deg); }
+    50% { transform: scale(1.12) rotate(15deg); }
+    100% { transform: scale(1) rotate(0deg); }
 }
 
 .player-card:hover {

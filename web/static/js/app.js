@@ -1571,21 +1571,76 @@ function updatePlayers(playersData, justDied = new Set()) {
     }
 }
 
+/** List of all targeting classes to cleanly add and remove. */
+const ALL_TARGET_CLASSES = [
+    'selectable-target',
+    'non-target',
+    'target-werewolf',
+    'target-witch',
+    'target-seer',
+    'target-guard',
+    'target-hunter',
+    'target-vote',
+    'target-sheriff',
+    'target-default'
+];
+
+/**
+ * Determines the role or action targeting class based on current pending action.
+ * @returns {string} The CSS class for targeting e.g. 'target-werewolf', 'target-witch', etc.
+ */
+function getTargetContextClass() {
+    if (!gameState.pendingAction) return 'target-default';
+    const req = gameState.pendingAction;
+    const promptStr = typeof req.prompt === 'object'
+        ? JSON.stringify(req.prompt).toLowerCase()
+        : String(req.prompt || '').toLowerCase();
+
+    // Check sheriff election or badge handoff
+    if (promptStr.includes('sheriff') || promptStr.includes('警长') || promptStr.includes('badge') || promptStr.includes('警徽')) {
+        return 'target-sheriff';
+    }
+
+    // Check day votes
+    if (req.type === 'vote') {
+        return 'target-vote';
+    }
+
+    // Role-specific night/death choices
+    const role = gameState.myRole;
+    if (role === 'Werewolf' || role === 'Black Werewolf King') {
+        return 'target-werewolf';
+    } else if (role === 'Witch') {
+        return 'target-witch';
+    } else if (role === 'Seer') {
+        return 'target-seer';
+    } else if (role === 'Guard') {
+        return 'target-guard';
+    } else if (role === 'Hunter') {
+        return 'target-hunter';
+    }
+
+    return 'target-default';
+}
+
 /**
  * Updates player card visuals to indicate which players can be targeted.
  * @param {Array<string>} targetPlayerNames - Array of selectable player names e.g. ['Player 2', 'Player 3']
  */
 function updatePlayerSelectableState(targetPlayerNames = []) {
     const cards = document.querySelectorAll('.player-card');
+    const targetClass = getTargetContextClass();
+
     cards.forEach(card => {
         const name = card.dataset.name;
+        // Clean up any existing target classes
+        ALL_TARGET_CLASSES.forEach(cls => card.classList.remove(cls));
+
         if (targetPlayerNames.length === 0) {
-            card.classList.remove('selectable-target', 'non-target');
+            // No targets active
         } else if (targetPlayerNames.includes(name)) {
-            card.classList.add('selectable-target');
-            card.classList.remove('non-target');
+            card.classList.add('selectable-target', targetClass);
         } else {
-            card.classList.remove('selectable-target');
             card.classList.add('non-target');
         }
     });
@@ -1804,6 +1859,7 @@ async function sendAction(value) {
     gameUI.input.disabled = true;
     
     document.querySelectorAll('.choice-btn').forEach(btn => btn.disabled = true);
+    updatePlayerSelectableState([]);
 
     try {
         await fetch('/api/game/action', {
