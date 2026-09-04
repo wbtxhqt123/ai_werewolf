@@ -17,8 +17,8 @@
     --dashboard-bg: rgba(255, 255, 255, 0.95);
     
     /* Typography System: Display (Fredoka) & Body (Inter) */
-    --font-display: 'Fredoka', 'Comic Sans MS', 'Chalkboard SE', 'Nunito', sans-serif;
-    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-display: 'Fredoka', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Nunito', sans-serif;
+    --font-body: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-main: var(--font-display);
     
     --border-radius-lg: 25px;
