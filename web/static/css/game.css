@@ -585,6 +585,15 @@
     gap: 10px;
 }
 
+.action-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    position: relative;
+    flex-wrap: wrap;
+}
+
 #action-prompt {
     font-size: 1.1rem;
     font-weight: 800;
@@ -592,6 +601,68 @@
     text-align: center;
     text-shadow: none;
     transition: color 0.5s ease;
+}
+
+.turn-timer {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 12px;
+    border-radius: 14px;
+    background: #fff;
+    border: 2px solid var(--panel-border);
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.12);
+    transition: all 0.25s ease;
+}
+
+body.night-mode .turn-timer {
+    background: #1e293b;
+    border-color: var(--panel-border);
+    color: #f1f2f6;
+}
+
+.turn-timer.warning {
+    color: #d35400;
+    border-color: #e67e22;
+    background: #fef5e7;
+    animation: timerPulseWarning 1s infinite alternate;
+}
+
+body.night-mode .turn-timer.warning {
+    background: rgba(230, 126, 34, 0.2);
+    border-color: #e67e22;
+    color: #f39c12;
+}
+
+.turn-timer.urgent {
+    color: #c0392b;
+    border-color: #e74c3c;
+    background: #fadbd8;
+    animation: timerPulseUrgent 0.6s infinite alternate;
+}
+
+body.night-mode .turn-timer.urgent {
+    background: rgba(231, 76, 60, 0.25);
+    border-color: #e74c3c;
+    color: #ff7675;
+}
+
+.turn-timer.hidden {
+    display: none;
+}
+
+@keyframes timerPulseWarning {
+    from { transform: scale(1); }
+    to { transform: scale(1.04); }
+}
+
+@keyframes timerPulseUrgent {
+    from { transform: scale(1); box-shadow: 0 0 4px #e74c3c; }
+    to { transform: scale(1.08); box-shadow: 0 0 12px #e74c3c; }
 }
 
 .input-wrapper {

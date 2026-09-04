@@ -278,7 +278,8 @@ const gameUI = {
     togglePlayersBtn: document.getElementById('toggle-players-btn'),
     showPlayersBtn: document.getElementById('show-players-btn'),
     playersSidebar: document.getElementById('players-sidebar'),
-    voiceInputBtn: document.getElementById('voice-input-btn')
+    voiceInputBtn: document.getElementById('voice-input-btn'),
+    turnTimer: document.getElementById('turn-timer')
 };
 
 /** @const {object} evalUI - References to DOM elements in the evaluation modal. */
@@ -959,6 +960,7 @@ async function pollGameState() {
 
         if (!data.game_active && !data.input_required) {
             gameState.active = false;
+            stopTurnTimer();
             clearInterval(pollingInterval);
             addSystemMessage(I18N[gameState.lang].gameOver);
             
@@ -1326,6 +1328,72 @@ function updatePlayerSelectableState(targetPlayerNames = []) {
     });
 }
 
+/** @type {number|null} - The timer ID for the 2-minute turn countdown. */
+let turnTimerInterval = null;
+const TURN_TIMEOUT_SECONDS = 120; // 2 minutes
+let turnSecondsRemaining = TURN_TIMEOUT_SECONDS;
+
+/**
+ * Starts a 2-minute countdown timer for the player's pending turn.
+ * @param {Function} onTimeout - Callback invoked when the countdown expires.
+ */
+function startTurnTimer(onTimeout) {
+    stopTurnTimer();
+    const timerEl = gameUI.turnTimer || document.getElementById('turn-timer');
+    if (!timerEl) return;
+
+    turnSecondsRemaining = TURN_TIMEOUT_SECONDS;
+    timerEl.classList.remove('hidden', 'warning', 'urgent');
+    updateTimerDisplay(timerEl, turnSecondsRemaining);
+
+    turnTimerInterval = setInterval(() => {
+        turnSecondsRemaining--;
+        updateTimerDisplay(timerEl, turnSecondsRemaining);
+
+        if (turnSecondsRemaining <= 10) {
+            timerEl.classList.add('urgent');
+            timerEl.classList.remove('warning');
+        } else if (turnSecondsRemaining <= 30) {
+            timerEl.classList.add('warning');
+            timerEl.classList.remove('urgent');
+        }
+
+        if (turnSecondsRemaining <= 0) {
+            stopTurnTimer();
+            if (typeof onTimeout === 'function') {
+                onTimeout();
+            }
+        }
+    }, 1000);
+}
+
+/**
+ * Stops and hides the active turn countdown timer.
+ */
+function stopTurnTimer() {
+    if (turnTimerInterval) {
+        clearInterval(turnTimerInterval);
+        turnTimerInterval = null;
+    }
+    const timerEl = gameUI.turnTimer || document.getElementById('turn-timer');
+    if (timerEl) {
+        timerEl.classList.add('hidden');
+        timerEl.classList.remove('warning', 'urgent');
+    }
+}
+
+/**
+ * Formats seconds as MM:SS and updates the timer element text.
+ * @param {HTMLElement} el - The timer DOM element.
+ * @param {number} seconds - Number of seconds remaining.
+ */
+function updateTimerDisplay(el, seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    el.innerText = `⏳ ${formatted}`;
+}
+
 /**
  * Handles a request for player input from the server.
  * @param {object|null} req - The input request object, or null to clear the prompt.
@@ -1334,6 +1402,7 @@ function handleInputRequest(req) {
     gameState.pendingAction = req;
 
     if (!req) {
+        stopTurnTimer();
         gameUI.input.disabled = true;
         gameUI.sendBtn.disabled = true;
         if (gameUI.voiceInputBtn) gameUI.voiceInputBtn.disabled = true;
@@ -1356,6 +1425,12 @@ function handleInputRequest(req) {
         gameUI.input.focus();
         gameUI.choiceButtons.innerHTML = '';
         updatePlayerSelectableState([]);
+        startTurnTimer(() => {
+            const text = gameUI.input.value.trim();
+            const fallback = gameState.lang === 'zh' ? "过" : "Pass";
+            sendAction(text || fallback);
+            gameUI.input.value = '';
+        });
     } else if (req.type === 'vote' || req.type === 'choice') {
         gameUI.input.disabled = true;
         gameUI.sendBtn.disabled = true;
@@ -1372,6 +1447,10 @@ function handleInputRequest(req) {
         } else {
              renderChoiceButtons(options, false);
         }
+
+        startTurnTimer(() => {
+            sendAction("Abstain");
+        });
     }
 }
 
@@ -1440,6 +1519,7 @@ async function sendTextAction() {
 async function sendAction(value) {
     if (!gameState.gameId || gameState.isSending) return;
 
+    stopTurnTimer();
     gameState.isSending = true;
     gameUI.sendBtn.disabled = true;
     gameUI.input.disabled = true;

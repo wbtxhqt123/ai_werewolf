@@ -136,7 +136,10 @@
                     <div class="my-status-icons"></div>
                 </div>
                 <div class="action-area" id="action-area">
-                    <div id="action-prompt" aria-live="polite">Waiting...</div>
+                    <div class="action-header">
+                        <div id="action-prompt" aria-live="polite">Waiting...</div>
+                        <div id="turn-timer" class="turn-timer hidden" aria-label="Turn Timer">⏳ 02:00</div>
+                    </div>
                     <div class="input-wrapper">
                         <input type="text" id="game-input" placeholder="Type a message..." disabled>
                         <button id="voice-input-btn" class="icon-btn" title="Voice Input" aria-label="Voice Input">🎤</button>
