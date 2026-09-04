@@ -125,6 +125,14 @@ const I18N = {
             protected: "你守护的人",
             shot: "你射击的人",
             noData: "没有可显示的操作历史。"
+        },
+        records: {
+            btn: "📖 记录",
+            title: "对局全景记录",
+            filterAll: "🌟 全部时间线",
+            filterActions: "🐺 我的行动",
+            filterVotes: "🗳️ 投票明细",
+            close: "关闭"
         }
     },
     en: {
@@ -206,6 +214,14 @@ const I18N = {
             protected: "Protected",
             shot: "Shot",
             noData: "No operations history to display."
+        },
+        records: {
+            btn: "📖 Records",
+            title: "Game Timeline Records",
+            filterAll: "🌟 All Events",
+            filterActions: "🐺 My Actions",
+            filterVotes: "🗳️ Vote Details",
+            close: "Close"
         }
     }
 };
@@ -286,6 +302,7 @@ const gameUI = {
     choiceButtons: document.getElementById('choice-buttons'),
     quitBtn: document.getElementById('quit-btn'),
     debugBtn: document.getElementById('toggle-debug-btn'),
+    recordsBtn: document.getElementById('records-btn'),
     gameLangBtn: document.getElementById('game-lang-btn'),
     lobbyLangBtn: document.getElementById('lobby-lang-btn'),
     newMessagesIndicator: document.getElementById('new-messages-indicator'),
@@ -745,23 +762,26 @@ function updateLanguage() {
         if (evalUI.newGameBtn) evalUI.newGameBtn.innerText = gameState.lang === 'zh' ? '再来一局' : 'New Game';
     }
 
-    // Records Modal
-    const recordsModal = document.getElementById('records-modal');
-    if (recordsModal) {
-        const t_records = I18N[gameState.lang].records;
-        const title = recordsModal.querySelector('h2');
-        if (title) title.innerText = t_records.title;
-        const tabs = recordsModal.querySelectorAll('.tab-btn');
-        if (tabs.length >= 2) {
-            tabs[0].innerText = t_records.votingHistory;
-            tabs[1].innerText = t_records.casualties;
+    // In-game Records Modal
+    const t_records = I18N[gameState.lang]?.records;
+    if (t_records) {
+        if (gameUI.recordsBtn) {
+            gameUI.recordsBtn.innerText = t_records.btn;
         }
-        const footerCloseBtn = document.getElementById('close-records-footer-btn');
-        if (footerCloseBtn) {
-            footerCloseBtn.innerText = t_records.close;
-        }
-        if (recordsModal.classList.contains('active')) {
-             fetchAndRenderRecords();
+        const recordsModal = document.getElementById('records-modal');
+        if (recordsModal) {
+            const title = document.getElementById('records-modal-title');
+            if (title) title.innerText = t_records.title;
+            const filterAll = document.getElementById('filter-all-btn');
+            if (filterAll) filterAll.innerText = t_records.filterAll;
+            const filterActions = document.getElementById('filter-actions-btn');
+            if (filterActions) filterActions.innerText = t_records.filterActions;
+            const filterVotes = document.getElementById('filter-votes-btn');
+            if (filterVotes) filterVotes.innerText = t_records.filterVotes;
+
+            if (recordsModal.classList.contains('active')) {
+                renderCurrentTimeline();
+            }
         }
     }
 }
@@ -881,7 +901,7 @@ function setupEventListeners() {
         }
     });
 
-
+    setupRecordsModalListeners();
 }
 
 
@@ -1801,15 +1821,403 @@ function showSpeechBubble(playerName, text) {
 }
 
 async function showOperationsHistory() {
-    loadOperationsHistory();
+    loadOperationsHistory('op-history-content');
 }
 
-async function loadOperationsHistory() {
-    const content = document.getElementById('op-history-content');
+// State for the Unified Timeline
+let timelineState = {
+    operations: null,
+    records: null,
+    filter: 'all' // 'all', 'actions', 'votes'
+};
+
+function setupRecordsModalListeners() {
+    const recordsBtn = document.getElementById('records-btn');
+    const recordsModal = document.getElementById('records-modal');
+    const closeRecordsBtn = document.getElementById('close-records-btn');
+    const filterAllBtn = document.getElementById('filter-all-btn');
+    const filterActionsBtn = document.getElementById('filter-actions-btn');
+    const filterVotesBtn = document.getElementById('filter-votes-btn');
+
+    if (recordsBtn && recordsModal) {
+        recordsBtn.addEventListener('click', () => {
+            recordsModal.classList.add('active');
+            loadUnifiedTimeline();
+        });
+    }
+
+    if (closeRecordsBtn && recordsModal) {
+        closeRecordsBtn.addEventListener('click', () => {
+            recordsModal.classList.remove('active');
+        });
+    }
+
+    if (recordsModal) {
+        recordsModal.addEventListener('click', (e) => {
+            if (e.target === recordsModal) {
+                recordsModal.classList.remove('active');
+            }
+        });
+    }
+
+    const filterBtns = [
+        { btn: filterAllBtn, filter: 'all' },
+        { btn: filterActionsBtn, filter: 'actions' },
+        { btn: filterVotesBtn, filter: 'votes' }
+    ];
+
+    filterBtns.forEach(({ btn, filter }) => {
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+            filterBtns.forEach(b => b.btn && b.btn.classList.remove('active'));
+            btn.classList.add('active');
+            timelineState.filter = filter;
+            renderCurrentTimeline();
+        });
+    });
+}
+
+async function loadUnifiedTimeline() {
+    const container = document.getElementById('records-timeline-content');
+    const identityCard = document.getElementById('records-identity-card');
+    const isZh = gameState.lang === 'zh';
+    if (!container) return;
+
+    container.innerHTML = `<p class="op-history-loading">${isZh ? '正在加载对局时间线...' : 'Loading game timeline...'}</p>`;
+
+    if (!gameState.gameId) {
+        if (identityCard) identityCard.innerHTML = `<div style="color:#888;">${isZh ? '对局尚未开始' : 'Game not started'}</div>`;
+        container.innerHTML = `<div class="op-empty-card"><p>${isZh ? '暂无对局记录' : 'No game records yet.'}</p></div>`;
+        return;
+    }
+
+    try {
+        const [opRes, recRes] = await Promise.all([
+            fetch(`/api/game/${gameState.gameId}/player/Player 1/operations`),
+            fetch(`/api/game/${gameState.gameId}/records`)
+        ]);
+
+        const opData = opRes.ok ? await opRes.json() : null;
+        const recData = recRes.ok ? await recRes.json() : null;
+
+        timelineState.operations = opData;
+        timelineState.records = recData;
+
+        renderIdentityCard(opData);
+        renderCurrentTimeline();
+    } catch (err) {
+        console.error('Error loading timeline data:', err);
+        container.innerHTML = `<div class="op-empty-card"><p>${isZh ? '网络错误，请稍后重试' : 'Network error. Please try again.'}</p></div>`;
+    }
+}
+
+function renderIdentityCard(opData) {
+    const card = document.getElementById('records-identity-card');
+    if (!card) return;
+    const isZh = gameState.lang === 'zh';
+
+    if (!opData || !opData.role) {
+        card.innerHTML = `<div style="color:#888;">${isZh ? '暂无角色信息' : 'No role info'}</div>`;
+        return;
+    }
+
+    const roleName = opData.role;
+    const roleConfig = ROLES.find(r => r.id === roleName) || { icon: '👱‍♀️' };
+    const localizedRole = I18N[gameState.lang].roles[roleName] || roleName;
+
+    let roleHtml = `
+        <div class="id-role-row">
+            <span>${isZh ? '你的身份' : 'Your Role'}: <span class="op-role-pill">${roleConfig.icon} ${localizedRole}</span></span>
+        </div>
+    `;
+
+    let alliesHtml = '';
+    if (opData.teammates && (opData.teammates.length > 0 || opData.king)) {
+        alliesHtml = `<div class="id-allies-row"><span>🐺 ${isZh ? '狼队阵容' : 'Werewolf Pack'}:</span>`;
+        if (opData.teammates.length > 0) {
+            opData.teammates.forEach(tm => {
+                alliesHtml += `<span class="op-badge teammate">${getAvatar(tm)} ${tm}</span>`;
+            });
+        }
+        if (opData.king) {
+            alliesHtml += `<span class="op-badge teammate" style="background:#ffd200;">👑 ${isZh ? '狼王' : 'King'}: ${opData.king}</span>`;
+        }
+        alliesHtml += `</div>`;
+    } else if (roleName === 'Seer') {
+        alliesHtml = `<div class="id-allies-row" style="color:#666;">🔮 ${isZh ? '每晚可查验一名玩家真实阵营' : 'Check one player\'s camp each night'}</div>`;
+    } else if (roleName === 'Witch') {
+        alliesHtml = `<div class="id-allies-row" style="color:#666;">🧙‍♀️ ${isZh ? '拥有一瓶解药与一瓶毒药，同夜只能使用一种' : 'Has one save potion and one poison potion'}</div>`;
+    } else if (roleName === 'Guard') {
+        alliesHtml = `<div class="id-allies-row" style="color:#666;">🛡️ ${isZh ? '每晚可守护一人免受袭击，不可连守' : 'Protect one player each night (no consecutive)'}</div>`;
+    } else if (roleName === 'Hunter') {
+        alliesHtml = `<div class="id-allies-row" style="color:#666;">🔫 ${isZh ? '出局时可开枪带走场上一名玩家（被毒死除外）' : 'Shoot another player upon death (except by poison)'}</div>`;
+    }
+
+    card.innerHTML = roleHtml + alliesHtml;
+}
+
+function renderCurrentTimeline() {
+    const container = document.getElementById('records-timeline-content');
+    if (!container) return;
+    const isZh = gameState.lang === 'zh';
+    const filter = timelineState.filter || 'all';
+
+    const opData = timelineState.operations || {};
+    const recData = timelineState.records || {};
+    const votes = recData.votes || [];
+    const deaths = recData.deaths || [];
+
+    // Calculate all rounds that exist
+    const roundsSet = new Set();
+    if (opData.kills) opData.kills.forEach(k => roundsSet.add(k.night));
+    if (opData.checked) opData.checked.forEach(c => roundsSet.add(c.night));
+    if (opData.saved_details) opData.saved_details.forEach(s => roundsSet.add(s.night));
+    if (opData.poisoned_details) opData.poisoned_details.forEach(p => roundsSet.add(p.night));
+    if (opData.protected_details) opData.protected_details.forEach(p => roundsSet.add(p.night));
+    if (opData.shot_details) opData.shot_details.forEach(s => roundsSet.add(s.day));
+    if (opData.public_shots) opData.public_shots.forEach(s => roundsSet.add(s.day));
+    votes.forEach(v => roundsSet.add(v.day));
+    deaths.forEach(d => roundsSet.add(d.day));
+
+    // Fallback: at least round 1
+    if (roundsSet.size === 0) roundsSet.add(1);
+
+    const sortedRounds = Array.from(roundsSet).sort((a, b) => a - b);
+    let html = '';
+
+    sortedRounds.forEach(roundNum => {
+        let roundHasContent = false;
+        let roundHtml = `<div class="timeline-round-divider">${isZh ? `第 ${roundNum} 轮对局 (Round ${roundNum})` : `Round ${roundNum}`}</div>`;
+
+        // 1. NIGHT NODE (🌙)
+        if (filter === 'all' || filter === 'actions') {
+            let nightActionsHtml = '';
+
+            // Werewolf Kills
+            if (opData.kills) {
+                const kill = opData.kills.find(k => k.night === roundNum);
+                if (kill) {
+                    const targetStr = kill.target 
+                        ? `<strong>${getAvatar(kill.target)} ${kill.target}</strong>` 
+                        : (isZh ? '空刀 (未袭击任何人)' : 'No target');
+                    nightActionsHtml += `
+                        <div class="timeline-card action-card">
+                            <span>🩸 ${isZh ? '狼人袭击' : 'Night Attack'}: ${targetStr}</span>
+                        </div>
+                    `;
+                }
+            }
+
+            // Seer Checks
+            if (opData.checked) {
+                const check = opData.checked.find(c => c.night === roundNum);
+                if (check) {
+                    const isWerewolf = check.camp === 'Werewolves';
+                    const campLabel = isWerewolf ? (isZh ? '狼人阵营 🐺' : 'Werewolf 🐺') : (isZh ? '好人阵营 👱' : 'Good 👱');
+                    nightActionsHtml += `
+                        <div class="timeline-card action-card">
+                            <span>🔮 ${isZh ? '查验身份' : 'Checked'}: <strong>${getAvatar(check.player)} ${check.player}</strong> ➔ <span class="op-camp-tag ${isWerewolf ? 'werewolf' : 'good'}">${campLabel}</span></span>
+                        </div>
+                    `;
+                }
+            }
+
+            // Witch Saves & Poisons
+            if (opData.saved_details) {
+                const save = opData.saved_details.find(s => s.night === roundNum);
+                if (save) {
+                    nightActionsHtml += `
+                        <div class="timeline-card action-card">
+                            <span>💚 ${isZh ? '女巫解药' : 'Witch Save'}: 救活了 <strong>${getAvatar(save.target)} ${save.target}</strong></span>
+                        </div>
+                    `;
+                }
+            }
+            if (opData.poisoned_details) {
+                const poison = opData.poisoned_details.find(p => p.night === roundNum);
+                if (poison) {
+                    nightActionsHtml += `
+                        <div class="timeline-card action-card">
+                            <span>💜 ${isZh ? '女巫毒药' : 'Witch Poison'}: 毒杀了 <strong>${getAvatar(poison.target)} ${poison.target}</strong></span>
+                        </div>
+                    `;
+                }
+            }
+
+            // Guard Protections
+            if (opData.protected_details) {
+                const protect = opData.protected_details.find(p => p.night === roundNum);
+                if (protect) {
+                    nightActionsHtml += `
+                        <div class="timeline-card action-card">
+                            <span>🛡️ ${isZh ? '守卫守护' : 'Protected'}: 守护了 <strong>${getAvatar(protect.target)} ${protect.target}</strong></span>
+                        </div>
+                    `;
+                }
+            }
+
+            // If player had no actions this night
+            if (!nightActionsHtml && filter === 'actions') {
+                // Don't show empty night if filtering purely by actions
+            } else {
+                if (!nightActionsHtml) {
+                    nightActionsHtml = `<div class="timeline-card" style="background:#f8fafc; color:#888;">😴 ${isZh ? '平安闭眼，无特殊夜间操作' : 'Sleeping peacefully with no actions'}</div>`;
+                }
+
+                roundHtml += `
+                    <div class="timeline-node night-node">
+                        <div class="timeline-node-icon">🌙</div>
+                        <div class="timeline-node-title">${isZh ? `第 ${roundNum} 夜` : `Night ${roundNum}`}</div>
+                        ${nightActionsHtml}
+                    </div>
+                `;
+                roundHasContent = true;
+            }
+        }
+
+        // 2. DAY NODE (☀️)
+        let dayContentHtml = '';
+
+        // Dawn Casualties (only in 'all' view)
+        if (filter === 'all') {
+            const nightDeaths = deaths.filter(d => d.day === roundNum && d.phase === 'night');
+            if (nightDeaths.length > 0) {
+                const deathNames = nightDeaths.map(d => `<strong>${getAvatar(d.player)} ${d.player}</strong>`).join(', ');
+                dayContentHtml += `
+                    <div class="timeline-card dawn-card">
+                        <span>💀 ${isZh ? '昨夜出局' : 'Night Casualties'}: ${deathNames}</span>
+                    </div>
+                `;
+            } else {
+                dayContentHtml += `
+                    <div class="timeline-card dawn-card" style="background:#f0fdf4; border-color:#bbf7d0;">
+                        <span>🕊️ ${isZh ? '昨夜平安夜，无人死亡' : 'Peaceful night, no casualties'}</span>
+                    </div>
+                `;
+            }
+        }
+
+        // Votes on this day (in 'all' or 'votes' view)
+        if (filter === 'all' || filter === 'votes') {
+            const dayVotes = votes.filter(v => v.day === roundNum);
+            dayVotes.forEach(voteEntry => {
+                let phaseLabel = voteEntry.phase;
+                if (voteEntry.phase === 'Sheriff Election') phaseLabel = isZh ? '警长竞选' : 'Sheriff Election';
+                else if (voteEntry.phase === 'Execution Vote') phaseLabel = isZh ? '放逐投票' : 'Execution Vote';
+                else if (voteEntry.phase === 'Tie Breaker') phaseLabel = isZh ? '平票PK' : 'Tie Breaker';
+
+                let resultLabel = '';
+                if (!voteEntry.result || voteEntry.result === 'None') {
+                    resultLabel = isZh ? '无人当选 / 无人出局' : 'No outcome';
+                } else if (voteEntry.result === 'Tie') {
+                    resultLabel = isZh ? '平票进入PK' : 'Tie vote';
+                } else {
+                    resultLabel = isZh ? `结果: ${voteEntry.result}` : `Result: ${voteEntry.result}`;
+                }
+
+                // Group voters by target
+                const targetMap = {};
+                if (voteEntry.votes) {
+                    for (const [voter, target] of Object.entries(voteEntry.votes)) {
+                        const tName = target || (isZh ? '弃票' : 'Abstained');
+                        if (!targetMap[tName]) targetMap[tName] = [];
+                        targetMap[tName].push(voter);
+                    }
+                }
+
+                let targetRowsHtml = '';
+                const targets = Object.keys(targetMap);
+                if (targets.length === 0) {
+                    targetRowsHtml = `<div style="color:#94a3b8; font-size:0.85rem;">${isZh ? '无人投票' : 'No votes'}</div>`;
+                } else {
+                    targets.forEach(tName => {
+                        const isAbstain = tName === 'Abstained' || tName === '弃票';
+                        const voters = targetMap[tName];
+                        const targetBadge = isAbstain
+                            ? `<span style="color:#64748b;">⚪ ${isZh ? '弃票' : 'Abstained'} (${voters.length})</span>`
+                            : `<span>🎯 ${getAvatar(tName)} ${tName} (${voters.length})</span>`;
+
+                        let votersPills = voters.map(voter => {
+                            const isSheriffVoter = voteEntry.sheriff && voteEntry.sheriff === voter && voteEntry.phase !== 'Sheriff Election';
+                            return isSheriffVoter
+                                ? `<span class="voter-pill sheriff-voter">${getAvatar(voter)} ${voter} 👮(1.5)</span>`
+                                : `<span class="voter-pill">${getAvatar(voter)} ${voter}</span>`;
+                        }).join('');
+
+                        targetRowsHtml += `
+                            <div class="vote-target-row">
+                                <div class="vote-target-side">${targetBadge}</div>
+                                <span class="vote-arrow-indicator">⟵ 投票者:</span>
+                                <div class="vote-voters-side">${votersPills}</div>
+                            </div>
+                        `;
+                    });
+                }
+
+                dayContentHtml += `
+                    <div class="timeline-card vote-timeline-card">
+                        <div class="vote-timeline-header">
+                            <span class="vote-phase-badge">${phaseLabel}</span>
+                            <span class="vote-result-badge">${resultLabel}</span>
+                        </div>
+                        ${targetRowsHtml}
+                    </div>
+                `;
+            });
+        }
+
+        // Public Gunshots & Deaths (in 'all' or 'actions' view)
+        if (filter === 'all' || filter === 'actions') {
+            if (opData.public_shots) {
+                const dayShots = opData.public_shots.filter(s => s.day === roundNum);
+                dayShots.forEach(s => {
+                    const shooterRole = s.role === 'Hunter' 
+                        ? (isZh ? '猎人' : 'Hunter') 
+                        : (isZh ? '白狼王' : 'Black Werewolf King');
+                    dayContentHtml += `
+                        <div class="timeline-card public-card">
+                            <span>🏹 <strong>${s.shooter}</strong> (${shooterRole}) 死亡开枪带走了 <strong>${getAvatar(s.target)} ${s.target}</strong></span>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        if (dayContentHtml) {
+            roundHtml += `
+                <div class="timeline-node day-node">
+                    <div class="timeline-node-icon">☀️</div>
+                    <div class="timeline-node-title">${isZh ? `第 ${roundNum} 天` : `Day ${roundNum}`}</div>
+                    ${dayContentHtml}
+                </div>
+            `;
+            roundHasContent = true;
+        }
+
+        if (roundHasContent) {
+            html += roundHtml;
+        }
+    });
+
+    if (!html) {
+        html = `<div class="op-empty-card"><p>${isZh ? '当前筛选下暂无记录' : 'No records match the current filter.'}</p></div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+// For post-game modal compatibility
+async function loadOperationsHistory(containerId = 'op-history-content') {
+    const content = document.getElementById(containerId);
     if (!content) return;
 
     const t = I18N[gameState.lang].opHistory;
     content.innerHTML = `<p class="op-history-loading">${gameState.lang === 'zh' ? '正在加载操作记录...' : 'Loading operations history...'}</p>`;
+
+    if (!gameState.gameId) {
+        content.innerHTML = `<div class="op-empty-card"><p>${t.noData}</p></div>`;
+        return;
+    }
 
     try {
         const response = await fetch(`/api/game/${gameState.gameId}/player/Player 1/operations`);
@@ -1834,6 +2242,7 @@ function renderOperationsHistory(data, t) {
     const roleName = data.role || 'Villager';
     const roleConfig = ROLES.find(r => r.id === roleName) || { icon: '👱‍♀️' };
     const localizedRole = I18N[gameState.lang].roles[roleName] || roleName;
+    const isZh = gameState.lang === 'zh';
 
     let html = `
         <div class="op-history-role">
@@ -1860,22 +2269,43 @@ function renderOperationsHistory(data, t) {
         html += `</div></div>`;
     }
 
+    if (data.kills && data.kills.length > 0) {
+        hasOperations = true;
+        const nightKillsTitle = isZh ? '夜间袭击目标' : 'Night Attack Targets';
+        html += `<div class="op-card">
+            <div class="op-card-title">🩸 ${nightKillsTitle}</div>
+            <div style="display:flex; flex-direction:column; gap:6px;">`;
+        data.kills.forEach(k => {
+            const nightLabel = isZh ? `第 ${k.night} 夜` : `Night ${k.night}`;
+            const targetText = k.target
+                ? `${getAvatar(k.target)} ${k.target}`
+                : (isZh ? '无人袭击 (空刀)' : 'No one targeted');
+            html += `
+                <div class="op-kill-item">
+                    <span class="op-night-tag">${nightLabel}</span>
+                    <span class="op-target-tag">${targetText}</span>
+                </div>
+            `;
+        });
+        html += `</div></div>`;
+    }
+
     if (data.saved !== undefined || data.poisoned !== undefined) {
         hasOperations = true;
         html += `<div class="op-card">
-            <div class="op-card-title">🧙‍♀️ ${gameState.lang === 'zh' ? '女巫用药' : 'Witch Potions'}</div>
+            <div class="op-card-title">🧙‍♀️ ${isZh ? '女巫用药' : 'Witch Potions'}</div>
             <div style="display:flex; flex-direction:column; gap:8px;">
                 <div class="op-badges-list" style="align-items:center;">
                     <span style="font-size:0.9rem; font-weight:700;">💚 ${t.saved}:</span>
                     ${(data.saved && data.saved.length > 0) 
                         ? data.saved.map(p => `<span class="op-badge saved">${p}</span>`).join('') 
-                        : `<span style="color:var(--text-muted); font-size:0.85rem;">${gameState.lang === 'zh' ? '未使用' : 'None'}</span>`}
+                        : `<span style="color:var(--text-muted); font-size:0.85rem;">${isZh ? '未使用' : 'None'}</span>`}
                 </div>
                 <div class="op-badges-list" style="align-items:center;">
                     <span style="font-size:0.9rem; font-weight:700;">💜 ${t.poisoned}:</span>
                     ${(data.poisoned && data.poisoned.length > 0) 
                         ? data.poisoned.map(p => `<span class="op-badge poisoned">${p}</span>`).join('') 
-                        : `<span style="color:var(--text-muted); font-size:0.85rem;">${gameState.lang === 'zh' ? '未使用' : 'None'}</span>`}
+                        : `<span style="color:var(--text-muted); font-size:0.85rem;">${isZh ? '未使用' : 'None'}</span>`}
                 </div>
             </div>
         </div>`;
@@ -1888,10 +2318,11 @@ function renderOperationsHistory(data, t) {
             <div style="display:flex; flex-direction:column; gap:6px;">`;
         data.checked.forEach(item => {
             const isWerewolf = item.camp === 'Werewolves';
-            const campLabel = isWerewolf ? (gameState.lang === 'zh' ? '狼人阵营 🐺' : 'Werewolf 🐺') : (gameState.lang === 'zh' ? '好人阵营 👱' : 'Good 👱');
+            const campLabel = isWerewolf ? (isZh ? '狼人阵营 🐺' : 'Werewolf 🐺') : (isZh ? '好人阵营 👱' : 'Good 👱');
+            const roundPrefix = item.night ? (isZh ? `第 ${item.night} 夜 · ` : `Night ${item.night} · `) : '';
             html += `
                 <div class="op-check-item">
-                    <span style="font-weight:700;">${getAvatar(item.player)} ${item.player}</span>
+                    <span style="font-weight:700;">${roundPrefix}${getAvatar(item.player)} ${item.player}</span>
                     <span class="op-camp-tag ${isWerewolf ? 'werewolf' : 'good'}">${campLabel}</span>
                 </div>
             `;
@@ -1920,9 +2351,9 @@ function renderOperationsHistory(data, t) {
     }
 
     if (!hasOperations) {
-        const villagerDesc = gameState.lang === 'zh'
+        const villagerDesc = isZh
             ? '作为普通村民，夜间无需操作。请在白天的发言和投票中发挥你的智慧！'
-            : 'As a Villager, you had no special night actions. Your strength lies in daytime discussion and voting!';
+            : 'As a Villager, you have no special night actions. Your strength lies in daytime discussion and voting!';
         html += `<div class="op-empty-card"><p>${villagerDesc}</p></div>`;
     }
 

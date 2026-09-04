@@ -242,6 +242,38 @@ input[type="password"] {
     box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
 }
 
+.header-pill-btn {
+    width: auto !important;
+    height: 40px !important;
+    padding: 0 16px !important;
+    border-radius: 20px !important;
+    font-size: 0.95rem !important;
+    font-weight: 800 !important;
+    font-family: var(--font-main);
+    background: var(--accent-yellow) !important;
+    color: var(--text-dark) !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 3px 3px 0px rgba(0,0,0,0.15) !important;
+}
+
+.header-pill-btn:hover {
+    transform: translateY(-2px) !important;
+    background: #ffeaa7 !important;
+    color: var(--text-dark) !important;
+}
+
+body.night-mode .header-pill-btn {
+    background: #34495e !important;
+    color: #f1f2f6 !important;
+    border-color: #7f8c8d !important;
+}
+
+body.night-mode .header-pill-btn:hover {
+    background: #4b6584 !important;
+}
+
 .toggle-btn {
     flex: 1;
     padding: 12px 10px;

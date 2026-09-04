@@ -97,6 +97,7 @@
                     <div class="phase-indicator" id="phase-indicator">Day 1</div>
                 </div>
                 <div class="header-right">
+                    <button id="records-btn" class="icon-btn header-pill-btn" style="font-size: 0.9rem; width: auto; padding: 0 14px; border-radius: 20px; font-weight: 800;" title="Game Records" aria-label="Game Records">📖 记录</button>
                     <button id="game-lang-btn" class="icon-btn" style="font-size: 0.9rem; width: auto; padding: 0 12px; border-radius: 20px; font-weight: 800;">中文/EN</button>
                     <button id="toggle-debug-btn" title="Toggle Debug Logs" aria-label="Toggle Debug Logs">🐞</button>
 
@@ -208,11 +209,33 @@
             </div>
         </div>
 
-        <!-- Operations History Modal (Preserved for compatibility) -->
-        <div id="op-history-modal" class="modal" style="display: none;">
-            <div class="modal-content">
-                <span class="close-modal">&times;</span>
-                <h2 id="op-history-title">Operations History</h2>
+        <!-- Game Records Modal: Unified Chronological Timeline (Plan 1) -->
+        <div id="records-modal" class="modal">
+            <div class="modal-content records-content">
+                <div class="records-header">
+                    <div class="records-title-group">
+                        <span class="records-icon">📖</span>
+                        <h2 id="records-modal-title">对局全景记录</h2>
+                    </div>
+                    <button class="close-modal-round" id="close-records-btn" aria-label="Close">&times;</button>
+                </div>
+
+                <!-- Identity Summary Card -->
+                <div id="records-identity-card" class="records-identity-card">
+                    <!-- Populated dynamically: role badge, teammates, king, abilities -->
+                </div>
+
+                <!-- Filter Pills -->
+                <div class="records-filter-bar">
+                    <button class="filter-pill active" data-filter="all" id="filter-all-btn">🌟 全部时间线</button>
+                    <button class="filter-pill" data-filter="actions" id="filter-actions-btn">🐺 我的行动</button>
+                    <button class="filter-pill" data-filter="votes" id="filter-votes-btn">🗳️ 投票明细</button>
+                </div>
+
+                <!-- Unified Timeline Body -->
+                <div class="records-timeline-container" id="records-timeline-content">
+                    <p class="op-history-loading">正在加载时间线...</p>
+                </div>
             </div>
         </div>
     </div>

@@ -13,60 +13,21 @@
     font-size: 1.8rem;
 }
 
-/* Records Modal - Modern Light/Cute Redesign */
+/* Records Modal Base */
 .records-content {
-    max-width: 800px;
+    max-width: 680px;
+    width: 92%;
     max-height: 85vh;
     overflow-y: hidden;
-    background: #fff; /* Light BG */
+    background: #fff;
     border: var(--border-thick);
-    border-radius: 25px;
+    border-radius: 24px;
     box-shadow: var(--shadow-pop);
     color: var(--text-dark);
     display: flex;
     flex-direction: column;
     padding: 0;
     font-family: var(--font-main);
-}
-
-.records-content h2 {
-    text-align: left;
-    font-family: var(--font-main);
-    font-size: 1.8rem;
-    font-weight: 900;
-    margin: 0;
-    color: var(--text-dark);
-    text-transform: none;
-    letter-spacing: 0;
-    border-bottom: none;
-    padding: 20px 30px;
-    background: var(--accent-yellow); /* Header BG */
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: var(--border-thick);
-}
-
-.records-content .close-modal {
-    position: static; /* Reset absolute positioning */
-    color: var(--text-dark);
-    font-size: 2rem;
-    transition: transform 0.2s;
-    cursor: pointer;
-    background: #fff;
-    border: 2px solid var(--text-dark);
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
-}
-
-.records-content .close-modal:hover {
-    transform: scale(1.1);
-    color: var(--accent-primary);
 }
 
 .chronicle-tabs {
@@ -969,3 +930,323 @@ input:checked + .slider:before {
     color: white;
     box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
 }
+
+/* In-game Records Modal: Unified Chronological Timeline (Plan 1) */
+.records-header {
+    background: var(--accent-yellow);
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2.5px solid var(--text-dark);
+}
+
+.records-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.records-icon {
+    font-size: 1.4rem;
+}
+
+.records-header h2 {
+    font-size: 1.35rem;
+    font-weight: 900;
+    margin: 0;
+    color: var(--text-dark);
+}
+
+.close-modal-round {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid var(--text-dark);
+    background: #ffffff;
+    color: var(--text-dark);
+    font-size: 1.3rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
+    transition: transform 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.close-modal-round:hover {
+    transform: scale(1.1);
+    background: #ff4757;
+    color: #ffffff;
+}
+
+/* Identity Card */
+.records-identity-card {
+    padding: 12px 18px;
+    background: #fffbe6;
+    border-bottom: 2px dashed #f0e6cc;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.9rem;
+}
+
+.id-role-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-weight: 800;
+}
+
+.id-allies-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: #555;
+    font-size: 0.85rem;
+}
+
+/* Filter Bar */
+.records-filter-bar {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #f8f9fa;
+    border-bottom: 1.5px solid #eceff1;
+}
+
+.filter-pill {
+    padding: 5px 14px;
+    border-radius: 16px;
+    border: 1.5px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
+    font-weight: 700;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.filter-pill:hover {
+    border-color: #94a3b8;
+    background: #f1f5f9;
+}
+
+.filter-pill.active {
+    background: var(--accent-secondary);
+    color: #ffffff;
+    border-color: var(--accent-secondary);
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+}
+
+/* Timeline Container */
+.records-timeline-container {
+    padding: 16px 20px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: #ffffff;
+}
+
+.timeline-round-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 0 2px 0;
+    font-weight: 800;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.timeline-round-divider::before,
+.timeline-round-divider::after {
+    content: '';
+    flex: 1;
+    height: 1.5px;
+    background: #e2e8f0;
+}
+
+.timeline-node {
+    position: relative;
+    padding-left: 38px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.timeline-node::before {
+    content: '';
+    position: absolute;
+    left: 13px;
+    top: 26px;
+    bottom: -14px;
+    width: 2px;
+    background: #cbd5e1;
+}
+
+.timeline-node:last-child::before {
+    display: none;
+}
+
+.timeline-node-icon {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    border: 2px solid var(--text-dark);
+    background: #ffffff;
+    z-index: 2;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
+}
+
+.timeline-node.night-node .timeline-node-icon {
+    background: #2c3e50;
+    color: #ffffff;
+    border-color: #1a252f;
+}
+
+.timeline-node.day-node .timeline-node-icon {
+    background: #ffa801;
+    color: #ffffff;
+    border-color: #d35400;
+}
+
+.timeline-node-title {
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: var(--text-dark);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.timeline-card {
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.action-card {
+    background: #f0fdf4;
+    border: 1.5px solid #bbf7d0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.dawn-card {
+    background: #fff7ed;
+    border: 1.5px solid #fed7aa;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.public-card {
+    background: #fff8e1;
+    border: 1.5px solid #ffecb3;
+}
+
+.vote-timeline-card {
+    background: #ffffff;
+    border: 2px solid var(--text-dark);
+    border-radius: 14px;
+    padding: 12px 14px;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.06);
+}
+
+.vote-timeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1.5px dashed #e2e8f0;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    font-weight: 800;
+    font-size: 0.9rem;
+}
+
+.vote-target-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 7px 10px;
+    margin-bottom: 6px;
+}
+
+.vote-target-side {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 800;
+    min-width: 120px;
+    font-size: 0.88rem;
+}
+
+.vote-arrow-indicator {
+    color: #94a3b8;
+    font-weight: 900;
+    font-size: 0.9rem;
+    padding: 0 4px;
+}
+
+.vote-voters-side {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.voter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #ffffff;
+    border: 1.5px solid var(--text-dark);
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-dark);
+    box-shadow: 1px 1px 0 rgba(0,0,0,0.1);
+}
+
+.voter-pill.sheriff-voter {
+    background: #fff9db;
+    border-color: #f59f00;
+}
+
+.vote-outcome-banner {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1.5px dashed #e2e8f0;
+    font-weight: 800;
+    font-size: 0.88rem;
+    color: var(--accent-primary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+

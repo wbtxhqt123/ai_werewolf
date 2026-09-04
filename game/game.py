@@ -449,12 +449,15 @@ class Game:
     def get_player_operations_history(self, player_name: str) -> dict[str, Any]:
         """
         Generates a history of operations for a specific player, tailored to their role.
+        Role-specific secret operations are only revealed to their respective roles,
+        while public death-triggered shots (Hunter, Black Werewolf King) are visible to all.
         """
         player = self.get_player_by_name(player_name)
         if not player or not player.role:
             return {}
 
-        history = {"role": player.role.name}
+        history: dict[str, Any] = {}
+        history["role"] = player.role.name
         role_name = player.role.name
 
         if role_name in ["Werewolf", "Black Werewolf King"]:
@@ -467,17 +470,35 @@ class Game:
             history["teammates"] = teammates
             history["king"] = king[0] if king else None
 
+            # Track werewolf kills round by round
+            kills = []
+            for log in self.game_log:
+                if log.log_type == LogType.WEREWOLF_TARGET:
+                    kills.append({
+                        "night": log.day or 1,
+                        "target": log.target.name if log.target else None,
+                    })
+            history["kills"] = kills
+
         if role_name == "Witch":
             saved = []
             poisoned = []
+            saved_details = []
+            poisoned_details = []
             for log in self.game_log:
                 if log.log_type == LogType.WITCH_ACTION and log.source == player:
+                    target_name = log.target.name if log.target else "no one"
+                    night_num = log.day or 1
                     if log.data.get("action") == "save":
-                        saved.append(log.target.name if log.target else "no one")
+                        saved.append(target_name)
+                        saved_details.append({"night": night_num, "target": target_name})
                     elif log.data.get("action") == "poison":
-                        poisoned.append(log.target.name if log.target else "no one")
+                        poisoned.append(target_name)
+                        poisoned_details.append({"night": night_num, "target": target_name})
             history["saved"] = saved
             history["poisoned"] = poisoned
+            history["saved_details"] = saved_details
+            history["poisoned_details"] = poisoned_details
 
         if role_name == "Seer":
             checked = []
@@ -486,6 +507,7 @@ class Game:
                     if log.target:
                         checked.append(
                             {
+                                "night": log.day or 1,
                                 "player": log.target.name,
                                 "camp": (
                                     "Werewolves"
@@ -498,14 +520,21 @@ class Game:
 
         if role_name == "Guard":
             protected = []
+            protected_details = []
             for log in self.game_log:
                 if log.log_type == LogType.GUARD_PROTECT and log.source == player:
                     if log.target:
                         protected.append(log.target.name)
+                        protected_details.append({
+                            "night": log.day or 1,
+                            "target": log.target.name,
+                        })
             history["protected"] = protected
+            history["protected_details"] = protected_details
 
         if role_name in ["Black Werewolf King", "Hunter"]:
             shot = []
+            shot_details = []
             if role_name == "Hunter":
                 for log in self.game_log:
                     if (
@@ -514,6 +543,7 @@ class Game:
                     ):
                         if log.target:
                             shot.append(log.target.name)
+                            shot_details.append({"day": log.day or 1, "target": log.target.name})
             if role_name == "Black Werewolf King":
                 for log in self.game_log:
                     if (
@@ -522,6 +552,20 @@ class Game:
                     ):
                         if log.target:
                             shot.append(log.target.name)
+                            shot_details.append({"day": log.day or 1, "target": log.target.name})
             history["shot"] = shot
+            history["shot_details"] = shot_details
+
+        # Public Shots: Hunter and Black Werewolf King shots are public daytime events
+        public_shots = []
+        for log in self.game_log:
+            if log.log_type in [LogType.HUNTER_SHOOT, LogType.BLACKWEREWOLFKING_SHOOT]:
+                public_shots.append({
+                    "day": log.day or 1,
+                    "shooter": log.source.name if log.source else "Unknown",
+                    "role": "Hunter" if log.log_type == LogType.HUNTER_SHOOT else "Black Werewolf King",
+                    "target": log.target.name if log.target else "no one",
+                })
+        history["public_shots"] = public_shots
 
         return history
