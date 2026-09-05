@@ -73,6 +73,10 @@ const I18N = {
         reconnected: "已重连到游戏",
         networkError: "网络错误",
         confirmQuit: "确定要退出吗？",
+        bgmOn: "音乐",
+        bgmMuted: "静音",
+        bgmTitlePlaying: "背景音乐：播放中 (点击静音)",
+        bgmTitleMuted: "背景音乐：已静音 (点击开启)",
         typeMessage: "输入消息...",
         send: "发送",
         waiting: "等待中...",
@@ -174,6 +178,10 @@ const I18N = {
         reconnected: "Reconnected to existing game.",
         networkError: "Network error",
         confirmQuit: "Are you sure you want to quit?",
+        bgmOn: "BGM",
+        bgmMuted: "Muted",
+        bgmTitlePlaying: "BGM: Playing (Click to mute)",
+        bgmTitleMuted: "BGM: Muted (Click to play)",
         typeMessage: "Type a message...",
         send: "Send",
         waiting: "Waiting...",
@@ -329,6 +337,8 @@ const gameUI = {
     gameSettingsBtn: document.getElementById('game-settings-btn'),
     gameLangBtn: document.getElementById('game-lang-btn'),
     lobbyLangBtn: document.getElementById('lobby-lang-btn'),
+    audioToggleBtn: document.getElementById('audio-toggle-btn'),
+    lobbyAudioBtn: document.getElementById('lobby-audio-btn'),
     newMessagesIndicator: document.getElementById('new-messages-indicator'),
     togglePlayersBtn: document.getElementById('toggle-players-btn'),
     showPlayersBtn: document.getElementById('show-players-btn'),
@@ -370,6 +380,155 @@ const settingsUI = {
     title: document.getElementById('settings-modal-title')
 };
 
+// --- BACKGROUND MUSIC (BGM) MANAGER ---
+
+/**
+ * Manages looping day and night background music (BGM) with strict mutual exclusivity,
+ * browser autoplay unlock, and persistent mute controls.
+ */
+const BGMManager = {
+    tracks: {
+        day: new Audio('/static/audio/day.mp3'),
+        night: new Audio('/static/audio/night.mp3')
+    },
+    currentTrackName: null,
+    isMuted: false,
+    targetVolume: 0.35,
+    unlocked: false,
+
+    init() {
+        Object.entries(this.tracks).forEach(([name, audio]) => {
+            audio.loop = true;
+            audio.preload = 'auto';
+            audio.volume = 0;
+            audio.addEventListener('error', (e) => {
+                console.warn(`[BGM] Failed loading track ${name}:`, e);
+            });
+        });
+
+        const storedMute = localStorage.getItem('werewolf_bgm_muted');
+        this.isMuted = storedMute === 'true';
+
+        const unlockAudio = () => {
+            this.unlock();
+            ['pointerdown', 'keydown', 'touchstart', 'click'].forEach(evt => {
+                window.removeEventListener(evt, unlockAudio);
+            });
+        };
+
+        ['pointerdown', 'keydown', 'touchstart', 'click'].forEach(evt => {
+            window.addEventListener(evt, unlockAudio, { passive: true });
+        });
+
+        this.updateButtonsUI();
+
+        // Attempt initial playback if permitted by browser
+        if (!this.isMuted) {
+            const isNight = document.body.classList.contains('night-mode');
+            this.playTrack(isNight ? 'night' : 'day');
+        }
+    },
+
+    unlock() {
+        if (this.unlocked) return;
+        this.unlocked = true;
+        if (!this.isMuted) {
+            const isNight = document.body.classList.contains('night-mode');
+            this.playTrack(isNight ? 'night' : 'day');
+        }
+    },
+
+    stopOtherTracks(activeTrackName) {
+        Object.entries(this.tracks).forEach(([name, audio]) => {
+            if (name !== activeTrackName) {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.volume = 0;
+            }
+        });
+    },
+
+    toggleMute() {
+        this.unlocked = true;
+        this.isMuted = !this.isMuted;
+        localStorage.setItem('werewolf_bgm_muted', this.isMuted ? 'true' : 'false');
+        
+        if (this.isMuted) {
+            this.stopAll();
+        } else {
+            const isNight = document.body.classList.contains('night-mode');
+            this.playTrack(isNight ? 'night' : 'day');
+        }
+        this.updateButtonsUI();
+    },
+
+    playTrack(trackName) {
+        if (this.isMuted) {
+            this.currentTrackName = trackName;
+            this.stopAll();
+            return;
+        }
+
+        // Strictly enforce mutual exclusivity: stop all other tracks immediately
+        this.stopOtherTracks(trackName);
+
+        const targetAudio = this.tracks[trackName];
+        if (!targetAudio) return;
+
+        this.currentTrackName = trackName;
+        targetAudio.volume = this.targetVolume;
+
+        if (targetAudio.paused) {
+            const playPromise = targetAudio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(() => {
+                    // Autoplay prevented pending user interaction
+                });
+            }
+        }
+    },
+
+    setTrack(trackName) {
+        if (this.isMuted) {
+            this.currentTrackName = trackName;
+            return;
+        }
+        this.playTrack(trackName);
+    },
+
+    stopAll() {
+        Object.values(this.tracks).forEach(audio => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.volume = 0;
+        });
+        this.currentTrackName = null;
+    },
+
+    updateButtonsUI() {
+        const lang = (gameState && gameState.lang) || 'zh';
+        const isZh = lang === 'zh';
+        const labelText = this.isMuted ? (isZh ? '静音' : 'Muted') : (isZh ? '音乐' : 'BGM');
+        const icon = this.isMuted ? '🔇' : '🎵';
+        const titleText = this.isMuted 
+            ? (I18N[lang]?.bgmTitleMuted || 'BGM: Muted (Click to play)')
+            : (I18N[lang]?.bgmTitlePlaying || 'BGM: Playing (Click to mute)');
+
+        const updateBtn = (btn) => {
+            if (!btn) return;
+            btn.classList.toggle('muted', this.isMuted);
+            btn.title = titleText;
+            btn.setAttribute('aria-label', titleText);
+            btn.innerHTML = `${icon} <span class="audio-label">${labelText}</span>`;
+        };
+
+        updateBtn(gameUI.lobbyAudioBtn);
+        updateBtn(gameUI.audioToggleBtn);
+    }
+};
+
+window.BGMManager = BGMManager;
+
 // --- INITIALIZATION ---
 
 /**
@@ -383,6 +542,7 @@ function init() {
     setupEventListeners();
     loadStoredSettings();
     updateLanguage();
+    BGMManager.init();
     
     let debugVisible = false;
     if (gameUI.debugBtn) {
@@ -401,6 +561,14 @@ function init() {
     
     if (gameUI.lobbyLangBtn) {
         gameUI.lobbyLangBtn.addEventListener('click', toggleLanguage);
+    }
+
+    if (gameUI.lobbyAudioBtn) {
+        gameUI.lobbyAudioBtn.addEventListener('click', () => BGMManager.toggleMute());
+    }
+
+    if (gameUI.audioToggleBtn) {
+        gameUI.audioToggleBtn.addEventListener('click', () => BGMManager.toggleMute());
     }
 
     if (gameUI.newMessagesIndicator) {
@@ -946,6 +1114,10 @@ function updateLanguage() {
             }
         }
     }
+
+    if (typeof BGMManager !== 'undefined') {
+        BGMManager.updateButtonsUI();
+    }
 }
 
 /**
@@ -1110,6 +1282,9 @@ async function startGame() {
             gameState.isAlive = true;
             switchScreen('game');
             gameState.active = true;
+            if (typeof BGMManager !== 'undefined') {
+                BGMManager.unlock();
+            }
             startPolling();
             addSystemMessage(I18N[gameState.lang].waitingStart);
             document.querySelector('.my-avatar').innerText = avatar;
@@ -1982,6 +2157,62 @@ function hideNewMessagesIndicator() {
 }
 
 /**
+ * Triggers a cartoon theatrical stage curtain transition between Day and Night.
+ * @param {boolean} targetIsNight - Whether transitioning into night.
+ * @param {Function} onSwapped - Callback invoked at mid-transition while curtains are closed.
+ */
+let isStageTransitioning = false;
+
+function playStageCurtainTransition(targetIsNight, onSwapped) {
+    const curtain = document.getElementById('stage-curtain');
+    const icon = document.getElementById('curtain-icon');
+    const title = document.getElementById('curtain-title');
+    const subtitle = document.getElementById('curtain-subtitle');
+
+    if (!curtain || isStageTransitioning) {
+        if (onSwapped) onSwapped();
+        return;
+    }
+
+    isStageTransitioning = true;
+    const isZh = gameState.lang === 'zh';
+
+    if (targetIsNight) {
+        if (icon) icon.innerText = '🌙';
+        if (title) title.innerText = isZh ? '天黑请闭眼' : 'Night Falls';
+        if (subtitle) subtitle.innerText = isZh ? 'Night Falls · Close Your Eyes' : 'Close Your Eyes';
+    } else {
+        if (icon) icon.innerText = '☀️';
+        if (title) title.innerText = isZh ? '天亮了 · 请睁眼' : 'Dawn Breaks';
+        if (subtitle) subtitle.innerText = isZh ? 'Dawn Breaks · Open Your Eyes' : 'Open Your Eyes';
+    }
+
+    // Step 1: Draw velvet curtains shut and drop stage placard
+    curtain.classList.remove('opening');
+    curtain.classList.add('closing');
+
+    setTimeout(() => {
+        // Step 2: Curtains fully closed; swap background backdrop and night-mode classes
+        curtain.classList.remove('closing');
+        curtain.classList.add('closed');
+
+        if (onSwapped) onSwapped();
+
+        // Hold closed briefly with swinging placard (600ms)
+        setTimeout(() => {
+            // Step 3: Draw back curtains and lift placard back to rafters
+            curtain.classList.remove('closed');
+            curtain.classList.add('opening');
+
+            setTimeout(() => {
+                curtain.classList.remove('opening');
+                isStageTransitioning = false;
+            }, 600);
+        }, 600);
+    }, 550);
+}
+
+/**
  * Sets the game phase indicator and updates the UI theme (day/night).
  * @param {string} phase - The name of the phase (e.g., 'Day', 'Night').
  * @param {object|string|null} rawMessage - Optional localized message from server log.
@@ -1999,10 +2230,30 @@ function setPhase(phase, rawMessage = null) {
 
     gameUI.phaseIndicator.innerText = gameState.phase || phase;
     
-    if (phase.toLowerCase().includes('night') || (gameState.phase && (gameState.phase.toLowerCase().includes('night') || gameState.phase.includes('夜')))) {
-        document.body.classList.add('night-mode');
+    const targetIsNight = phase.toLowerCase().includes('night') || (gameState.phase && (gameState.phase.toLowerCase().includes('night') || gameState.phase.includes('夜')));
+    const wasNight = document.body.classList.contains('night-mode');
+    const isGameActive = screens.game && screens.game.classList.contains('active');
+
+    if (wasNight !== Boolean(targetIsNight) && isGameActive) {
+        playStageCurtainTransition(targetIsNight, () => {
+            if (targetIsNight) {
+                document.body.classList.add('night-mode');
+            } else {
+                document.body.classList.remove('night-mode');
+            }
+            if (typeof BGMManager !== 'undefined') {
+                BGMManager.setTrack(targetIsNight ? 'night' : 'day');
+            }
+        });
     } else {
-        document.body.classList.remove('night-mode');
+        if (targetIsNight) {
+            document.body.classList.add('night-mode');
+        } else {
+            document.body.classList.remove('night-mode');
+        }
+        if (typeof BGMManager !== 'undefined') {
+            BGMManager.setTrack(targetIsNight ? 'night' : 'day');
+        }
     }
 }
 
@@ -2578,6 +2829,9 @@ function renderOperationsHistory(data, t) {
 
     return html;
 }
+
+// Expose helper on window for debugging & testing
+window.playStageCurtainTransition = playStageCurtainTransition;
 
 // Start
 init();

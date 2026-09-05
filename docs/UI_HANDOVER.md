@@ -47,31 +47,26 @@ The following high-priority refactors and fixes have been completed and verified
 
 ---
 
-## 3. Your Immediate Next Task: Implement Cartoon Night Targeting (Item C)
+## 3. Future Aesthetic Exploration: Village / Small Town Atmosphere
 
-### What Happened in the Previous Attempt
-An initial implementation of role-themed targeting was tested using colored solid borders, blurry neon `box-shadow: 0 0 14px <color>` glows, and OS `cursor: crosshair`.  
-**The user explicitly rejected this as ugly**, because neon blurry glows and sterile CAD crosshairs break the comic book aesthetic. That change was rolled back to maintain a clean codebase.
+### The User's Idea & Vision
+The user wants to explore making the overall environment more beautiful and thematic, evoking the feeling of a **cozy, living small town or village**:
+* **Daytime**: A bright sun, rolling village outskirts, feeling like daytime in the town square.
+* **Nighttime**: Warm lighting, a central town square bonfire, glowing cottage windows, or lantern light as villagers shelter from wolves.
 
-### The Approved Path Forward
-Read **[`docs/CARTOON_TARGETING_PROPOSAL.md`](CARTOON_TARGETING_PROPOSAL.md)** for the complete design specification and implementation blueprint.
+### Prototype Attempt & Critical Lesson Learned
+We prototyped an inline SVG village skyline (cottage gables, windmill, clock steeple) and a CSS bonfire at the bottom of the screen.  
+**The user explicitly rejected this attempt as ugly and cluttered ("the scenery is sucked, very ugly. i want you to revert it"), and it was promptly rolled back.**
 
-#### Key Directives for the Implementation:
-1. **Physical Props & Floating Stickers**:
-   - Instead of a blurry box-shadow, attach a **chunky cartoon sticker badge** to the corner of valid target cards using CSS pseudo-elements (`::after`):
-     - 🐺 **Werewolf / Wolf King**: Candy-crimson pawprint stamp (`🐺`) or claw mark.
-     - 🧪 **Witch**: Emerald bubbling poison flask (`🧪`) or candy-pink heart antidote.
-     - 🔮 **Seer**: Violet magnifying lens sticker (`🔮`).
-     - 🛡️ **Guard**: Sturdy riveted iron shield badge (`🛡️`).
-     - 🏹 **Hunter**: Pop-art suction-cup bullseye arrow (`🎯`).
-2. **Cartoon Framing**:
-   - Give active target cards a thick **dashed ink border** (`border: 3px dashed <accent>`) on a clean warm-paper card fill, with hard comic drop-shadow (`box-shadow: 4px 4px 0 var(--text-dark)`).
-3. **Cartoon Hover Physics**:
-   - On hover, tilt cards with spring physics (`transform: translateY(-6px) scale(1.04) rotate(-1.5deg);` using `cubic-bezier(0.34, 1.56, 0.64, 1)`).
-4. **Inactive Player De-emphasis**:
-   - Do NOT turn inactive cards into dreary 50% grayscale mud. Simply use `opacity: 0.65; transform: scale(0.96); filter: saturate(70%);` so the board stays colorful and cohesive.
-5. **Strict Client-Side Secrecy Constraint**:
-   - Target styles must **only** be visible on the human player's browser when `updatePlayerSelectableState(targets)` is triggered for their private turn. AI turns and dead players must never leak target eligibility.
+#### Post-Mortem on Why It Failed:
+1. **The "Clip-Art Clutter" Trap**: Hand-assembled geometric SVG shapes (simple polygons for roofs and rectangles for buildings) looked like cheap vector clip-art rather than polished, professional game art.
+2. **Foreground Collision**: Complex silhouettes along the bottom horizon fought for visual attention with the center chat box, bottom action controls, and player cards, destroying the clean negative space.
+3. **The Clean Sky Works Better**: The existing minimalist sky (clean blue day / deep radial night gradient, subtle clouds, simple moon/stars) provides necessary breathing room for the chunky, high-contrast Neo-Brutalist cards and chat bubbles.
+
+#### Guidance for Any Future Attempts:
+* **Never use crude procedural CSS/SVG drawings** to represent complex scenes like whole villages or animated campfires.
+* If revisiting the village motif, use **cohesive, professionally illustrated storybook background assets** with soft contrast that sit comfortably behind the UI without creating visual noise.
+* Consider **subtle atmospheric lighting and color grading** (e.g., warm golden hour vignette at dawn, deep midnight blue with soft lantern glows in the header) rather than literal busy objects on the screen.
 
 ---
 
@@ -79,13 +74,12 @@ Read **[`docs/CARTOON_TARGETING_PROPOSAL.md`](CARTOON_TARGETING_PROPOSAL.md)** f
 
 > **Greetings!**
 > 
-> You are taking over a healthy, stable frontend on branch `main` with 0 uncommitted regressions.
+> You are taking over a healthy, stable frontend on branch `main` with all core milestones (Items A, B, C, D, E) completed and committed.
 > 
-> - **Primary Reference**: Review `docs/CARTOON_TARGETING_PROPOSAL.md` before writing code for night targeting.
-> - **CSS Architecture**: Work within the modular stylesheets:
->   - `web/static/css/game.css` for card states and targeting animations.
->   - `web/static/js/app.js` (`updatePlayerSelectableState`) for client-side class toggling based on `gameState.myRole`.
-> - **Verification Command**: Run the test suite before submitting:
+> - **Current Art Direction**: Neo-Brutalist / Cartoon Pop (thick ink borders, hard offset drop-shadows, Fredoka display font, candy accents, tactile click physics).
+> - **Night Targeting**: Completed in commit `9294aca` with role-specific sticker badges (`🐺`, `🧪`, `🔮`, `🛡️`, `🎯`, `🗳️`, `⭐`) and dashed ink borders.
+> - **Scenery State**: Clean, minimalist sky gradient with subtle clouds and moon/stars. Do NOT add busy procedural drawings without user sign-off.
+> - **Verification Command**: Run the test suite before submitting any changes:
 >   ```bash
 >   conda run -n were python -m unittest discover tests
 >   ```

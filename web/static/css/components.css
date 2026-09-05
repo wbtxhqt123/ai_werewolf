@@ -84,13 +84,21 @@
     50% { transform: scale(1.1); }
 }
 
-/* Fixed Language Toggle */
-.lang-toggle-fixed {
+/* Top Fixed Lobby Controls (Language & Audio) */
+.top-fixed-controls {
     position: fixed;
     top: 20px;
     right: 20px;
     z-index: 1000;
-    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.top-fixed-btn,
+.lang-toggle-fixed {
+    position: static;
+    padding: 10px 18px;
     background: rgba(255, 255, 255, 0.9);
     border: 2px solid var(--text-dark);
     border-radius: 25px;
@@ -100,17 +108,38 @@
     cursor: pointer;
     box-shadow: 3px 3px 0px rgba(0,0,0,0.1);
     transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
 }
 
+.top-fixed-btn:hover,
 .lang-toggle-fixed:hover {
     transform: translateY(-2px);
     box-shadow: 5px 5px 0px rgba(0,0,0,0.1);
     background: #fff;
 }
 
+.top-fixed-btn:active,
 .lang-toggle-fixed:active {
     transform: translateY(2px);
     box-shadow: 0px 0px 0px rgba(0,0,0,0.1);
+}
+
+.top-fixed-btn.muted,
+.icon-btn.header-pill-btn.muted {
+    opacity: 0.8;
+    background: #dfe6e9 !important;
+    color: #636e72 !important;
+    border-color: #b2bec3 !important;
+    box-shadow: 2px 2px 0px rgba(0,0,0,0.1) !important;
+}
+
+body.night-mode .icon-btn.header-pill-btn.muted {
+    background: #2c3e50 !important;
+    color: #95a5a6 !important;
+    border-color: #576574 !important;
 }
 
 /* Secondary Button (Settings) */

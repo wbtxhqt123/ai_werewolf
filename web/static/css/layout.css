@@ -1,111 +1,435 @@
-/* Background Scenery */
+/* Background Scenery: Storybook Town Square Backdrop */
 .scenery-layer {
-    position: absolute;
-    bottom: 0;
+    position: fixed;
+    top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
+    width: 100vw;
+    height: 100vh;
     pointer-events: none;
-    z-index: -1;
+    z-index: 0;
     overflow: hidden;
 }
 
-.forest-silhouette {
+.scenery-backdrop {
     position: absolute;
-    bottom: 0;
-    left: 0;
+    inset: 0;
     width: 100%;
-    height: 25vh;
-    background-color: #2d3436;
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='%23000' fill-opacity='1' d='M0,224L48,213.3C96,203,192,181,288,181.3C384,181,480,203,576,224C672,245,768,267,864,261.3C960,256,1056,224,1152,197.3C1248,171,1344,149,1392,138.7L1440,128L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'%3E%3C/path%3E%3C/svg%3E");
-    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='%23000' fill-opacity='1' d='M0,224L48,213.3C96,203,192,181,288,181.3C384,181,480,203,576,224C672,245,768,267,864,261.3C960,256,1056,224,1152,197.3C1248,171,1344,149,1392,138.7L1440,128L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'%3E%3C/path%3E%3C/svg%3E");
-    mask-size: cover;
-    -webkit-mask-size: cover;
-    mask-repeat: no-repeat;
-    -webkit-mask-repeat: no-repeat;
-    opacity: 0.2;
+    height: 100%;
+    background-size: cover;
+    background-position: center bottom;
+    background-repeat: no-repeat;
+    pointer-events: none;
+    transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.day-backdrop {
+    background-image: url('/static/img/day.png');
+    opacity: 1;
+    z-index: 1;
+}
+
+.night-backdrop {
+    background-image: url('/static/img/night.png');
+    opacity: 0;
+    z-index: 2;
+}
+
+body.night-mode .day-backdrop {
+    opacity: 0;
+}
+
+body.night-mode .night-backdrop {
+    opacity: 1;
+}
+
+/* Atmospheric Scrim for High UI Contrast & Readability */
+.scenery-scrim {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 3;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.22) 100%);
+    transition: background 1.2s ease;
+}
+
+body.night-mode .scenery-scrim {
+    background: radial-gradient(ellipse at center, rgba(15, 23, 42, 0.2) 0%, rgba(10, 15, 29, 0.5) 100%);
 }
 
 .cloud {
     position: absolute;
-    background: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.55);
     border-radius: 50px;
-    animation: floatCloud 20s linear infinite;
+    z-index: 4;
+    animation: floatCloud 25s linear infinite;
+    pointer-events: none;
 }
 
-.cloud:nth-child(1) { width: 100px; height: 40px; top: 10%; left: -100px; animation-duration: 25s; }
-.cloud:nth-child(2) { width: 140px; height: 60px; top: 20%; left: -140px; animation-duration: 35s; animation-delay: 5s; }
-.cloud:nth-child(3) { width: 80px; height: 30px; top: 15%; left: -80px; animation-duration: 28s; animation-delay: 10s; }
+.cloud:nth-child(5) { width: 110px; height: 38px; top: 7%; left: -120px; animation-duration: 28s; }
+.cloud:nth-child(6) { width: 150px; height: 50px; top: 16%; left: -160px; animation-duration: 38s; animation-delay: 6s; }
+.cloud:nth-child(7) { width: 85px; height: 30px; top: 12%; left: -90px; animation-duration: 32s; animation-delay: 14s; }
 
 @keyframes floatCloud {
     from { transform: translateX(-200px); }
     to { transform: translateX(120vw); }
 }
 
-/* Night Mode Atmosphere */
-body.night-mode .scenery-layer {
-    background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
-}
-
 body.night-mode .cloud {
-    opacity: 0.1;
+    opacity: 0.12;
 }
 
-body.night-mode .forest-silhouette {
-    opacity: 0.4;
-    filter: brightness(0.5);
-}
-
-/* Stars */
+/* Subtle Night Sky Twinkle */
 .stars {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
-    height: 100%;
+    height: 45%;
     pointer-events: none;
+    z-index: 4;
     background-image: 
-        radial-gradient(2px 2px at 20px 30px, #eee, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 40px 70px, #fff, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 50px 160px, #ddd, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 90px 40px, #fff, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 130px 80px, #fff, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 160px 120px, #ddd, rgba(0,0,0,0));
+        radial-gradient(1.5px 1.5px at 25px 35px, #fff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 80px 65px, #f1c40f, rgba(0,0,0,0)),
+        radial-gradient(1.5px 1.5px at 140px 25px, #fff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 200px 85px, #fff, rgba(0,0,0,0)),
+        radial-gradient(1.5px 1.5px at 270px 45px, #ffeaa7, rgba(0,0,0,0));
     background-repeat: repeat;
-    background-size: 200px 200px;
+    background-size: 320px 140px;
     opacity: 0;
     transition: opacity 2s ease;
 }
 
 body.night-mode .stars {
-    opacity: 1;
-    animation: twinkle 4s infinite;
+    opacity: 0.55;
+    animation: twinkle 4s infinite alternate;
 }
 
 @keyframes twinkle {
-    0% { opacity: 0.8; }
-    50% { opacity: 1; }
-    100% { opacity: 0.8; }
+    0% { opacity: 0.35; }
+    50% { opacity: 0.65; }
+    100% { opacity: 0.45; }
 }
 
-/* Moon */
-.moon {
+/* ==========================================================================
+   Theatrical Stage Curtain Scene Change (Neo-Brutalist / Cartoon Pop)
+   ========================================================================== */
+.stage-curtain-overlay {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 9999;
+    overflow: hidden;
+}
+
+.stage-curtain-overlay.closing,
+.stage-curtain-overlay.closed {
+    pointer-events: auto;
+}
+
+/* Top Stage Pelmet / Valance */
+.curtain-pelmet {
     position: absolute;
-    top: 50px;
-    right: 50px;
-    width: 80px;
-    height: 80px;
-    background: #f1c40f;
-    border-radius: 50%;
-    box-shadow: 0 0 20px #f1c40f;
-    opacity: 0;
-    transition: all 2s ease;
-    transform: translateY(50px);
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 52px;
+    z-index: 50;
+    transform: translateY(-110%);
+    transition: transform 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.15);
 }
 
-body.night-mode .moon {
-    opacity: 1;
+.pelmet-valance {
+    width: 100%;
+    height: 40px;
+    background: linear-gradient(180deg, #962d22 0%, #c0392b 60%, #7b241c 100%);
+    border-bottom: 3px solid var(--text-dark, #2d3436);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+}
+
+.pelmet-fringe {
+    width: 100%;
+    height: 12px;
+    background: repeating-linear-gradient(
+        90deg,
+        #f1c40f 0px,
+        #f1c40f 8px,
+        #d4ac0d 8px,
+        #d4ac0d 14px
+    );
+    border-bottom: 3px solid var(--text-dark, #2d3436);
+    box-shadow: 0 3px 0 rgba(0,0,0,0.2);
+}
+
+/* Left & Right Velvet Curtain Wings */
+.curtain-wing {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 53%;
+    height: 100%;
+    z-index: 30;
+    background: linear-gradient(135deg, #c0392b 0%, #962d22 45%, #78281f 100%);
+    box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
+    will-change: transform;
+}
+
+.curtain-wing.curtain-left {
+    left: 0;
+    border-right: 4px solid var(--text-dark, #2d3436);
+    transform: translateX(-102%);
+    transition: transform 0.55s cubic-bezier(0.18, 0.89, 0.32, 1.15);
+}
+
+.curtain-wing.curtain-right {
+    right: 0;
+    border-left: 4px solid var(--text-dark, #2d3436);
+    transform: translateX(102%);
+    transition: transform 0.55s cubic-bezier(0.18, 0.89, 0.32, 1.15);
+}
+
+/* Cartoon Vertical Folds for Rich Theatrical Drapes */
+.curtain-folds {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    pointer-events: none;
+}
+
+.curtain-folds .fold {
+    flex: 1;
+    height: 100%;
+    border-right: 2px dashed rgba(45, 52, 54, 0.3);
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.14) 0%,
+        rgba(255, 255, 255, 0.04) 25%,
+        rgba(0, 0, 0, 0.15) 75%,
+        rgba(0, 0, 0, 0.35) 100%
+    );
+}
+
+/* Chunky Gold Trim on Curtain Edges */
+.curtain-gold-trim {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 12px;
+    background: #f1c40f;
+    border-bottom: none;
+    border-top: none;
+}
+
+.curtain-left .curtain-gold-trim {
+    right: 0;
+    border-left: 2px solid var(--text-dark, #2d3436);
+}
+
+.curtain-right .curtain-gold-trim {
+    left: 0;
+    border-right: 2px solid var(--text-dark, #2d3436);
+}
+
+/* Hanging Cartoon Stage Tassels */
+.curtain-tassel {
+    position: absolute;
+    top: 52%;
+    width: 24px;
+    height: 48px;
+    background: #f1c40f;
+    border: 3px solid var(--text-dark, #2d3436);
+    border-radius: 6px 6px 12px 12px;
+    box-shadow: 3px 3px 0 var(--text-dark, #2d3436);
+    z-index: 35;
+}
+
+.curtain-left .curtain-tassel {
+    right: 18px;
+}
+
+.curtain-right .curtain-tassel {
+    left: 18px;
+}
+
+.curtain-tassel::before {
+    content: '';
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 12px;
+    background: #d4ac0d;
+    border: 2px solid var(--text-dark, #2d3436);
+    border-radius: 50%;
+}
+
+.curtain-tassel::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 3px;
+    right: 3px;
+    height: 6px;
+    background: repeating-linear-gradient(90deg, #d4ac0d, #f1c40f 4px);
+    border-radius: 0 0 4px 4px;
+}
+
+/* Suspended Stage Placard (天黑请闭眼 / 天亮了) */
+.curtain-placard-wrap {
+    position: absolute;
+    top: 24%;
+    left: 50%;
+    transform: translate(-50%, -150vh) rotate(-3deg);
+    z-index: 60;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+    will-change: transform;
+}
+
+.placard-ropes {
+    display: flex;
+    justify-content: space-between;
+    width: 78%;
+    height: 140px;
+    margin-bottom: -6px;
+}
+
+.placard-rope {
+    width: 8px;
+    height: 100%;
+    background: repeating-linear-gradient(
+        45deg,
+        #f1c40f 0px,
+        #f1c40f 6px,
+        #d35400 6px,
+        #d35400 12px
+    );
+    border-left: 2px solid var(--text-dark, #2d3436);
+    border-right: 2px solid var(--text-dark, #2d3436);
+}
+
+.stage-placard {
+    background: #e67e22;
+    border: 4px solid var(--text-dark, #2d3436);
+    border-radius: 24px;
+    box-shadow: 6px 6px 0 var(--text-dark, #2d3436);
+    padding: 10px;
+    min-width: min(380px, 88vw);
+    max-width: 92vw;
+}
+
+.placard-inner {
+    background: #fffdf5;
+    border: 3px solid var(--text-dark, #2d3436);
+    border-radius: 16px;
+    padding: clamp(10px, 2vh, 16px) clamp(16px, 3vw, 32px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(10px, 2vw, 20px);
+}
+
+.placard-icon {
+    font-size: clamp(2.4rem, 5vw, 3.4rem);
+    line-height: 1;
+    filter: drop-shadow(2px 2px 0 var(--text-dark, #2d3436));
+    animation: placardIconBob 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes placardIconBob {
+    0% { transform: translateY(0) scale(1); }
+    100% { transform: translateY(-4px) scale(1.08); }
+}
+
+.placard-text-box {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+}
+
+.placard-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.4rem, 3.5vw, 2rem);
+    font-weight: 700;
+    color: var(--text-dark, #2d3436);
+    letter-spacing: 0.5px;
+    line-height: 1.2;
+}
+
+.placard-subtitle {
+    font-family: var(--font-display);
+    font-size: clamp(0.75rem, 1.8vw, 0.95rem);
+    font-weight: 600;
+    color: #7f8c8d;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+
+/* --- Curtain States --- */
+
+/* 1. Closing State (Curtains Sweep In, Placard Drops) */
+.stage-curtain-overlay.closing .curtain-pelmet {
     transform: translateY(0);
+}
+
+.stage-curtain-overlay.closing .curtain-wing.curtain-left {
+    transform: translateX(0);
+}
+
+.stage-curtain-overlay.closing .curtain-wing.curtain-right {
+    transform: translateX(0);
+}
+
+.stage-curtain-overlay.closing .curtain-placard-wrap {
+    transform: translate(-50%, 0) rotate(0deg);
+    transition-delay: 0.15s;
+}
+
+/* 2. Closed State (Curtains Fully Closed in the Center) */
+.stage-curtain-overlay.closed .curtain-pelmet {
+    transform: translateY(0);
+}
+
+.stage-curtain-overlay.closed .curtain-wing.curtain-left {
+    transform: translateX(0);
+}
+
+.stage-curtain-overlay.closed .curtain-wing.curtain-right {
+    transform: translateX(0);
+}
+
+.stage-curtain-overlay.closed .curtain-placard-wrap {
+    transform: translate(-50%, 0) rotate(0deg);
+}
+
+/* 3. Opening State (Curtains Draw Back, Placard Ascends) */
+.stage-curtain-overlay.opening .curtain-placard-wrap {
+    transform: translate(-50%, -150vh) rotate(3deg);
+    transition: transform 0.42s cubic-bezier(0.6, -0.28, 0.735, 0.045);
+}
+
+.stage-curtain-overlay.opening .curtain-wing.curtain-left {
+    transform: translateX(-102%);
+    transition: transform 0.58s cubic-bezier(0.7, 0, 0.3, 1) 0.12s;
+}
+
+.stage-curtain-overlay.opening .curtain-wing.curtain-right {
+    transform: translateX(102%);
+    transition: transform 0.58s cubic-bezier(0.7, 0, 0.3, 1) 0.12s;
+}
+
+.stage-curtain-overlay.opening .curtain-pelmet {
+    transform: translateY(-110%);
+    transition: transform 0.45s ease 0.35s;
 }
 
 .screen {

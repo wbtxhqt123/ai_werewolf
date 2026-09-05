@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://gstatic.loli.net" crossorigin>
     <link href="https://fonts.loli.net/css2?family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/base.css?v=9">
-    <link rel="stylesheet" href="/static/css/layout.css?v=9">
-    <link rel="stylesheet" href="/static/css/components.css?v=9">
+    <link rel="stylesheet" href="/static/css/layout.css?v=11">
+    <link rel="stylesheet" href="/static/css/components.css?v=10">
     <link rel="stylesheet" href="/static/css/setup.css?v=9">
     <link rel="stylesheet" href="/static/css/game.css?v=10">
     <link rel="stylesheet" href="/static/css/modals.css?v=9">
@@ -17,18 +17,67 @@
 <body>
     <div id="app">
         <!-- Background Scenery -->
-        <div class="scenery-layer">
+        <div class="scenery-layer" aria-hidden="true">
+            <div class="scenery-backdrop day-backdrop"></div>
+            <div class="scenery-backdrop night-backdrop"></div>
+            <div class="scenery-scrim"></div>
             <div class="stars"></div>
-            <div class="moon"></div>
             <div class="cloud"></div>
             <div class="cloud"></div>
             <div class="cloud"></div>
-            <div class="forest-silhouette"></div>
+        </div>
+
+        <!-- Theatrical Stage Curtain Scene Change -->
+        <div id="stage-curtain" class="stage-curtain-overlay" aria-hidden="true">
+            <div class="curtain-pelmet">
+                <div class="pelmet-valance"></div>
+                <div class="pelmet-fringe"></div>
+            </div>
+            <div class="curtain-wing curtain-left">
+                <div class="curtain-fabric"></div>
+                <div class="curtain-folds">
+                    <span class="fold"></span>
+                    <span class="fold"></span>
+                    <span class="fold"></span>
+                    <span class="fold"></span>
+                </div>
+                <div class="curtain-gold-trim"></div>
+                <div class="curtain-tassel left-tassel"></div>
+            </div>
+            <div class="curtain-wing curtain-right">
+                <div class="curtain-fabric"></div>
+                <div class="curtain-folds">
+                    <span class="fold"></span>
+                    <span class="fold"></span>
+                    <span class="fold"></span>
+                    <span class="fold"></span>
+                </div>
+                <div class="curtain-gold-trim"></div>
+                <div class="curtain-tassel right-tassel"></div>
+            </div>
+            <div class="curtain-placard-wrap">
+                <div class="placard-ropes">
+                    <div class="placard-rope rope-left"></div>
+                    <div class="placard-rope rope-right"></div>
+                </div>
+                <div class="stage-placard">
+                    <div class="placard-inner">
+                        <span class="placard-icon" id="curtain-icon">🌙</span>
+                        <div class="placard-text-box">
+                            <span class="placard-title" id="curtain-title">天黑请闭眼</span>
+                            <span class="placard-subtitle" id="curtain-subtitle">Night Falls · Close Your Eyes</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Login / Setup Screen -->
         <div id="setup-screen" class="screen active">
-            <button id="lobby-lang-btn" class="lang-toggle-fixed">中文/EN</button>
+            <div class="top-fixed-controls">
+                <button id="lobby-audio-btn" class="top-fixed-btn" title="Toggle Music" aria-label="Toggle Music">🎵 <span class="audio-label">音乐</span></button>
+                <button id="lobby-lang-btn" class="top-fixed-btn lang-toggle-fixed">中文/EN</button>
+            </div>
             <div class="setup-container" role="main">
                 <h1>Werewolf</h1>
                 <div class="form-group">
@@ -114,6 +163,7 @@
                     <div class="phase-indicator" id="phase-indicator">Day 1</div>
                 </div>
                 <div class="header-right">
+                    <button id="audio-toggle-btn" class="icon-btn header-pill-btn" title="Toggle Music" aria-label="Toggle Music">🎵 <span class="audio-label">音乐</span></button>
                     <button id="records-btn" class="icon-btn header-pill-btn" title="Game Records" aria-label="Game Records">📖 记录</button>
                     <button id="game-lang-btn" class="icon-btn header-pill-btn" title="Toggle Language" aria-label="Toggle Language">中文/EN</button>
                     <button id="toggle-debug-btn" title="Toggle Debug Logs" aria-label="Toggle Debug Logs">🐞</button>
@@ -272,6 +322,6 @@
         </div>
     </template>
 
-    <script src="/static/js/app.js?v=10"></script>
+    <script src="/static/js/app.js?v=14"></script>
 </body>
 </html>
