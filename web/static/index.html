@@ -6,7 +6,7 @@
     <title>Werewolf Game V2</title>
     <link rel="preconnect" href="https://fonts.loli.net">
     <link rel="preconnect" href="https://gstatic.loli.net" crossorigin>
-    <link href="https://fonts.loli.net/css2?family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.loli.net/css2?family=Cinzel:wght@600;700;800;900&family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/base.css?v=9">
     <link rel="stylesheet" href="/static/css/layout.css?v=11">
     <link rel="stylesheet" href="/static/css/components.css?v=10">
@@ -27,48 +27,25 @@
             <div class="cloud"></div>
         </div>
 
-        <!-- Theatrical Stage Curtain Scene Change -->
-        <div id="stage-curtain" class="stage-curtain-overlay" aria-hidden="true">
-            <div class="curtain-pelmet">
-                <div class="pelmet-valance"></div>
-                <div class="pelmet-fringe"></div>
+        <!-- Celestial Orbit Day / Night Scene Transition (Zero-Blocking, Clockwise Arc) -->
+        <div id="celestial-orbit-layer" class="celestial-orbit-layer" aria-hidden="true">
+            <svg class="celestial-orbit-svg" viewBox="0 0 900 220" preserveAspectRatio="none">
+                <path d="M 50,200 Q 450,20 850,200" fill="none" stroke="#feca57" stroke-width="3" stroke-dasharray="8 8" opacity="0.35" />
+            </svg>
+
+            <!-- Celestial Sun Orb -->
+            <div class="celestial-orb celestial-sun pos-zenith" id="celestial-sun">
+                <img src="/static/img/sun.png" alt="Sun">
             </div>
-            <div class="curtain-wing curtain-left">
-                <div class="curtain-fabric"></div>
-                <div class="curtain-folds">
-                    <span class="fold"></span>
-                    <span class="fold"></span>
-                    <span class="fold"></span>
-                    <span class="fold"></span>
-                </div>
-                <div class="curtain-gold-trim"></div>
-                <div class="curtain-tassel left-tassel"></div>
+
+            <!-- Celestial Moon Orb -->
+            <div class="celestial-orb celestial-moon pos-left" id="celestial-moon">
+                <img src="/static/img/moon.png" alt="Moon">
             </div>
-            <div class="curtain-wing curtain-right">
-                <div class="curtain-fabric"></div>
-                <div class="curtain-folds">
-                    <span class="fold"></span>
-                    <span class="fold"></span>
-                    <span class="fold"></span>
-                    <span class="fold"></span>
-                </div>
-                <div class="curtain-gold-trim"></div>
-                <div class="curtain-tassel right-tassel"></div>
-            </div>
-            <div class="curtain-placard-wrap">
-                <div class="placard-ropes">
-                    <div class="placard-rope rope-left"></div>
-                    <div class="placard-rope rope-right"></div>
-                </div>
-                <div class="stage-placard">
-                    <div class="placard-inner">
-                        <span class="placard-icon" id="curtain-icon">🌙</span>
-                        <div class="placard-text-box">
-                            <span class="placard-title" id="curtain-title">天黑请闭眼</span>
-                            <span class="placard-subtitle" id="curtain-subtitle">Night Falls · Close Your Eyes</span>
-                        </div>
-                    </div>
-                </div>
+
+            <!-- Floating Celestial Herald Banner -->
+            <div class="celestial-herald-banner" id="celestial-banner">
+                🌙 太阳西沉 · 天黑请闭眼
             </div>
         </div>
 

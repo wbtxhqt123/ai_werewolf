@@ -2157,19 +2157,18 @@ function hideNewMessagesIndicator() {
 }
 
 /**
- * Triggers a cartoon theatrical stage curtain transition between Day and Night.
+ * Triggers a celestial clockwise orbit transition between Day and Night (Zero-blocking).
  * @param {boolean} targetIsNight - Whether transitioning into night.
- * @param {Function} onSwapped - Callback invoked at mid-transition while curtains are closed.
+ * @param {Function} onSwapped - Callback invoked at mid-transition while sky shifts.
  */
 let isStageTransitioning = false;
 
 function playStageCurtainTransition(targetIsNight, onSwapped) {
-    const curtain = document.getElementById('stage-curtain');
-    const icon = document.getElementById('curtain-icon');
-    const title = document.getElementById('curtain-title');
-    const subtitle = document.getElementById('curtain-subtitle');
+    const sunEl = document.getElementById('celestial-sun');
+    const moonEl = document.getElementById('celestial-moon');
+    const banner = document.getElementById('celestial-banner');
 
-    if (!curtain || isStageTransitioning) {
+    if (!sunEl || !moonEl || isStageTransitioning) {
         if (onSwapped) onSwapped();
         return;
     }
@@ -2178,38 +2177,60 @@ function playStageCurtainTransition(targetIsNight, onSwapped) {
     const isZh = gameState.lang === 'zh';
 
     if (targetIsNight) {
-        if (icon) icon.innerText = '🌙';
-        if (title) title.innerText = isZh ? '天黑请闭眼' : 'Night Falls';
-        if (subtitle) subtitle.innerText = isZh ? 'Night Falls · Close Your Eyes' : 'Close Your Eyes';
-    } else {
-        if (icon) icon.innerText = '☀️';
-        if (title) title.innerText = isZh ? '天亮了 · 请睁眼' : 'Dawn Breaks';
-        if (subtitle) subtitle.innerText = isZh ? 'Dawn Breaks · Open Your Eyes' : 'Open Your Eyes';
-    }
+        // Day -> Night Clockwise:
+        // Sun sets clockwise: pos-zenith (50%) -> pos-right (88%)
+        // Moon rises clockwise: pos-left (12%) -> pos-zenith (50%)
+        sunEl.className = 'celestial-orb celestial-sun pos-right';
+        moonEl.className = 'celestial-orb celestial-moon pos-zenith';
 
-    // Step 1: Draw velvet curtains shut and drop stage placard
-    curtain.classList.remove('opening');
-    curtain.classList.add('closing');
+        if (banner) {
+            banner.innerText = isZh ? '🌙 太阳西沉 · 天黑请闭眼' : '🌙 Night Falls · Close Your Eyes';
+            banner.classList.add('visible');
+        }
 
-    setTimeout(() => {
-        // Step 2: Curtains fully closed; swap background backdrop and night-mode classes
-        curtain.classList.remove('closing');
-        curtain.classList.add('closed');
-
-        if (onSwapped) onSwapped();
-
-        // Hold closed briefly with swinging placard (600ms)
+        // Halfway through the 2.2s orbit (850ms), crossfade day/night background & BGM
         setTimeout(() => {
-            // Step 3: Draw back curtains and lift placard back to rafters
-            curtain.classList.remove('closed');
-            curtain.classList.add('opening');
+            if (onSwapped) onSwapped();
+        }, 850);
 
-            setTimeout(() => {
-                curtain.classList.remove('opening');
-                isStageTransitioning = false;
-            }, 600);
-        }, 600);
-    }, 550);
+        // When transition completes (2250ms), silently relocate sunken sun to pos-left under horizon
+        setTimeout(() => {
+            sunEl.classList.add('no-transition');
+            sunEl.className = 'celestial-orb celestial-sun pos-left no-transition';
+            void sunEl.offsetWidth; // force reflow
+            sunEl.classList.remove('no-transition');
+
+            if (banner) banner.classList.remove('visible');
+            isStageTransitioning = false;
+        }, 2250);
+    } else {
+        // Night -> Day Clockwise:
+        // Moon sets clockwise: pos-zenith (50%) -> pos-right (88%)
+        // Sun rises clockwise: pos-left (12%) -> pos-zenith (50%)
+        moonEl.className = 'celestial-orb celestial-moon pos-right';
+        sunEl.className = 'celestial-orb celestial-sun pos-zenith';
+
+        if (banner) {
+            banner.innerText = isZh ? '☀️ 晨曦破晓 · 天亮请睁眼' : '☀️ Dawn Breaks · Open Your Eyes';
+            banner.classList.add('visible');
+        }
+
+        // Halfway through the 2.2s orbit (850ms), crossfade day/night background & BGM
+        setTimeout(() => {
+            if (onSwapped) onSwapped();
+        }, 850);
+
+        // When transition completes (2250ms), silently relocate sunken moon to pos-left under horizon
+        setTimeout(() => {
+            moonEl.classList.add('no-transition');
+            moonEl.className = 'celestial-orb celestial-moon pos-left no-transition';
+            void moonEl.offsetWidth; // force reflow
+            moonEl.classList.remove('no-transition');
+
+            if (banner) banner.classList.remove('visible');
+            isStageTransitioning = false;
+        }, 2250);
+    }
 }
 
 /**
@@ -2250,6 +2271,14 @@ function setPhase(phase, rawMessage = null) {
             document.body.classList.add('night-mode');
         } else {
             document.body.classList.remove('night-mode');
+        }
+        if (!isStageTransitioning) {
+            const sunEl = document.getElementById('celestial-sun');
+            const moonEl = document.getElementById('celestial-moon');
+            if (sunEl && moonEl) {
+                sunEl.className = `celestial-orb celestial-sun ${targetIsNight ? 'pos-left' : 'pos-zenith'}`;
+                moonEl.className = `celestial-orb celestial-moon ${targetIsNight ? 'pos-zenith' : 'pos-left'}`;
+            }
         }
         if (typeof BGMManager !== 'undefined') {
             BGMManager.setTrack(targetIsNight ? 'night' : 'day');

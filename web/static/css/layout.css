@@ -113,323 +113,124 @@ body.night-mode .stars {
 }
 
 /* ==========================================================================
-   Theatrical Stage Curtain Scene Change (Neo-Brutalist / Cartoon Pop)
+   Celestial Orbit Day / Night Scene Transition (Clean, Zero-Blocking, Clockwise)
    ========================================================================== */
-.stage-curtain-overlay {
+.celestial-orbit-layer {
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
     width: 100vw;
     height: 100vh;
     pointer-events: none;
-    z-index: 9999;
+    z-index: 3;
     overflow: hidden;
 }
 
-.stage-curtain-overlay.closing,
-.stage-curtain-overlay.closed {
-    pointer-events: auto;
-}
-
-/* Top Stage Pelmet / Valance */
-.curtain-pelmet {
+.celestial-orbit-svg {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 52px;
-    z-index: 50;
-    transform: translateY(-110%);
-    transition: transform 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.15);
-}
-
-.pelmet-valance {
-    width: 100%;
-    height: 40px;
-    background: linear-gradient(180deg, #962d22 0%, #c0392b 60%, #7b241c 100%);
-    border-bottom: 3px solid var(--text-dark, #2d3436);
-    box-shadow: 0 4px 10px rgba(0,0,0,0.35);
-}
-
-.pelmet-fringe {
-    width: 100%;
-    height: 12px;
-    background: repeating-linear-gradient(
-        90deg,
-        #f1c40f 0px,
-        #f1c40f 8px,
-        #d4ac0d 8px,
-        #d4ac0d 14px
-    );
-    border-bottom: 3px solid var(--text-dark, #2d3436);
-    box-shadow: 0 3px 0 rgba(0,0,0,0.2);
-}
-
-/* Left & Right Velvet Curtain Wings */
-.curtain-wing {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 53%;
-    height: 100%;
-    z-index: 30;
-    background: linear-gradient(135deg, #c0392b 0%, #962d22 45%, #78281f 100%);
-    box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
-    will-change: transform;
-}
-
-.curtain-wing.curtain-left {
-    left: 0;
-    border-right: 4px solid var(--text-dark, #2d3436);
-    transform: translateX(-102%);
-    transition: transform 0.55s cubic-bezier(0.18, 0.89, 0.32, 1.15);
-}
-
-.curtain-wing.curtain-right {
-    right: 0;
-    border-left: 4px solid var(--text-dark, #2d3436);
-    transform: translateX(102%);
-    transition: transform 0.55s cubic-bezier(0.18, 0.89, 0.32, 1.15);
-}
-
-/* Cartoon Vertical Folds for Rich Theatrical Drapes */
-.curtain-folds {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    pointer-events: none;
-}
-
-.curtain-folds .fold {
-    flex: 1;
-    height: 100%;
-    border-right: 2px dashed rgba(45, 52, 54, 0.3);
-    background: linear-gradient(
-        90deg,
-        rgba(255, 255, 255, 0.14) 0%,
-        rgba(255, 255, 255, 0.04) 25%,
-        rgba(0, 0, 0, 0.15) 75%,
-        rgba(0, 0, 0, 0.35) 100%
-    );
-}
-
-/* Chunky Gold Trim on Curtain Edges */
-.curtain-gold-trim {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 12px;
-    background: #f1c40f;
-    border-bottom: none;
-    border-top: none;
-}
-
-.curtain-left .curtain-gold-trim {
-    right: 0;
-    border-left: 2px solid var(--text-dark, #2d3436);
-}
-
-.curtain-right .curtain-gold-trim {
-    left: 0;
-    border-right: 2px solid var(--text-dark, #2d3436);
-}
-
-/* Hanging Cartoon Stage Tassels */
-.curtain-tassel {
-    position: absolute;
-    top: 52%;
-    width: 24px;
-    height: 48px;
-    background: #f1c40f;
-    border: 3px solid var(--text-dark, #2d3436);
-    border-radius: 6px 6px 12px 12px;
-    box-shadow: 3px 3px 0 var(--text-dark, #2d3436);
-    z-index: 35;
-}
-
-.curtain-left .curtain-tassel {
-    right: 18px;
-}
-
-.curtain-right .curtain-tassel {
-    left: 18px;
-}
-
-.curtain-tassel::before {
-    content: '';
-    position: absolute;
-    top: -12px;
+    top: 15px;
     left: 50%;
     transform: translateX(-50%);
-    width: 12px;
-    height: 12px;
-    background: #d4ac0d;
-    border: 2px solid var(--text-dark, #2d3436);
-    border-radius: 50%;
-}
-
-.curtain-tassel::after {
-    content: '';
-    position: absolute;
-    bottom: -6px;
-    left: 3px;
-    right: 3px;
-    height: 6px;
-    background: repeating-linear-gradient(90deg, #d4ac0d, #f1c40f 4px);
-    border-radius: 0 0 4px 4px;
-}
-
-/* Suspended Stage Placard (天黑请闭眼 / 天亮了) */
-.curtain-placard-wrap {
-    position: absolute;
-    top: 24%;
-    left: 50%;
-    transform: translate(-50%, -150vh) rotate(-3deg);
-    z-index: 60;
+    width: min(960px, 92vw);
+    height: 220px;
+    overflow: visible;
     pointer-events: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    transition: transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
-    will-change: transform;
 }
 
-.placard-ropes {
-    display: flex;
-    justify-content: space-between;
-    width: 78%;
-    height: 140px;
-    margin-bottom: -6px;
-}
-
-.placard-rope {
-    width: 8px;
-    height: 100%;
-    background: repeating-linear-gradient(
-        45deg,
-        #f1c40f 0px,
-        #f1c40f 6px,
-        #d35400 6px,
-        #d35400 12px
-    );
-    border-left: 2px solid var(--text-dark, #2d3436);
-    border-right: 2px solid var(--text-dark, #2d3436);
-}
-
-.stage-placard {
-    background: #e67e22;
-    border: 4px solid var(--text-dark, #2d3436);
-    border-radius: 24px;
-    box-shadow: 6px 6px 0 var(--text-dark, #2d3436);
-    padding: 10px;
-    min-width: min(380px, 88vw);
-    max-width: 92vw;
-}
-
-.placard-inner {
-    background: #fffdf5;
-    border: 3px solid var(--text-dark, #2d3436);
-    border-radius: 16px;
-    padding: clamp(10px, 2vh, 16px) clamp(16px, 3vw, 32px);
+/* Celestial Sun & Moon Orbs (True Circular Planetary Orbit) */
+.celestial-orb {
+    position: absolute;
+    top: 36px;
+    left: 50%;
+    width: 82px;
+    height: 82px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: clamp(10px, 2vw, 20px);
+    /* Orbital Pivot 360px below zenith - produces mathematically true circle arc */
+    transform-origin: 50% 360px;
+    transition: transform 2.2s cubic-bezier(0.28, 1, 0.35, 1), opacity 1.3s ease;
+    filter: drop-shadow(0 0 16px rgba(254, 202, 87, 0.7));
+    z-index: 5;
+    will-change: transform, opacity;
+    pointer-events: none;
 }
 
-.placard-icon {
-    font-size: clamp(2.4rem, 5vw, 3.4rem);
-    line-height: 1;
-    filter: drop-shadow(2px 2px 0 var(--text-dark, #2d3436));
-    animation: placardIconBob 1.2s ease-in-out infinite alternate;
+.celestial-orb.no-transition,
+.celestial-orb.no-transition img {
+    transition: none !important;
 }
 
-@keyframes placardIconBob {
-    0% { transform: translateY(0) scale(1); }
-    100% { transform: translateY(-4px) scale(1.08); }
+.celestial-orb img {
+    width: 85%;
+    height: 85%;
+    object-fit: contain;
+    /* Counter-rotation matches parent to keep face 100% upright & non-spinning */
+    transition: transform 2.2s cubic-bezier(0.28, 1, 0.35, 1);
+    will-change: transform;
+    pointer-events: none;
 }
 
-.placard-text-box {
-    display: flex;
-    flex-direction: column;
-    text-align: left;
+.celestial-sun {
+    background: radial-gradient(circle, #fff275 0%, #feca57 60%, #e67e22 100%);
+    border: 3.5px solid var(--text-dark, #1e1b29);
 }
 
-.placard-title {
-    font-family: var(--font-display);
-    font-size: clamp(1.4rem, 3.5vw, 2rem);
+.celestial-moon {
+    background: radial-gradient(circle, #e0f7fa 0%, #80deea 60%, #26c6da 100%);
+    border: 3.5px solid var(--text-dark, #1e1b29);
+    filter: drop-shadow(0 0 18px rgba(128, 222, 234, 0.8));
+}
+
+/* 3 Orbital Arc Key Positions (Clockwise: -56deg -> 0deg -> +56deg) */
+.celestial-orb.pos-zenith {
+    transform: translate(-50%, 0) rotate(0deg) scale(1);
+    opacity: 1;
+}
+.celestial-orb.pos-zenith img {
+    transform: rotate(0deg);
+}
+
+.celestial-orb.pos-left {
+    transform: translate(-50%, 0) rotate(-56deg) scale(0.62);
+    opacity: 0;
+}
+.celestial-orb.pos-left img {
+    transform: rotate(56deg);
+}
+
+.celestial-orb.pos-right {
+    transform: translate(-50%, 0) rotate(56deg) scale(0.62);
+    opacity: 0;
+}
+.celestial-orb.pos-right img {
+    transform: rotate(-56deg);
+}
+
+/* Floating Celestial Herald Banner */
+.celestial-herald-banner {
+    position: fixed;
+    top: 75px;
+    left: 50%;
+    transform: translate(-50%, -40px);
+    background: rgba(26, 22, 40, 0.92);
+    border: 3px solid #feca57;
+    border-radius: 30px;
+    padding: 10px 28px;
+    color: #ffd32a;
+    font-size: 1.2rem;
     font-weight: 700;
-    color: var(--text-dark, #2d3436);
-    letter-spacing: 0.5px;
-    line-height: 1.2;
+    opacity: 0;
+    transition: all 0.5s cubic-bezier(0.34, 1.5, 0.64, 1);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5), 0 0 15px rgba(254, 202, 87, 0.4);
+    z-index: 10000;
+    pointer-events: none;
+    letter-spacing: 1px;
 }
-
-.placard-subtitle {
-    font-family: var(--font-display);
-    font-size: clamp(0.75rem, 1.8vw, 0.95rem);
-    font-weight: 600;
-    color: #7f8c8d;
-    letter-spacing: 0.3px;
-    text-transform: uppercase;
-}
-
-/* --- Curtain States --- */
-
-/* 1. Closing State (Curtains Sweep In, Placard Drops) */
-.stage-curtain-overlay.closing .curtain-pelmet {
-    transform: translateY(0);
-}
-
-.stage-curtain-overlay.closing .curtain-wing.curtain-left {
-    transform: translateX(0);
-}
-
-.stage-curtain-overlay.closing .curtain-wing.curtain-right {
-    transform: translateX(0);
-}
-
-.stage-curtain-overlay.closing .curtain-placard-wrap {
-    transform: translate(-50%, 0) rotate(0deg);
-    transition-delay: 0.15s;
-}
-
-/* 2. Closed State (Curtains Fully Closed in the Center) */
-.stage-curtain-overlay.closed .curtain-pelmet {
-    transform: translateY(0);
-}
-
-.stage-curtain-overlay.closed .curtain-wing.curtain-left {
-    transform: translateX(0);
-}
-
-.stage-curtain-overlay.closed .curtain-wing.curtain-right {
-    transform: translateX(0);
-}
-
-.stage-curtain-overlay.closed .curtain-placard-wrap {
-    transform: translate(-50%, 0) rotate(0deg);
-}
-
-/* 3. Opening State (Curtains Draw Back, Placard Ascends) */
-.stage-curtain-overlay.opening .curtain-placard-wrap {
-    transform: translate(-50%, -150vh) rotate(3deg);
-    transition: transform 0.42s cubic-bezier(0.6, -0.28, 0.735, 0.045);
-}
-
-.stage-curtain-overlay.opening .curtain-wing.curtain-left {
-    transform: translateX(-102%);
-    transition: transform 0.58s cubic-bezier(0.7, 0, 0.3, 1) 0.12s;
-}
-
-.stage-curtain-overlay.opening .curtain-wing.curtain-right {
-    transform: translateX(102%);
-    transition: transform 0.58s cubic-bezier(0.7, 0, 0.3, 1) 0.12s;
-}
-
-.stage-curtain-overlay.opening .curtain-pelmet {
-    transform: translateY(-110%);
-    transition: transform 0.45s ease 0.35s;
+.celestial-herald-banner.visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
 }
 
 .screen {
