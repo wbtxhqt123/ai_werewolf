@@ -22,21 +22,30 @@ class SheriffElectionState(GameState):
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "Players can now choose to run for sheriff.", "zh": "现在开始竞选警长。"}, camps=["All"]))
         
         candidates = []
+        pending_election_logs = []
         with ThreadPoolExecutor() as executor:
             future_to_player = {executor.submit(player.controller.get_join_election_decision, player): player for player in self.game.players}
             for future in as_completed(future_to_player):
                 player = future_to_player[future]
                 try:
                     if future.result():
-                        player.is_sheriff_candidate = True
                         candidates.append(player)
-                        self.game.log(LogEntry(log_type=LogType.SHERIFF_CANDIDATE, message={"en": f"{player.name} has decided to run for sheriff.", "zh": f"{player.name} 决定竞选警长。"}, source=player, camps=["All"]))
+                        pending_election_logs.append((player, LogEntry(log_type=LogType.SHERIFF_CANDIDATE, message={"en": f"{player.name} has decided to run for sheriff.", "zh": f"{player.name} 决定竞选警长。"}, source=player, camps=["All"])))
                     else:
-                        self.game.log(LogEntry(log_type=LogType.SHERIFF_CANDIDATE, message={"en": f"{player.name} has decided to not run for sheriff.", "zh": f"{player.name} 决定不竞选警长。"}, source=player, camps=["All"]))
+                        pending_election_logs.append((player, LogEntry(log_type=LogType.SHERIFF_CANDIDATE, message={"en": f"{player.name} has decided to not run for sheriff.", "zh": f"{player.name} 决定不竞选警长。"}, source=player, camps=["All"])))
                 except Exception as exc:
-                    self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": f"{player.name} encountered an error and will not run for sheriff.", "zh": f"{player.name} 遇到错误，将不参与警长竞选。"}, camps=["All"]))
+                    pending_election_logs.append((player, LogEntry(log_type=LogType.SYSTEM, message={"en": f"{player.name} encountered an error and will not run for sheriff.", "zh": f"{player.name} 遇到错误，将不参与警长竞选。"}, camps=["All"])))
+
+        # Update candidate status only after all players have completed their decision
+        for candidate in candidates:
+            candidate.is_sheriff_candidate = True
 
         self.game.election_players = candidates
+
+        # Announce election decisions simultaneously in player seat order
+        pending_election_logs.sort(key=lambda item: self.game.players.index(item[0]) if item[0] in self.game.players else 0)
+        for _, log_entry in pending_election_logs:
+            self.game.log(log_entry)
 
         if len(candidates) == 0:
             self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "No one is running for sheriff.", "zh": "没有人竞选警长。"}, camps=["All"]))
@@ -97,6 +106,7 @@ class SheriffVoteState(GameState):
         vote_details = {c.name: [] for c in candidates}
         vote_details["Abstained"] = []
         
+        pending_vote_logs = []
         with ThreadPoolExecutor() as executor:
             future_to_voter = {executor.submit(voter.controller.get_vote_for_sheriff, voter, candidates): voter for voter in voters}
             for future in as_completed(future_to_voter):
@@ -107,15 +117,20 @@ class SheriffVoteState(GameState):
                         votes[target] += 1
                         raw_votes[voter] = target
                         vote_details[target.name].append(voter.name)
-                        self.game.log(LogEntry(log_type=LogType.SHERIFF_VOTE, message={"en": f"{voter.name} voted for {target.name}.", "zh": f"{voter.name} 投票给了 {target.name}。"}, source=voter, target=target, camps=["All"]))
+                        pending_vote_logs.append((voter, LogEntry(log_type=LogType.SHERIFF_VOTE, message={"en": f"{voter.name} voted for {target.name}.", "zh": f"{voter.name} 投票给了 {target.name}。"}, source=voter, target=target, camps=["All"])))
                     else:
                         raw_votes[voter] = "Abstained"
                         vote_details["Abstained"].append(voter.name)
-                        self.game.log(LogEntry(log_type=LogType.SHERIFF_VOTE, message={"en": f"{voter.name} abstained.", "zh": f"{voter.name} 弃票。"}, source=voter, camps=["All"]))
+                        pending_vote_logs.append((voter, LogEntry(log_type=LogType.SHERIFF_VOTE, message={"en": f"{voter.name} abstained.", "zh": f"{voter.name} 弃票。"}, source=voter, camps=["All"])))
                 except Exception as exc:
                     raw_votes[voter] = "Abstained"
                     vote_details["Abstained"].append(voter.name)
-                    self.game.log(LogEntry(log_type=LogType.SHERIFF_VOTE, message={"en": f"{voter.name} encountered an error and abstained.", "zh": f"{voter.name} 遇到错误并弃票。"}, source=voter, camps=["All"]))
+                    pending_vote_logs.append((voter, LogEntry(log_type=LogType.SHERIFF_VOTE, message={"en": f"{voter.name} encountered an error and abstained.", "zh": f"{voter.name} 遇到错误并弃票。"}, source=voter, camps=["All"])))
+
+        # Announce all votes simultaneously after all votes are cast (sorted in voter order)
+        pending_vote_logs.sort(key=lambda item: voters.index(item[0]) if item[0] in voters else 0)
+        for _, log_entry in pending_vote_logs:
+            self.game.log(log_entry)
 
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "--- Sheriff Vote Results ---", "zh": "--- 警长投票结果 ---"}, camps=["All"]))
         

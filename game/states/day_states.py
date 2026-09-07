@@ -153,6 +153,7 @@ class VoteState(GameState):
         vote_details = {p.name: [] for p in living_players}
         vote_details["Abstained"] = []
         
+        pending_vote_logs = []
         with ThreadPoolExecutor() as executor:
             future_to_voter = {executor.submit(voter.controller.get_vote, voter, [p for p in living_players if p != voter]): voter for voter in living_players}
             for future in as_completed(future_to_voter):
@@ -164,16 +165,21 @@ class VoteState(GameState):
                         votes[target] += vote_weight
                         raw_votes[voter] = target
                         vote_details[target.name].append(voter.name)
-                        self.game.log(LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} voted for {target.name} ({vote_weight} votes).", "zh": f"{voter.name} 投票给了 {target.name} ({vote_weight} 票)。"}, source=voter, target=target, camps=["All"]))
+                        pending_vote_logs.append((voter, LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} voted for {target.name} ({vote_weight} votes).", "zh": f"{voter.name} 投票给了 {target.name} ({vote_weight} 票)。"}, source=voter, target=target, camps=["All"])))
                     else:
                         raw_votes[voter] = "Abstained"
                         vote_details["Abstained"].append(voter.name)
-                        self.game.log(LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} abstained from voting.", "zh": f"{voter.name} 弃票。"}, source=voter, camps=["All"]))
+                        pending_vote_logs.append((voter, LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} abstained from voting.", "zh": f"{voter.name} 弃票。"}, source=voter, camps=["All"])))
                 except Exception as exc:
                     raw_votes[voter] = "Abstained"
                     vote_details["Abstained"].append(voter.name)
-                    self.game.log(LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} encountered an error and abstained from voting.", "zh": f"{voter.name} 遇到错误并弃票。"}, source=voter, camps=["All"]))
+                    pending_vote_logs.append((voter, LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} encountered an error and abstained from voting.", "zh": f"{voter.name} 遇到错误并弃票。"}, source=voter, camps=["All"])))
         
+        # Announce all votes simultaneously after all votes are cast (sorted in seat order)
+        pending_vote_logs.sort(key=lambda item: living_players.index(item[0]) if item[0] in living_players else 0)
+        for _, log_entry in pending_vote_logs:
+            self.game.log(log_entry)
+
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "--- Vote Results ---", "zh": "--- 投票结果 ---"}, camps=["All"]))
         
         if not any(votes.values()):
@@ -374,6 +380,7 @@ class TieVoteState(GameState):
         vote_details = {p.name: [] for p in candidates}
         vote_details["Abstained"] = []
         
+        pending_vote_logs = []
         # The voting method depends on whether it's a sheriff tie or an execution tie.
         with ThreadPoolExecutor() as executor:
             future_to_voter = {}
@@ -394,16 +401,21 @@ class TieVoteState(GameState):
                         votes[target] += vote_weight
                         raw_votes[voter] = target
                         vote_details[target.name].append(voter.name)
-                        self.game.log(LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} voted for {target.name} ({vote_weight} votes).", "zh": f"{voter.name} 投票给了 {target.name} ({vote_weight} 票)。"}, source=voter, target=target, camps=["All"]))
+                        pending_vote_logs.append((voter, LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} voted for {target.name} ({vote_weight} votes).", "zh": f"{voter.name} 投票给了 {target.name} ({vote_weight} 票)。"}, source=voter, target=target, camps=["All"])))
                     else:
                         raw_votes[voter] = "Abstained"
                         vote_details["Abstained"].append(voter.name)
-                        self.game.log(LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} abstained from voting.", "zh": f"{voter.name} 弃票。"}, source=voter, camps=["All"]))
+                        pending_vote_logs.append((voter, LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} abstained from voting.", "zh": f"{voter.name} 弃票。"}, source=voter, camps=["All"])))
                 except Exception as exc:
                     raw_votes[voter] = "Abstained"
                     vote_details["Abstained"].append(voter.name)
-                    self.game.log(LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} encountered an error and abstained from voting.", "zh": f"{voter.name} 遇到错误并弃票。"}, source=voter, camps=["All"]))
+                    pending_vote_logs.append((voter, LogEntry(log_type=LogType.EXECUTION_VOTE, message={"en": f"{voter.name} encountered an error and abstained from voting.", "zh": f"{voter.name} 遇到错误并弃票。"}, source=voter, camps=["All"])))
         
+        # Announce all votes simultaneously after all votes are cast (sorted in voter order)
+        pending_vote_logs.sort(key=lambda item: voters.index(item[0]) if item[0] in voters else 0)
+        for _, log_entry in pending_vote_logs:
+            self.game.log(log_entry)
+
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "--- Tie-breaker Vote Results ---", "zh": "--- PK投票结果 ---"}, camps=["All"]))
         if not any(votes.values()):
             self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "No votes were cast. The tie remains.", "zh": "无人投票，依然平票。"}, camps=["All"]))

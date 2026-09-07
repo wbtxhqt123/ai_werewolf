@@ -8,10 +8,10 @@
     <link rel="preconnect" href="https://gstatic.loli.net" crossorigin>
     <link href="https://fonts.loli.net/css2?family=Cinzel:wght@600;700;800;900&family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/base.css?v=9">
-    <link rel="stylesheet" href="/static/css/layout.css?v=11">
+    <link rel="stylesheet" href="/static/css/layout.css?v=13">
     <link rel="stylesheet" href="/static/css/components.css?v=10">
     <link rel="stylesheet" href="/static/css/setup.css?v=9">
-    <link rel="stylesheet" href="/static/css/game.css?v=10">
+    <link rel="stylesheet" href="/static/css/game.css?v=13">
     <link rel="stylesheet" href="/static/css/modals.css?v=9">
 </head>
 <body>
@@ -22,19 +22,12 @@
             <div class="scenery-backdrop night-backdrop"></div>
             <div class="scenery-scrim"></div>
             <div class="stars"></div>
-            <div class="cloud"></div>
-            <div class="cloud"></div>
-            <div class="cloud"></div>
         </div>
 
-        <!-- Celestial Orbit Day / Night Scene Transition (Zero-Blocking, Clockwise Arc) -->
+        <!-- Celestial Day / Night Scene Transition (Zero-Blocking, Clockwise Arc) -->
         <div id="celestial-orbit-layer" class="celestial-orbit-layer" aria-hidden="true">
-            <svg class="celestial-orbit-svg" viewBox="0 0 900 220" preserveAspectRatio="none">
-                <path d="M 50,200 Q 450,20 850,200" fill="none" stroke="#feca57" stroke-width="3" stroke-dasharray="8 8" opacity="0.35" />
-            </svg>
-
             <!-- Celestial Sun Orb -->
-            <div class="celestial-orb celestial-sun pos-zenith" id="celestial-sun">
+            <div class="celestial-orb celestial-sun pos-left" id="celestial-sun">
                 <img src="/static/img/sun.png" alt="Sun">
             </div>
 
@@ -299,6 +292,6 @@
         </div>
     </template>
 
-    <script src="/static/js/app.js?v=14"></script>
+    <script src="/static/js/app.js?v=17"></script>
 </body>
 </html>

@@ -342,9 +342,82 @@ body.night-mode .player-card.selectable-target:active {
     background-color: var(--text-dark);
 }
 
-.player-card.sheriff:not(.me) .player-sheriff-label {
+/* --- Sheriff Persistent Radiance (Alive) --- */
+.player-card.sheriff:not(.dead) {
+    border-color: #f1c40f !important;
+    box-shadow: 3px 3px 0 var(--text-dark), 0 0 16px rgba(254, 202, 87, 0.45) !important;
+}
+
+.player-card.sheriff:not(.dead) .player-avatar {
+    border: 3px solid #ffd32a !important;
+    animation: sheriffGlowPulse 1.8s ease-in-out infinite alternate !important;
+}
+
+.player-card.sheriff:not(.dead) .player-name {
+    border-color: #f1c40f !important;
+    color: #b7791f !important;
+}
+
+.player-card.sheriff:not(.dead) .player-sheriff-label {
+    display: block !important;
+    background: linear-gradient(135deg, #f39c12, #f1c40f) !important;
+    color: #1e1b29 !important;
+    border: 1.5px solid #1e1b29;
+    box-shadow: 2px 2px 0 var(--text-dark), 0 0 10px rgba(254, 202, 87, 0.6);
+    font-weight: 800;
+}
+
+/* If Player 1 (ME) is sheriff, combine ME border with sheriff golden pulse */
+.player-card.me.sheriff:not(.dead) .player-avatar {
+    border: 3px solid #ffd32a !important;
+    box-shadow: 0 0 0 2px #ffffff, 0 0 22px rgba(254, 202, 87, 0.95), 2px 2px 0 rgba(0,0,0,0.15) !important;
+    animation: sheriffGlowPulse 1.8s ease-in-out infinite alternate !important;
+}
+
+.player-card.me.sheriff:not(.dead) {
+    border-color: #f1c40f !important;
+    box-shadow: 3px 3px 0 var(--text-dark), 0 0 16px rgba(254, 202, 87, 0.5) !important;
+}
+
+@keyframes sheriffGlowPulse {
+    0% {
+        box-shadow: 0 0 6px #feca57, 0 0 12px rgba(254, 202, 87, 0.5), 2px 2px 0 rgba(0,0,0,0.15);
+    }
+    100% {
+        box-shadow: 0 0 16px #ffd32a, 0 0 28px rgba(254, 202, 87, 0.9), 2px 2px 0 rgba(0,0,0,0.15);
+    }
+}
+
+.player-card.sheriff:not(.dead) .player-status-icons {
     display: block;
-    background-color: var(--status-sheriff-color);
+    font-size: 1.1rem;
+    filter: drop-shadow(0 0 3px #feca57);
+}
+
+/* Extinguish sheriff glow completely upon death */
+.player-card.dead.sheriff .player-avatar,
+.player-card.dead .player-avatar {
+    border-color: #636e72 !important;
+    background: #dfe6e9 !important;
+    box-shadow: none !important;
+    animation: none !important;
+}
+
+.player-card.dead.sheriff .player-sheriff-label,
+.player-card.dead .player-sheriff-label {
+    display: none !important;
+}
+
+.player-card.dead.sheriff .player-status-icons,
+.player-card.dead .player-status-icons {
+    animation: none !important;
+    filter: none !important;
+}
+
+/* Retain high visibility for living sheriff during targeting/voting */
+.player-card.sheriff.non-target:not(.dead) {
+    opacity: 0.88 !important;
+    filter: saturate(90%) !important;
 }
 
 .player-card.sheriff-candidate:not(.me) .player-candidate-label {
@@ -374,15 +447,6 @@ body.night-mode .player-card.selectable-target:active {
 .player-card.sheriff-candidate:not(.me) .player-name {
     border-color: var(--status-candidate-color);
     color: var(--status-candidate-color);
-}
-
-.player-card.sheriff:not(.me) .player-avatar {
-    border: 3px solid var(--status-sheriff-color);
-    box-shadow: 0 0 10px var(--status-sheriff-color), 2px 2px 0 rgba(0,0,0,0.1);
-}
-.player-card.sheriff:not(.me) .player-name {
-    border-color: var(--status-sheriff-color);
-    color: var(--status-sheriff-color);
 }
 
 .player-card.tie:not(.me) .player-avatar {

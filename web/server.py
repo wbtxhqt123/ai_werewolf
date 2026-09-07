@@ -269,7 +269,7 @@ async def start_game(request: StartGameRequest):
 
     role_to_assign = request.user_role
     if role_to_assign == "Random":
-        role_to_assign = random.choice(["Villager", "Werewolf", "Witch", "Seer", "Guard", "Hunter", "Black Werewolf King"])
+        role_to_assign = None
 
     game_instance = Game(players_with_controllers, player_role=role_to_assign, language=request.language)
     game_instance.add_log_listener(web_controller.add_log)

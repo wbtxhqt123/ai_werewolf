@@ -28,14 +28,15 @@ let gameState = {
     players: [],
     logs: [],
     lastLogIndex: 0,
-    myRole: '',
+    myRole: 'Random',
     myAvatar: '👤',
     phase: 'Day 1',
     pendingAction: null,
     lang: 'zh',
     gameId: null,
     isSending: false,
-    isPolling: false
+    isPolling: false,
+    pendingVoteLogs: []
 };
 
 /** @type {number|null} - The interval ID for the game state polling timer. */
@@ -259,14 +260,14 @@ const I18N = {
 
 /** @const {Array<object>} ROLES - Defines the available roles in the game. */
 const ROLES = [
+    { id: 'Random', icon: '🎲' },
     { id: 'Villager', icon: '👱‍♀️' },
     { id: 'Werewolf', icon: '🐺' },
     { id: 'Witch', icon: '🧙‍♀️' },
     { id: 'Seer', icon: '🔮' },
     { id: 'Guard', icon: '🛡️' },
     { id: 'Hunter', icon: '🔫' },
-    { id: 'Black Werewolf King', icon: '👹' },
-    { id: 'Random', icon: '🎲' }
+    { id: 'Black Werewolf King', icon: '👹' }
 ];
 
 /** @const {Array<string>} AVATARS - A list of available avatars for players. */
@@ -945,12 +946,54 @@ function toggleLanguage() {
 }
 
 /**
+ * Checks if the player is currently making a blind/secret action (vote or sheriff election).
+ * @returns {boolean}
+ */
+function isUserDecidingBlindAction() {
+    if (!gameState.pendingAction) return false;
+    if (gameState.pendingAction.type === 'vote') return true;
+    const prompt = gameState.pendingAction.prompt;
+    const promptStr = typeof prompt === 'object' ? (prompt.zh || prompt.en || '') : String(prompt || '');
+    return promptStr.includes('竞选警长') || promptStr.includes('run for sheriff');
+}
+
+/**
+ * Checks if a log entry represents a player voting or candidate signup action that should stay hidden until all players submit their choice.
+ * @param {object} log - The log entry object.
+ * @returns {boolean} True if the log is a blind decision action.
+ */
+function isHiddenDecisionLog(log) {
+    if (!log) return false;
+    if (log.type === 'EXECUTION_VOTE' || log.type === 'SHERIFF_VOTE' || log.type === 'SHERIFF_CANDIDATE') return true;
+    const msg = typeof log.message === 'object' ? (log.message.zh || log.message.en || '') : String(log.message || '');
+    return msg.includes('投票给') || msg.includes('voted for') || msg.includes('弃票') || msg.includes('abstained') || msg.includes('竞选警长') || msg.includes('run for sheriff');
+}
+
+/**
+ * Flushes buffered decision logs once the player has submitted their choice.
+ */
+function flushPendingVoteLogs() {
+    if (gameState.pendingVoteLogs && gameState.pendingVoteLogs.length > 0) {
+        const logsToFlush = gameState.pendingVoteLogs;
+        gameState.pendingVoteLogs = [];
+        const shouldScroll = isUserNearBottom();
+        logsToFlush.forEach(log => processLog(log));
+        scrollToBottom(shouldScroll);
+    }
+}
+
+/**
  * Re-renders all logs currently stored in the game state.
  * This is used after a language change to update the display.
  */
 function renderLogs() {
     gameUI.chatBox.innerHTML = '';
-    gameState.logs.forEach(processLog);
+    gameState.logs.forEach(log => {
+        if (isUserDecidingBlindAction() && isHiddenDecisionLog(log)) {
+            return;
+        }
+        processLog(log);
+    });
     scrollToBottom();
 }
 
@@ -1126,7 +1169,7 @@ function updateLanguage() {
  */
 function renderRoleSelection(playerCount) {
     const t = I18N[gameState.lang];
-    let currentSelection = gameState.myRole || 'Villager';
+    let currentSelection = gameState.myRole || 'Random';
     
     let availableRoles = ROLES;
     if (playerCount && ROLE_DISTRIBUTION[playerCount]) {
@@ -1249,7 +1292,7 @@ async function startGame() {
     const selectedAvatarEl = document.querySelector('.avatar-option.selected');
     const selectedCountEl = document.querySelector('.toggle-btn.active');
     
-    const role = gameState.myRole || (selectedRoleEl ? selectedRoleEl.dataset.role : 'Villager');
+    const role = gameState.myRole || (selectedRoleEl ? selectedRoleEl.dataset.role : 'Random');
     const avatar = selectedAvatarEl ? selectedAvatarEl.dataset.avatar : '👤';
     const count = selectedCountEl ? parseInt(selectedCountEl.dataset.value) : 9;
     const apiKey = setupUI.apiKeyInput.value;
@@ -1335,7 +1378,11 @@ async function pollGameState() {
             gameState.logs = gameState.logs.concat(data.logs);
             
             data.logs.forEach(log => {
-                processLog(log);
+                if (isUserDecidingBlindAction() && isHiddenDecisionLog(log)) {
+                    gameState.pendingVoteLogs.push(log);
+                } else {
+                    processLog(log);
+                }
                 if (log.type === 'PLAYER_ELIMINATED' && log.target) {
                     justDied.add(log.target.name);
                 }
@@ -1681,25 +1728,38 @@ function updatePlayers(playersData, justDied = new Set()) {
             dead: "DEAD"
         };
 
+        const isSheriffAlive = Boolean(p.is_sheriff && p.is_alive);
+
+        const hideOtherCandidates = isUserDecidingBlindAction() && p.name !== 'Player 1';
+        const isCandidateActive = Boolean(p.is_sheriff_candidate && !hideOtherCandidates);
+
         if (p.name === 'Player 1') {
             card.classList.add('me');
             card.querySelector('.player-name').innerText = "1";
             const meLabel = card.querySelector('.player-me-label');
             if (meLabel) {
                 meLabel.style.display = 'block';
-                if (p.is_sheriff) {
-                    meLabel.innerText = `${statusTexts.me} · 👮`;
-                } else if (p.is_sheriff_candidate) {
+                if (isSheriffAlive) {
+                    meLabel.innerText = `${statusTexts.me} · 👮 ${statusTexts.sheriff}`;
+                } else if (isCandidateActive) {
                     meLabel.innerText = `${statusTexts.me} · 🎙️`;
                 } else if (p.is_tie) {
                     meLabel.innerText = `${statusTexts.me} · ⚔️`;
                 } else {
-                    meLabel.innerText = `⭐ ${statusTexts.me}`;
+                    meLabel.innerText = statusTexts.me;
                 }
             }
 
-            if (p.is_sheriff) card.classList.add('sheriff');
-            if (p.is_sheriff_candidate) card.classList.add('sheriff-candidate');
+            if (isSheriffAlive) {
+                card.classList.add('sheriff');
+            } else {
+                card.classList.remove('sheriff');
+            }
+            if (isCandidateActive) {
+                card.classList.add('sheriff-candidate');
+            } else {
+                card.classList.remove('sheriff-candidate');
+            }
             if (p.is_tie) card.classList.add('tie');
         } else {
             const num = p.name.replace('Player ', '');
@@ -1712,20 +1772,39 @@ function updatePlayers(playersData, justDied = new Set()) {
                     tieLabel.innerText = `⚔️ ${statusTexts.tie}`;
                     tieLabel.style.display = 'block';
                 }
-            } else if (p.is_sheriff) {
+            }
+            if (isSheriffAlive) {
                 card.classList.add('sheriff');
                 const sheriffLabel = card.querySelector('.player-sheriff-label');
                 if (sheriffLabel) {
                     sheriffLabel.innerText = `👮 ${statusTexts.sheriff}`;
                     sheriffLabel.style.display = 'block';
                 }
-            } else if (p.is_sheriff_candidate) {
+            } else {
+                card.classList.remove('sheriff');
+            }
+            const candidateLabel = card.querySelector('.player-candidate-label');
+            if (isCandidateActive) {
                 card.classList.add('sheriff-candidate');
-                const candidateLabel = card.querySelector('.player-candidate-label');
                 if (candidateLabel) {
                     candidateLabel.innerText = `🎙️ ${statusTexts.candidate}`;
                     candidateLabel.style.display = 'block';
                 }
+            } else {
+                card.classList.remove('sheriff-candidate');
+                if (candidateLabel) {
+                    candidateLabel.style.display = 'none';
+                }
+            }
+        }
+
+        const statusIcons = card.querySelector('.player-status-icons');
+        if (statusIcons) {
+            if (isSheriffAlive) {
+                statusIcons.innerText = '⭐';
+                statusIcons.title = statusTexts.sheriff;
+            } else {
+                statusIcons.innerText = '';
             }
         }
 
@@ -1897,6 +1976,10 @@ function handleInputRequest(req) {
     if (!req) {
         currentTurnRequestId = null;
         gameState.pendingAction = null;
+        flushPendingVoteLogs();
+        if (gameState.players && gameState.players.length > 0) {
+            updatePlayers(gameState.players);
+        }
         stopTurnTimer();
         gameUI.input.disabled = true;
         gameUI.sendBtn.disabled = true;
@@ -1905,6 +1988,13 @@ function handleInputRequest(req) {
         gameUI.actionPrompt.innerText = I18N[gameState.lang].waiting;
         updatePlayerSelectableState([]);
         return;
+    }
+
+    if (req.type !== 'vote' && !isUserDecidingBlindAction()) {
+        flushPendingVoteLogs();
+        if (gameState.players && gameState.players.length > 0) {
+            updatePlayers(gameState.players);
+        }
     }
 
     // Generate stable request ID to avoid resetting countdown on every polling tick
@@ -2028,6 +2118,11 @@ async function sendTextAction() {
 async function sendAction(value) {
     if (!gameState.gameId || gameState.isSending) return;
 
+    gameState.pendingAction = null;
+    flushPendingVoteLogs();
+    if (gameState.players && gameState.players.length > 0) {
+        updatePlayers(gameState.players);
+    }
     stopTurnTimer();
     gameState.isSending = true;
     gameUI.sendBtn.disabled = true;
@@ -2178,10 +2273,17 @@ function playStageCurtainTransition(targetIsNight, onSwapped) {
 
     if (targetIsNight) {
         // Day -> Night Clockwise:
-        // Sun sets clockwise: pos-zenith (50%) -> pos-right (88%)
-        // Moon rises clockwise: pos-left (12%) -> pos-zenith (50%)
-        sunEl.className = 'celestial-orb celestial-sun pos-right';
-        moonEl.className = 'celestial-orb celestial-moon pos-zenith';
+        // Position sun at zenith silently, then animate sun setting & moon rising
+        sunEl.className = 'celestial-orb celestial-sun pos-zenith no-transition';
+        moonEl.className = 'celestial-orb celestial-moon pos-left no-transition';
+        void sunEl.offsetWidth;
+        sunEl.classList.remove('no-transition');
+        moonEl.classList.remove('no-transition');
+
+        requestAnimationFrame(() => {
+            sunEl.className = 'celestial-orb celestial-sun pos-right';
+            moonEl.className = 'celestial-orb celestial-moon pos-zenith';
+        });
 
         if (banner) {
             banner.innerText = isZh ? '🌙 太阳西沉 · 天黑请闭眼' : '🌙 Night Falls · Close Your Eyes';
@@ -2193,22 +2295,37 @@ function playStageCurtainTransition(targetIsNight, onSwapped) {
             if (onSwapped) onSwapped();
         }, 850);
 
-        // When transition completes (2250ms), silently relocate sunken sun to pos-left under horizon
+        // When transition completes (2250ms), fade out orbs and silently relocate
         setTimeout(() => {
-            sunEl.classList.add('no-transition');
-            sunEl.className = 'celestial-orb celestial-sun pos-left no-transition';
-            void sunEl.offsetWidth; // force reflow
-            sunEl.classList.remove('no-transition');
+            sunEl.classList.add('fade-out');
+            moonEl.classList.add('fade-out');
 
-            if (banner) banner.classList.remove('visible');
-            isStageTransitioning = false;
+            setTimeout(() => {
+                sunEl.classList.add('no-transition');
+                moonEl.classList.add('no-transition');
+                sunEl.className = 'celestial-orb celestial-sun pos-left no-transition';
+                moonEl.className = 'celestial-orb celestial-moon pos-left no-transition';
+                void sunEl.offsetWidth; // force reflow
+                sunEl.classList.remove('no-transition', 'fade-out');
+                moonEl.classList.remove('no-transition', 'fade-out');
+
+                if (banner) banner.classList.remove('visible');
+                isStageTransitioning = false;
+            }, 500);
         }, 2250);
     } else {
         // Night -> Day Clockwise:
-        // Moon sets clockwise: pos-zenith (50%) -> pos-right (88%)
-        // Sun rises clockwise: pos-left (12%) -> pos-zenith (50%)
-        moonEl.className = 'celestial-orb celestial-moon pos-right';
-        sunEl.className = 'celestial-orb celestial-sun pos-zenith';
+        // Position moon at zenith silently, then animate moon setting & sun rising
+        moonEl.className = 'celestial-orb celestial-moon pos-zenith no-transition';
+        sunEl.className = 'celestial-orb celestial-sun pos-left no-transition';
+        void moonEl.offsetWidth;
+        moonEl.classList.remove('no-transition');
+        sunEl.classList.remove('no-transition');
+
+        requestAnimationFrame(() => {
+            moonEl.className = 'celestial-orb celestial-moon pos-right';
+            sunEl.className = 'celestial-orb celestial-sun pos-zenith';
+        });
 
         if (banner) {
             banner.innerText = isZh ? '☀️ 晨曦破晓 · 天亮请睁眼' : '☀️ Dawn Breaks · Open Your Eyes';
@@ -2220,15 +2337,23 @@ function playStageCurtainTransition(targetIsNight, onSwapped) {
             if (onSwapped) onSwapped();
         }, 850);
 
-        // When transition completes (2250ms), silently relocate sunken moon to pos-left under horizon
+        // When transition completes (2250ms), fade out orbs and silently relocate
         setTimeout(() => {
-            moonEl.classList.add('no-transition');
-            moonEl.className = 'celestial-orb celestial-moon pos-left no-transition';
-            void moonEl.offsetWidth; // force reflow
-            moonEl.classList.remove('no-transition');
+            sunEl.classList.add('fade-out');
+            moonEl.classList.add('fade-out');
 
-            if (banner) banner.classList.remove('visible');
-            isStageTransitioning = false;
+            setTimeout(() => {
+                sunEl.classList.add('no-transition');
+                moonEl.classList.add('no-transition');
+                sunEl.className = 'celestial-orb celestial-sun pos-left no-transition';
+                moonEl.className = 'celestial-orb celestial-moon pos-left no-transition';
+                void moonEl.offsetWidth; // force reflow
+                sunEl.classList.remove('no-transition', 'fade-out');
+                moonEl.classList.remove('no-transition', 'fade-out');
+
+                if (banner) banner.classList.remove('visible');
+                isStageTransitioning = false;
+            }, 500);
         }, 2250);
     }
 }
@@ -2276,8 +2401,8 @@ function setPhase(phase, rawMessage = null) {
             const sunEl = document.getElementById('celestial-sun');
             const moonEl = document.getElementById('celestial-moon');
             if (sunEl && moonEl) {
-                sunEl.className = `celestial-orb celestial-sun ${targetIsNight ? 'pos-left' : 'pos-zenith'}`;
-                moonEl.className = `celestial-orb celestial-moon ${targetIsNight ? 'pos-zenith' : 'pos-left'}`;
+                sunEl.className = 'celestial-orb celestial-sun pos-left no-transition';
+                moonEl.className = 'celestial-orb celestial-moon pos-left no-transition';
             }
         }
         if (typeof BGMManager !== 'undefined') {

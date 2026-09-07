@@ -294,6 +294,128 @@ class TestOperationsAndVoteHistory(unittest.TestCase):
 
         game_manager.remove_game(session_id)
 
+    def test_votes_hidden_until_all_voters_finish(self):
+        import time
+        from unittest.mock import MagicMock
+        from game.states.day_states import VoteState
+
+        p1 = self.game.players[0]
+        p2 = self.game.players[1]
+        p3 = self.game.players[2]
+
+        for p in self.game.players[3:]:
+            p.is_alive = False
+
+        logs_during_p1_vote = []
+
+        def delayed_p1_vote(player, potential_targets):
+            time.sleep(0.05)
+            # Check if any EXECUTION_VOTE logs were emitted while P1 is still deciding
+            for entry in self.game.game_log:
+                if entry.log_type == LogType.EXECUTION_VOTE:
+                    logs_during_p1_vote.append(entry)
+            return p2
+
+        p1.controller.get_vote = delayed_p1_vote
+        p2.controller.get_vote = MagicMock(return_value=p3)
+        p3.controller.get_vote = MagicMock(return_value=p1)
+
+        state = VoteState(self.game)
+        state.handle()
+
+        # While P1 was deciding, NO execution vote logs should have been logged
+        self.assertEqual(len(logs_during_p1_vote), 0)
+
+        # After state.handle() completes, all votes should be logged
+        exec_logs = [
+            e for e in self.game.game_log if e.log_type == LogType.EXECUTION_VOTE
+        ]
+        self.assertEqual(len(exec_logs), 3)
+
+    def test_sheriff_votes_hidden_until_all_voters_finish(self):
+        import time
+        from unittest.mock import MagicMock
+        from game.states.sheriff_states import SheriffVoteState
+
+        c1 = self.game.players[0]
+        c2 = self.game.players[1]
+        v1 = self.game.players[2]
+        v2 = self.game.players[3]
+
+        self.game.election_players = [c1, c2]
+        for p in self.game.players[4:]:
+            p.is_alive = False
+
+        logs_during_v1_vote = []
+
+        def delayed_v1_vote(player, potential_targets):
+            time.sleep(0.05)
+            for entry in self.game.game_log:
+                if entry.log_type == LogType.SHERIFF_VOTE:
+                    logs_during_v1_vote.append(entry)
+            return c1
+
+        v1.controller.get_vote_for_sheriff = delayed_v1_vote
+        v2.controller.get_vote_for_sheriff = MagicMock(return_value=c2)
+
+        state = SheriffVoteState(self.game)
+        state.handle()
+
+        # While v1 was deciding, NO sheriff vote logs should have been logged
+        self.assertEqual(len(logs_during_v1_vote), 0)
+
+        # After state.handle() completes, both votes should be logged
+        sheriff_logs = [
+            e for e in self.game.game_log if e.log_type == LogType.SHERIFF_VOTE
+        ]
+        self.assertEqual(len(sheriff_logs), 2)
+
+    def test_sheriff_election_candidates_hidden_until_all_players_decide(self):
+        import time
+        from unittest.mock import MagicMock
+        from game.states.sheriff_states import SheriffElectionState
+
+        p1 = self.game.players[0]
+        p2 = self.game.players[1]
+        p3 = self.game.players[2]
+
+        # Only 3 players in game for this test
+        self.game.players = [p1, p2, p3]
+
+        logs_during_p1_choice = []
+        candidates_during_p1_choice = []
+
+        def delayed_p1_choice(player):
+            time.sleep(0.05)
+            for entry in self.game.game_log:
+                if entry.log_type == LogType.SHERIFF_CANDIDATE:
+                    logs_during_p1_choice.append(entry)
+            for p in self.game.players:
+                if getattr(p, "is_sheriff_candidate", False):
+                    candidates_during_p1_choice.append(p)
+            return True
+
+        p1.controller.get_join_election_decision = delayed_p1_choice
+        p2.controller.get_join_election_decision = MagicMock(return_value=True)
+        p3.controller.get_join_election_decision = MagicMock(return_value=False)
+
+        state = SheriffElectionState(self.game)
+        state.handle()
+
+        # While P1 was choosing, NO candidate logs should have been emitted
+        self.assertEqual(len(logs_during_p1_choice), 0)
+        # And candidate flags on player models should NOT have been set yet
+        self.assertEqual(len(candidates_during_p1_choice), 0)
+
+        # After state.handle() completes, candidate decisions should all be logged
+        candidate_logs = [
+            e for e in self.game.game_log if e.log_type == LogType.SHERIFF_CANDIDATE
+        ]
+        self.assertEqual(len(candidate_logs), 3)
+        self.assertTrue(p1.is_sheriff_candidate)
+        self.assertTrue(p2.is_sheriff_candidate)
+        self.assertFalse(p3.is_sheriff_candidate)
+
 
 if __name__ == "__main__":
     unittest.main()
