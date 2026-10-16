@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from typing import Any, List, Optional, Dict
 import shutil
 import os
-import asyncio
+import tempfile
 
 from game.game import Game
 from game.controllers import RandomController
@@ -37,12 +37,13 @@ class GameSession:
     including the game logic, the web controller for the human player, the game
     thread, and an optional evaluator. Tracks creation and access timestamps for TTL.
     """
-    def __init__(self, game_id: str, game_instance: Game, web_controller: WebController, game_thread: threading.Thread):
+    def __init__(self, game_id: str, game_instance: Game, web_controller: WebController, game_thread: threading.Thread, llm_config: Optional[dict] = None):
         self.game_id = game_id
         self.game_instance = game_instance
         self.web_controller = web_controller
         self.game_thread = game_thread
         self.game_evaluator: GameEvaluator | None = None
+        self.llm_config = llm_config or {}
         self.created_at = time.time()
         self.last_accessed_at = time.time()
 
@@ -68,11 +69,11 @@ class GameManager:
         self.active_games: Dict[str, GameSession] = {}
         self.lock = threading.Lock()
 
-    def create_game(self, game_instance: Game, web_controller: WebController, game_thread: threading.Thread) -> str:
+    def create_game(self, game_instance: Game, web_controller: WebController, game_thread: threading.Thread, llm_config: Optional[dict] = None) -> str:
         """Creates a new game session and returns its ID, pruning expired sessions first."""
         self.cleanup_expired_games()
         game_id = str(uuid.uuid4())
-        session = GameSession(game_id, game_instance, web_controller, game_thread)
+        session = GameSession(game_id, game_instance, web_controller, game_thread, llm_config=llm_config)
         with self.lock:
             self.active_games[game_id] = session
         return game_id
@@ -143,6 +144,9 @@ class EvaluationRequest(BaseModel):
     game_id: str
     mode: str
     api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    model_name: Optional[str] = None
+    provider: Optional[str] = None
     language: str = "zh"
 
 class ChatRequest(BaseModel):
@@ -181,20 +185,26 @@ async def read_game():
 class WebSocketManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
 
     async def connect(self, websocket: WebSocket):
+        self.loop = asyncio.get_running_loop()
         await websocket.accept()
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
 
     async def send_personal_message(self, message: dict, websocket: WebSocket):
         await websocket.send_json(message)
 
     async def broadcast(self, message: dict):
-        for connection in self.active_connections:
-            await connection.send_json(message)
+        for connection in list(self.active_connections):
+            try:
+                await connection.send_json(message)
+            except Exception:
+                self.disconnect(connection)
 
 websocket_manager = WebSocketManager()
 
@@ -274,6 +284,11 @@ async def start_game(request: StartGameRequest):
     game_instance = Game(players_with_controllers, player_role=role_to_assign, language=request.language)
     game_instance.add_log_listener(web_controller.add_log)
     
+    try:
+        websocket_manager.loop = asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+
     ui_event_handler = UIEventHandler(game_instance, websocket_manager)
     game_instance.event_bus.subscribe(PlayerDied, ui_event_handler.handle_event)
     game_instance.event_bus.subscribe(SeerCheckResult, ui_event_handler.handle_event)
@@ -281,7 +296,13 @@ async def start_game(request: StartGameRequest):
     game_thread = threading.Thread(target=run_game_thread, args=(game_instance,))
     game_thread.start()
 
-    game_id = game_manager.create_game(game_instance, web_controller, game_thread)
+    session_llm_config = {
+        "api_key": request.api_key,
+        "base_url": request.base_url,
+        "model_name": request.model_name,
+        "provider": request.provider,
+    }
+    game_id = game_manager.create_game(game_instance, web_controller, game_thread, llm_config=session_llm_config)
 
     return {"message": "Game started", "game_id": game_id}
 
@@ -308,10 +329,12 @@ async def get_game_state(game_id: str, last_log_index: int = 0):
 
     players_data = []
     if game_instance:
+        reveal_all_roles = (not is_active) or bool(game_instance.winner)
         for p in game_instance.players:
+            visible_role = (p.role.name if p.role else "Unknown") if (reveal_all_roles or p.name == "Player 1") else "Unknown"
             players_data.append({
                 "name": p.name,
-                "role": p.role.name if p.role else "Unknown",
+                "role": visible_role,
                 "is_alive": p.is_alive,
                 "is_sheriff": p.is_sheriff,
                 "is_sheriff_candidate": getattr(p, 'is_sheriff_candidate', False),
@@ -380,10 +403,12 @@ async def get_full_logs(game_id: str):
         return {"logs": []}
         
     game_instance = session.game_instance
+    is_game_over = session.is_finished() or bool(game_instance.winner)
     
     player_logs = {}
+    target_players = game_instance.players if is_game_over else [p for p in game_instance.players if p.name == "Player 1"]
     
-    for p in game_instance.players:
+    for p in target_players:
         player_logs[p.name] = {
             "role": p.role.name if p.role else "Unknown",
             "logs": []
@@ -391,7 +416,7 @@ async def get_full_logs(game_id: str):
         
     # This approach reconstructs each player's view of the game log.
     for entry in game_instance.game_log:
-        for p in game_instance.players:
+        for p in target_players:
             if game_instance._is_visible(entry, p):
                 player_logs[p.name]["logs"].append({
                     "type": entry.log_type.name,
@@ -450,6 +475,10 @@ async def get_player_operations(game_id: str, player_name: str):
         raise HTTPException(status_code=404, detail="Game not found")
         
     game_instance = session.game_instance
+    is_game_over = session.is_finished() or bool(game_instance.winner)
+    if not is_game_over and player_name != "Player 1":
+        raise HTTPException(status_code=403, detail="Cannot view other players' operations while the game is active")
+
     history = game_instance.get_player_operations_history(player_name)
     return history
 
@@ -503,10 +532,21 @@ async def evaluate_game(request: EvaluationRequest):
     if not human_player:
         raise HTTPException(status_code=400, detail="Human player not found")
 
-    if not request.api_key:
+    api_key = request.api_key or session.llm_config.get("api_key")
+    if not api_key:
          raise HTTPException(status_code=400, detail="API Key required for evaluation")
 
-    session.game_evaluator = GameEvaluator(api_key=request.api_key, language=request.language)
+    base_url = request.base_url or session.llm_config.get("base_url")
+    model_name = request.model_name or session.llm_config.get("model_name")
+    provider = request.provider or session.llm_config.get("provider")
+
+    session.game_evaluator = GameEvaluator(
+        api_key=api_key,
+        language=request.language,
+        base_url=base_url,
+        model=model_name,
+        provider=provider,
+    )
     
     game_result = "Game Over"
     if game_instance.winner:
@@ -555,11 +595,13 @@ async def transcribe_audio(file: UploadFile = File(...), language: Optional[str]
         raise HTTPException(status_code=503, detail=str(e))
 
     try:
-        temp_filename = f"temp_{uuid.uuid4()}_{file.filename}"
-        with open(temp_filename, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        raw_ext = os.path.splitext(file.filename or "")[1]
+        safe_ext = raw_ext if raw_ext and raw_ext.isalnum() or (raw_ext.startswith(".") and raw_ext[1:].isalnum()) else ".webm"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=safe_ext) as tmp:
+            temp_filename = tmp.name
+            shutil.copyfileobj(file.file, tmp)
         
-        text = transcriber.transcribe(temp_filename, language=language)
+        text = await asyncio.to_thread(transcriber.transcribe, temp_filename, language=language)
         
         os.remove(temp_filename)
         temp_filename = None
@@ -586,8 +628,8 @@ async def websocket_transcribe(websocket: WebSocket):
         await websocket.close(code=1011, reason=str(e))
         return
     
-    session_id = str(uuid.uuid4())
-    temp_filename = f"temp_stream_{session_id}.webm"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
+        temp_filename = tmp.name
     language = None
     
     try:
@@ -605,11 +647,11 @@ async def websocket_transcribe(websocket: WebSocket):
                     language = text.split(":")[1]
                 elif text == "process":
                     if os.path.exists(temp_filename) and os.path.getsize(temp_filename) > 0:
-                        result = transcriber.transcribe(temp_filename, language=language)
+                        result = await asyncio.to_thread(transcriber.transcribe, temp_filename, language=language)
                         await websocket.send_json({"text": result, "is_final": False})
                 elif text == "stop":
                     if os.path.exists(temp_filename) and os.path.getsize(temp_filename) > 0:
-                        result = transcriber.transcribe(temp_filename, language=language)
+                        result = await asyncio.to_thread(transcriber.transcribe, temp_filename, language=language)
                         await websocket.send_json({"text": result, "is_final": True})
                     break
                     

@@ -144,6 +144,45 @@ class TestWebConcurrency(unittest.TestCase):
         self.assertIsNotNone(session)
         self.assertEqual(session.web_controller.timeout, 300.0)
 
+    def test_api_role_and_operations_privacy_during_active_game(self):
+        from starlette.testclient import TestClient
+        from web.server import app, game_manager
+        from game.controllers import RandomController
+
+        web_ctrl = WebController(timeout=60.0)
+        game = Game(
+            {"Player 1": web_ctrl, "Player 2": RandomController()},
+            player_role="Villager",
+            language="en",
+        )
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = True
+
+        game_id = game_manager.create_game(game, web_ctrl, mock_thread)
+        client = TestClient(app)
+
+        # 1. During active game, Player 2's role must be masked as "Unknown"
+        state_res = client.get(f"/api/game/{game_id}/state")
+        self.assertEqual(state_res.status_code, 200)
+        players_payload = {p["name"]: p["role"] for p in state_res.json()["players"]}
+        self.assertEqual(players_payload["Player 1"], "Villager")
+        self.assertEqual(players_payload["Player 2"], "Unknown")
+
+        # 2. During active game, querying Player 2's operations is forbidden
+        op_res = client.get(f"/api/game/{game_id}/player/Player 2/operations")
+        self.assertEqual(op_res.status_code, 403)
+
+        # 3. Once game finishes, roles and operations are accessible
+        mock_thread.is_alive.return_value = False
+        state_res_after = client.get(f"/api/game/{game_id}/state")
+        players_after = {p["name"]: p["role"] for p in state_res_after.json()["players"]}
+        self.assertNotEqual(players_after["Player 2"], "Unknown")
+
+        op_res_after = client.get(f"/api/game/{game_id}/player/Player 2/operations")
+        self.assertEqual(op_res_after.status_code, 200)
+
+        game_manager.remove_game(game_id)
+
 
 if __name__ == "__main__":
     unittest.main()

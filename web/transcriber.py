@@ -44,7 +44,7 @@ class AudioTranscriber:
             logger.error(f"Failed to initialize pipeline: {e}")
             raise e
 
-    def transcribe(self, audio_input, language: str = None) -> str:
+    def transcribe(self, audio_input, language: str | None = None) -> str:
         """Converts speech from an audio input into text.
 
         Args:

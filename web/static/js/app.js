@@ -279,7 +279,7 @@ const ROLE_DISTRIBUTION = {
         "Werewolf": 2,
         "Villager": 2,
         "Seer": 1,
-        "Guard": 1
+        "Witch": 1
     },
     9: {
         "Black Werewolf King": 1,
@@ -287,7 +287,7 @@ const ROLE_DISTRIBUTION = {
         "Villager": 3,
         "Seer": 1,
         "Witch": 1,
-        "Guard": 1
+        "Hunter": 1
     },
     12: {
         "Black Werewolf King": 1,
@@ -1477,6 +1477,12 @@ async function startEvaluation() {
     
     const mode = selectedModeBtn.dataset.mode;
     const apiKey = evalUI.apiKeyInput.value;
+    const baseUrlEl = document.getElementById('base-url');
+    const modelNameEl = document.getElementById('model-name');
+    const providerEl = document.getElementById('provider-select');
+    const baseUrl = baseUrlEl ? baseUrlEl.value : '';
+    const modelName = modelNameEl ? modelNameEl.value : '';
+    const provider = providerEl ? providerEl.value : '';
     
     if (!apiKey) {
         alert(I18N[gameState.lang].eval.apiKeyWarning);
@@ -1496,6 +1502,9 @@ async function startEvaluation() {
                 game_id: gameState.gameId,
                 mode: mode,
                 api_key: apiKey,
+                base_url: baseUrl || null,
+                model_name: modelName || null,
+                provider: provider || null,
                 language: gameState.lang
             })
         });
@@ -1561,6 +1570,15 @@ async function sendEvaluationMessage() {
     }
 }
 
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 /**
  * Renders a message in the evaluation chat box.
  * @param {string} message - The message content.
@@ -1571,7 +1589,7 @@ function renderEvaluationChat(message, isUser) {
     msgDiv.className = `eval-message ${isUser ? 'user' : 'ai'}`;
     
     if (!isUser) {
-        let formatted = message.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+        let formatted = escapeHtml(message).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
         formatted = formatted.replace(/\n/g, '<br>');
         msgDiv.innerHTML = formatted;
     } else {
@@ -2155,21 +2173,26 @@ async function sendAction(value) {
 // --- UI HELPER FUNCTIONS ---
 
 /**
- * Traps focus within a given element.
+ * Traps focus within a given element without accumulating duplicate listeners.
  * @param {HTMLElement} element - The element to trap focus within.
  */
 function trapFocus(element) {
-    const focusableEls = element.querySelectorAll('a[href]:not([disabled]), button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])');
-    const firstFocusableEl = focusableEls[0];
-    const lastFocusableEl = focusableEls[focusableEls.length - 1];
+    if (!element) return;
+    if (element._focusTrapHandler) {
+        element.removeEventListener('keydown', element._focusTrapHandler);
+    }
+
     const KEYCODE_TAB = 9;
-
-    element.addEventListener('keydown', function(e) {
+    element._focusTrapHandler = function(e) {
         const isTabPressed = (e.key === 'Tab' || e.keyCode === KEYCODE_TAB);
-
         if (!isTabPressed) {
             return;
         }
+
+        const focusableEls = element.querySelectorAll('a[href]:not([disabled]), button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])');
+        if (focusableEls.length === 0) return;
+        const firstFocusableEl = focusableEls[0];
+        const lastFocusableEl = focusableEls[focusableEls.length - 1];
 
         if (e.shiftKey) /* shift + tab */ {
             if (document.activeElement === firstFocusableEl) {
@@ -2182,7 +2205,9 @@ function trapFocus(element) {
                 e.preventDefault();
             }
         }
-    });
+    };
+
+    element.addEventListener('keydown', element._focusTrapHandler);
 }
 
 /**
@@ -2797,7 +2822,7 @@ function renderCurrentTimeline() {
                 dayShots.forEach(s => {
                     const shooterRole = s.role === 'Hunter' 
                         ? (isZh ? '猎人' : 'Hunter') 
-                        : (isZh ? '白狼王' : 'Black Werewolf King');
+                        : (isZh ? '黑狼王' : 'Black Werewolf King');
                     dayContentHtml += `
                         <div class="timeline-card public-card">
                             <span>🏹 <strong>${s.shooter}</strong> (${shooterRole}) 死亡开枪带走了 <strong>${getAvatar(s.target)} ${s.target}</strong></span>

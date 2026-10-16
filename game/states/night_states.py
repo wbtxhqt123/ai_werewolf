@@ -316,10 +316,7 @@ class NightEndState(GameState):
             poisoned_player.death_reason = "poison"
             self.game.killed_this_night.add(poisoned_player)
 
-        # --- Announce and Finalize Deaths ---
-        if not self.game.killed_this_night:
-            self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "A peaceful night... no one was eliminated.", "zh": "昨晚是平安夜，无人死亡。"}, camps=["All"]))
-
+        # --- End of Night ---
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "The night is over, and dawn is approaching.", "zh": "长夜已过，黎明将至。"}, camps=["All"]))
         self.game.event_bus.publish(NightEnd(night_number=self.game.day))
 

@@ -34,10 +34,11 @@ class TestHybridArchitecture(unittest.TestCase):
         phase_changes = [e[1] for e in received_events if e[0] == "PhaseChanged"]
         self.assertIn("night_begin", phase_changes)
         
-        # 3. Verify GameOver was published and winner matches game.winner
+        # 3. Verify GameOver was published exactly once and winner matches game.winner
         self.assertIn("GameOver", event_names)
-        game_over_event = next(e for e in received_events if e[0] == "GameOver")
-        self.assertEqual(game_over_event[1], game.winner)
+        game_over_events = [e for e in received_events if e[0] == "GameOver"]
+        self.assertEqual(len(game_over_events), 1)
+        self.assertEqual(game_over_events[0][1], game.winner)
         
         # 4. Verify PlayerDied events were emitted when players died
         if len(game.death) > 0:

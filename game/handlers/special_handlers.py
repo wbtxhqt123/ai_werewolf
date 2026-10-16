@@ -4,12 +4,14 @@ from game.events.day_events import PlayerDied
 
 def handle_player_died(game, event):
     player = event.player
+    if not player.role:
+        return
     if player.role.name == "Hunter":
         potential_targets = [p for p in game.players if p.is_alive]
         target = player.controller.get_hunter_shoot_target(player, potential_targets)
         if target:
             game.event_bus.publish(HunterShoot(player=player, target=target))
-    elif player.role.name == "BlackWerewolfKing":
+    elif player.role.name in ("Black Werewolf King", "BlackWerewolfKing"):
         potential_targets = [p for p in game.players if p.is_alive]
         target = player.controller.get_hunter_shoot_target(player, potential_targets)
         if target:

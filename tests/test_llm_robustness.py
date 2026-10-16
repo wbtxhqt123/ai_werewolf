@@ -107,6 +107,31 @@ class TestLLMRobustness(unittest.TestCase):
         rc_game.game = game
         self.assertEqual(rc_game.get_speech(player), "I am an AI player. I'm trying to find the werewolves.")
 
+    def test_llm_controller_validates_potential_targets(self):
+        mock_client = MagicMock()
+        # LLM tries to vote for Player 1 (not in potential_targets)
+        mock_client.get_completion.return_value = '{"thought": "Vote self", "action": {"vote": "Player 1"}}'
+        controller = LLMController(llm_client=mock_client, language="en")
+        game = Game({"Player 1": controller, "Player 2": RandomController(), "Player 3": RandomController()}, language="en")
+        p1, p2, p3 = game.players
+        # Only p2 and p3 are valid targets
+        vote_target = controller.get_vote(p1, [p2, p3])
+        self.assertIsNone(vote_target)
+
+    def test_llm_controller_witch_poison_without_prior_save_call(self):
+        from game.player import Witch
+        mock_client = MagicMock()
+        mock_client.get_completion.return_value = '{"thought": "Poison Player 2", "action": {"save": false, "poison": "Player 2"}}'
+        controller = LLMController(llm_client=mock_client, language="en")
+        game = Game({"Player 1": controller, "Player 2": RandomController()}, language="en")
+        p1, p2 = game.players
+        p1.role = Witch()
+        p1.role.has_save = False  # Save potion already used on an earlier night
+
+        # Directly call get_witch_poison_target without calling get_witch_save_decision
+        poison_target = controller.get_witch_poison_target(p1, [p1, p2])
+        self.assertEqual(poison_target, p2)
+
 
 if __name__ == "__main__":
     unittest.main()

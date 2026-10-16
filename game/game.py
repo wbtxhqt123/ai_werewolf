@@ -3,6 +3,7 @@ import random
 import os
 import datetime
 import json
+import threading
 from typing import Callable, Any, Optional
 from config import ROLE_CONFIG, HISTORY_DIR
 from .player import Player, Villager, Werewolf, Witch, Seer, Guard, Hunter, BlackWerewolfKing
@@ -58,6 +59,7 @@ class Game:
         self.game_log: list[LogEntry] = []
         self.log_listeners: list[Callable[[LogEntry], None]] = []
         self.log_entry_counter = 0
+        self._log_lock = threading.RLock()
         self.death = []
         self.vote_history = []
         self.running = True
@@ -69,9 +71,11 @@ class Game:
 
     def add_log_listener(self, listener: Callable[[LogEntry], None]):
         """Adds a listener that will be called whenever a log entry is added."""
-        self.log_listeners.append(listener)
+        with self._log_lock:
+            self.log_listeners.append(listener)
+            existing_logs = list(self.game_log)
         # Replay any prior logs (such as game setup logs from __init__) to the new listener
-        for entry in self.game_log:
+        for entry in existing_logs:
             listener(entry)
 
     def _create_players(
@@ -234,7 +238,7 @@ class Game:
 
         # Log player roles for history file, not for players
         player_roles_message = ", ".join(
-            [f"{p.name}: {p.role.name}" for p in self.players]
+            [f"{p.name}: {p.role.name if p.role else 'Unknown'}" for p in self.players]
         )
         self.log(
             LogEntry(
@@ -344,11 +348,9 @@ class Game:
             self.state.handle()
             next_state_name, next_state_kwargs = self.state.transition()
             if next_state_name:
-                self.set_state(next_state_name, **next_state_kwargs)
+                self.set_state(next_state_name, **(next_state_kwargs or {}))
             else:
                 self.state = None
-        if self.winner:
-            self.event_bus.publish(GameOver(winner=self.winner))
         self._write_log_to_file()
 
     def stop(self):
@@ -424,17 +426,19 @@ class Game:
         Args:
             entry: The LogEntry to be added.
         """
-        entry.id = self.log_entry_counter
-        self.log_entry_counter += 1
-        entry.day = self.day
-        entry.state = self.state.name if self.state else ""
-        self.game_log.append(entry)
-        for player in self.players:
-            if self._is_visible(entry, player):
-                player.logs.append(entry)
+        with self._log_lock:
+            entry.id = self.log_entry_counter
+            self.log_entry_counter += 1
+            entry.day = self.day
+            entry.state = self.state.name if self.state else ""
+            self.game_log.append(entry)
+            for player in self.players:
+                if self._is_visible(entry, player):
+                    player.logs.append(entry)
+            listeners = list(self.log_listeners)
 
         # Notify listeners
-        for listener in self.log_listeners:
+        for listener in listeners:
             listener(entry)
 
     def get_player_by_name(self, name: str) -> Player | None:

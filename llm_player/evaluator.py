@@ -12,8 +12,21 @@ if TYPE_CHECKING:
 class GameEvaluator:
     """Evaluates player performance and handles follow-up chat."""
 
-    def __init__(self, api_key: str, language: str = "zh"):
-        self.llm_client = LLMClient(api_key=api_key)
+    def __init__(
+        self,
+        api_key: str | None = None,
+        language: str = "zh",
+        base_url: str | None = None,
+        model: str | None = None,
+        provider: str | None = None,
+        llm_client: Any | None = None,
+    ):
+        self.llm_client = llm_client or LLMClient(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            provider=provider,
+        )
         self.language = language
         self.prompt_dir = os.path.join(os.path.dirname(__file__), "prompts")
         self.current_mode = None

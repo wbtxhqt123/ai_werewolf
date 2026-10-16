@@ -44,15 +44,26 @@ class LLMClient:
         # Determine provider config
         if provider and provider in LLM_PROVIDERS:
             provider_config = LLM_PROVIDERS[provider]
-            self.base_url = base_url or provider_config["base_url"]
+            self.base_url = base_url or provider_config["base_url"] or None
             self.model = model or provider_config["model"]
             api_key_env = provider_config["api_key_env"]
             self.api_key = api_key or os.getenv(api_key_env)
         else:
             # Fallback to global defaults
-            self.base_url = base_url or LLM_API_BASE_URL
+            self.base_url = base_url or LLM_API_BASE_URL or None
             self.model = model or LLM_MODEL
-            self.api_key = api_key or os.getenv(LLM_API_KEY_ENV)
+            self.api_key = api_key or (os.getenv(LLM_API_KEY_ENV) if LLM_API_KEY_ENV else None)
+
+        if not self.model:
+            default_models = {
+                "openai": "gpt-4o",
+                "doubao": "doubao-seed-1-6-flash-250828",
+                "gemini": "gemini-1.5-flash",
+                "qwen": "qwen-plus",
+                "deepseek": "deepseek-chat",
+                "groq": "llama-3.3-70b-versatile",
+            }
+            self.model = default_models.get(provider or "", "gpt-4o")
 
         if self.api_key:
             self.api_key = self.api_key.strip()
@@ -298,18 +309,20 @@ class LLMController(Controller):
                     return f.read()
             raise
 
-    def _find_player_by_name(self, name: str) -> Player | None:
-        """Utility function to find a Player object from their name.
+    def _find_player_by_name(self, name: str | None, potential_targets: list[Player] | None = None) -> Player | None:
+        """Utility function to find a Player object from their name, optionally restricted to valid targets.
 
         Args:
             name: The name of the player to find.
+            potential_targets: Optional list of valid target players to restrict the lookup.
 
         Returns:
-            The `Player` object if found, otherwise None.
+            The `Player` object if found and valid, otherwise None.
         """
-        if not name:
+        if not name or not isinstance(name, str):
             return None
-        for p in self.game.players:
+        candidates = potential_targets if potential_targets is not None else (self.game.players if getattr(self, "game", None) else [])
+        for p in candidates:
             if p.name == name:
                 return p
         return None
@@ -398,13 +411,13 @@ class LLMController(Controller):
         elif isinstance(player.role, Werewolf):
             werewolf_team = [p.name for p in self.game.players if p.is_alive and isinstance(p.role, Werewolf)]
             role_info = f"- Your fellow werewolves are: {', '.join(werewolf_team)}."
-        elif player.role.name == "Seer":
+        elif isinstance(player.role, Seer):
             role_info = "- You are the Seer. You can check one player's identity each night."
-        elif player.role.name == "Guard":
+        elif isinstance(player.role, Guard):
             role_info = "- You are the Guard. You can protect one player each night."
             if player.role.last_protected:
                 role_info += f"\n- Last night you protected {player.role.last_protected.name}. You cannot protect them again tonight."
-        elif player.role.name == "Hunter":
+        elif isinstance(player.role, Hunter):
             role_info = "- You are the Hunter. If you die (except by poison), you can shoot someone."
 
         status_prompt_template = self._load_prompt("status", "status")
@@ -539,13 +552,13 @@ class LLMController(Controller):
         targets_str = ", ".join([p.name for p in potential_targets])
         action = self._get_decision(player, "vote", {"potential_targets": targets_str})
         target_name = action.get("vote")
-        return self._find_player_by_name(target_name)
+        return self._find_player_by_name(target_name, potential_targets)
 
     def get_werewolf_target(self, player: Player, potential_targets: list[Player]) -> Player | None:
         targets_str = ", ".join([p.name for p in potential_targets])
         action = self._get_decision(player, "werewolf_kill", {"potential_targets": targets_str})
         target_name = action.get("kill")
-        return self._find_player_by_name(target_name)
+        return self._find_player_by_name(target_name, potential_targets)
 
     def get_witch_save_decision(self, player: Player, target: Player) -> bool:
         poison_targets_str = ", ".join([p.name for p in self.game.players if p.is_alive and p != player])
@@ -553,58 +566,60 @@ class LLMController(Controller):
             "werewolf_target": target.name if target else "None",
             "poison_targets": poison_targets_str
         })
-        return self.last_witch_decision.get("save", False)
+        return bool(self.last_witch_decision.get("save", False))
 
     def get_witch_poison_target(self, player: Player, potential_targets: list[Player]) -> Player | None:
-        # The Witch's action (save and poison) is a two-part decision made in a single
-        # LLM call within `get_witch_save_decision`. The result is stored in
-        # `self.last_witch_decision`.
-        if self.last_witch_decision:
-            # If the AI decided to use the save potion, it cannot also use poison.
-            if self.last_witch_decision.get("save", False):
-                self.last_witch_decision = None # Consume the decision
-                return None
+        # The Witch's action (save and poison) may have been decided in `get_witch_save_decision`,
+        # or if `get_witch_save_decision` was skipped (e.g. no save potion left, or Witch was targeted,
+        # or no werewolf target), we query the LLM now for the poison decision.
+        decision = self.last_witch_decision
+        self.last_witch_decision = None
 
-            # If save was not used, check for a poison target.
-            target_name = self.last_witch_decision.get("poison")
-            self.last_witch_decision = None # Consume the decision
-            return self._find_player_by_name(target_name)
-        
-        # This path is taken if `get_witch_save_decision` was not called first, which
-        # indicates an issue in the game state flow.
-        return None
+        if decision is None:
+            poison_targets_str = ", ".join([p.name for p in potential_targets])
+            decision = self._get_decision(player, "witch_action", {
+                "werewolf_target": "None",
+                "poison_targets": poison_targets_str
+            })
+
+        if decision.get("save", False):
+            return None
+
+        target_name = decision.get("poison")
+        return self._find_player_by_name(target_name, potential_targets)
 
     def get_vote_for_sheriff(self, player: Player, potential_targets: list[Player]) -> Player | None:
         targets_str = ", ".join([p.name for p in potential_targets])
         action = self._get_decision(player, "vote_for_sheriff", {"potential_targets": targets_str})
         target_name = action.get("vote_for_sheriff")
-        return self._find_player_by_name(target_name)
+        return self._find_player_by_name(target_name, potential_targets)
 
     def get_join_election_decision(self, player: Player) -> bool:
         action = self._get_decision(player, "run_for_sheriff", {})
-        return action.get("run_for_sheriff", False)
+        return bool(action.get("run_for_sheriff", False))
 
     def get_seer_target(self, player: Player, potential_targets: list[Player]) -> Player | None:
         targets_str = ", ".join([p.name for p in potential_targets])
         action = self._get_decision(player, "seer_action", {"potential_targets": targets_str})
         target_name = action.get("check")
-        return self._find_player_by_name(target_name)
+        return self._find_player_by_name(target_name, potential_targets)
 
     def get_guard_protect(self, player: Player, potential_targets: list[Player]) -> Player | None:
         targets_str = ", ".join([p.name for p in potential_targets])
         action = self._get_decision(player, "guard_protect", {"potential_targets": targets_str})
         target_name = action.get("protect")
-        return self._find_player_by_name(target_name)
+        return self._find_player_by_name(target_name, potential_targets)
 
     def get_hunter_shoot_target(self, player: Player, potential_targets: list[Player]) -> Player | None:
         targets_str = ", ".join([p.name for p in potential_targets])
         action = self._get_decision(player, "hunter_shoot", {"potential_targets": targets_str})
         target_name = action.get("shoot")
-        return self._find_player_by_name(target_name)
+        return self._find_player_by_name(target_name, potential_targets)
 
     def get_speech_order_decision(self, player: Player) -> str:
         action = self._get_decision(player, "decide_speech_order", {})
-        return action.get("speech_order", "clockwise")
+        order = action.get("speech_order", "clockwise")
+        return order if order in ("clockwise", "counter_clockwise") else "clockwise"
 
     def get_sheriff_death_decision(self, player: Player, potential_targets: list[Player]) -> Player | None:
         targets_str = ", ".join([p.name for p in potential_targets])
@@ -612,7 +627,7 @@ class LLMController(Controller):
         target_name = action.get("pass_badge")
         if target_name == "destroy_badge":
             return None
-        return self._find_player_by_name(target_name)
+        return self._find_player_by_name(target_name, potential_targets)
 
     def summarize_history(self, player: Player, logs_to_summarize: list[LogEntry]):
         """Uses the LLM to summarize the events of the day for a player.

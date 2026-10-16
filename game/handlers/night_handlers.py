@@ -51,10 +51,10 @@ def handle_werewolf_target_selected(game, event):
 
 def handle_witch_turn_started(game, event):
     witch = next(
-        (p for p in game.players if p.role.name == "Witch" and p.is_alive), None
+        (p for p in game.players if p.role and p.role.name == "Witch" and p.is_alive), None
     )
     if witch:
-        if witch.role.has_antidote and game.night_kill_target:
+        if witch.role.has_save and game.night_kill_target:
             if witch.controller.get_witch_save_decision(witch, game.night_kill_target):
                 game.event_bus.publish(WitchSave(player=witch))
                 # Witch used save, so can't use poison in the same turn
@@ -75,9 +75,9 @@ def handle_witch_turn_started(game, event):
 
 
 def handle_witch_save(game, event):
-    if event.player.role.has_antidote and game.night_kill_target is not None:
+    if event.player.role.has_save and game.night_kill_target is not None:
         game.night_kill_target = None
-        event.player.role.has_antidote = False
+        event.player.role.has_save = False
 
 
 def handle_witch_poison(game, event):
@@ -87,10 +87,10 @@ def handle_witch_poison(game, event):
 
 
 def handle_seer_turn_started(game, event):
-    seer = next((p for p in game.players if p.role.name == "Seer" and p.is_alive), None)
+    seer = next((p for p in game.players if p.role and p.role.name == "Seer" and p.is_alive), None)
     if seer:
         alive_players = [p for p in game.players if p.is_alive and p != seer]
-        target = seer.controller.get_seer_check(seer, alive_players)
+        target = seer.controller.get_seer_target(seer, alive_players)
         game.event_bus.publish(SeerCheck(player=seer, target=target))
     else:
         game.event_bus.publish(NightEnd())
