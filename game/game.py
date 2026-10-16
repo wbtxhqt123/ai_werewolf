@@ -311,20 +311,29 @@ class Game:
         """
         Checks if a win condition has been met.
         Returns the winning team ('Villagers' or 'Werewolves') or None.
+        Werewolves win when their total voting power is >= the humans' total voting power.
         """
         living_players = [p for p in self.players if p.is_alive]
         living_werewolves = [
             p for p in living_players if isinstance(p.role, Werewolf)
         ]
+        living_villagers = [
+            p for p in living_players if not isinstance(p.role, Werewolf)
+        ]
 
-        num_living_players = len(living_players)
-        num_living_werewolves = len(living_werewolves)
-        num_living_villagers = num_living_players - num_living_werewolves
-
-        if num_living_werewolves == 0:
+        if len(living_werewolves) == 0:
             return "Villagers"
 
-        if num_living_werewolves >= num_living_villagers:
+        werewolf_votes = sum(1.5 if p.is_sheriff else 1.0 for p in living_werewolves)
+        villager_votes = sum(1.5 if p.is_sheriff else 1.0 for p in living_villagers)
+
+        # If a dead Sheriff has not yet passed or destroyed the badge, and passing it to a human
+        # would give humans more votes than werewolves, wait for SheriffDeathState to resolve first.
+        pending_sheriff_handoff = any((not p.is_alive) and p.is_sheriff for p in self.players)
+        if pending_sheriff_handoff and werewolf_votes < villager_votes + 0.5:
+            return None
+
+        if werewolf_votes >= villager_votes:
             return "Werewolves"
 
         return None

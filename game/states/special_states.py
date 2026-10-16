@@ -51,11 +51,12 @@ class LastWordsState(GameState):
 
 class ShootState(GameState):
     """State for a player with a shooting ability to use it upon death."""
-    def __init__(self, game: Game, shooter: Player, next_state_name: str, next_state_kwargs: dict):
+    def __init__(self, game: Game, shooter: Player, next_state_name: str, next_state_kwargs: dict, allow_last_words: bool = False):
         super().__init__(game)
         self.shooter = shooter
         self.next_state_name = next_state_name
         self.next_state_kwargs = next_state_kwargs
+        self.allow_last_words = allow_last_words or (shooter.death_reason == "execution") or (game.day == 1)
         self.target = None
 
     @state_handler
@@ -86,19 +87,23 @@ class ShootState(GameState):
 
         next_state_name = self.next_state_name
         next_state_kwargs = self.next_state_kwargs
-        
-        # Handle chained shootings
+
+        # 3. The shot target gets to leave last words (placed before earlier deaths' last words so order is c -> b -> a).
+        if self.target and self.allow_last_words:
+            next_state_name, next_state_kwargs = "last_words", {"player": self.target, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
+
+        # 2. If the shot target was the Sheriff, trigger the badge-passing state before their last words.
+        if self.target and self.target.is_sheriff:
+            next_state_name, next_state_kwargs = "sheriff_death", {"sheriff": self.target, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
+
+        # 1. Handle chained shootings first (so everyone shoots before leaving last words).
         if self.game.shoot_triggers:
             next_shooter = self.game.shoot_triggers.pop(0)
-            next_state_name, next_state_kwargs = "shoot", {"shooter": next_shooter, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
-        
-        # The shot target gets to leave last words under specific conditions.
-        if self.target:
-            if self.shooter.death_reason == "execution" or self.game.day == 1:
-                next_state_name, next_state_kwargs = "last_words", {"player": self.target, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
-        
-        # If the shot target was the Sheriff, trigger the badge-passing state.
-        if self.target and self.target.is_sheriff:
-             next_state_name, next_state_kwargs = "sheriff_death", {"sheriff": self.target, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
+            next_state_name, next_state_kwargs = "shoot", {
+                "shooter": next_shooter,
+                "next_state_name": next_state_name,
+                "next_state_kwargs": next_state_kwargs,
+                "allow_last_words": self.allow_last_words,
+            }
 
         return next_state_name, next_state_kwargs

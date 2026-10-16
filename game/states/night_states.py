@@ -186,9 +186,9 @@ class WitchNightState(GameState):
 
         # --- Save Action ---
         target = self.game.night_kill_target
-        if target:
-            self.game.log(LogEntry(log_type=LogType.ACTION, message={"en": f"This player was targeted by the werewolves: {target.name}.", "zh": f"今晚 {target.name} 被狼人袭击了。"}, visible_to_roles=["Witch"], camps=["Villagers"]))
-            if witch_role.has_save:
+        if witch_role.has_save:
+            if target:
+                self.game.log(LogEntry(log_type=LogType.ACTION, message={"en": f"This player was targeted by the werewolves: {target.name}.", "zh": f"今晚 {target.name} 被狼人袭击了。"}, visible_to_roles=["Witch"], camps=["Villagers"]))
                 # Witch cannot save herself
                 if target == witch_player:
                     self.game.log(LogEntry(log_type=LogType.ACTION, message={"en": "You cannot save yourself.", "zh": "你不能自救。"}, visible_to_roles=["Witch"], camps=["Villagers"]))
@@ -199,9 +199,9 @@ class WitchNightState(GameState):
                     self.game.event_bus.publish(WitchSave(player=witch_player))
                     self.game.log(LogEntry(log_type=LogType.WITCH_ACTION, message={"en": f"You have saved {target.name}.", "zh": f"你使用解药救了 {target.name}。"}, source=witch_player, target=target, data={"action": "save"}, visible_to_roles=["Witch"], camps=["Villagers"]))
             else:
-                self.game.log(LogEntry(log_type=LogType.ACTION, message={"en": "You have no save potion left.", "zh": "你没有解药了。"}, visible_to_roles=["Witch"], camps=["Villagers"]))
+                self.game.log(LogEntry(log_type=LogType.ACTION, message={"en": "No one was targeted by the werewolves tonight.", "zh": "今晚平安夜。"}, visible_to_roles=["Witch"], camps=["Villagers"]))
         else:
-            self.game.log(LogEntry(log_type=LogType.ACTION, message={"en": "No one was targeted by the werewolves tonight.", "zh": "今晚平安夜。"}, visible_to_roles=["Witch"], camps=["Villagers"]))
+            self.game.log(LogEntry(log_type=LogType.ACTION, message={"en": "You have no save potion left.", "zh": "你没有解药了。"}, visible_to_roles=["Witch"], camps=["Villagers"]))
 
         # --- Poison Action (only if save was not used) ---
         if not used_save:

@@ -28,14 +28,10 @@ class DayStartState(GameState):
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "A new day begins.", "zh": "天亮了。"}, camps=["All"]))
 
     def transition(self):
-        winner = self.game.check_win_condition()
-        if winner:
-            return "game_over", {"winner": winner}
+        if self.game.day == 1:
+            return "sheriff_election", {}
         else:
-            if self.game.day == 1:
-                return "sheriff_election", {}
-            else:
-                return "day_announcement", {}
+            return "day_announcement", {}
 
 
 class DayAnnouncementState(GameState):
@@ -53,7 +49,8 @@ class DayAnnouncementState(GameState):
         # This state is now primarily for setting up the consequences of night deaths.
         # The actual death announcements have been moved to NightEndState.
         if self.game.killed_this_night:
-            for player in self.game.killed_this_night:
+            sorted_killed = sorted(list(self.game.killed_this_night), key=lambda p: self.game.players.index(p))
+            for player in sorted_killed:
                 player.is_alive = False
                 self.game.log(LogEntry(log_type=LogType.PLAYER_ELIMINATED, message={"en": f"Last night, {player.name} was eliminated.", "zh": f"昨晚，{player.name} 死亡。"}, target=player, camps=["All"]))
                 # Record to historical log
@@ -84,29 +81,34 @@ class DayAnnouncementState(GameState):
         # preceding states (like last words, shooting, or badge passing) are inserted before it.
 
         # 3. Last Words: If players died on the first night, they get to speak.
+        # Built so that if multiple died or chained shots occur, last words happen in reverse death order (c -> b -> a).
         if self.game.day == 1 and self.game.killed_this_night:
             sorted_dead = sorted(list(self.game.killed_this_night), key=lambda p: self.game.players.index(p))
-            for player in reversed(sorted_dead):
+            for player in sorted_dead:
                 next_state_name, next_state_kwargs = "last_words", {"player": player, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
 
-        # 2. Shooting: If a Hunter or Black Werewolf King died, their shooting action is triggered.
+        # 2. Sheriff Death: If the Sheriff died, the badge must be passed or destroyed before last words.
+        sheriff_died = any(p.is_sheriff for p in self.game.killed_this_night)
+        if sheriff_died:
+            next_state_name, next_state_kwargs = "sheriff_death", {"sheriff": self.game.sheriff, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
+
+        # 1. Shooting: If a Hunter or Black Werewolf King died, their shooting action is triggered first.
         if self.game.shoot_triggers:
             sorted_shooters = sorted(self.game.shoot_triggers, key=lambda p: self.game.players.index(p))
+            self.game.shoot_triggers = []
             for shooter in reversed(sorted_shooters):
-                next_state_name, next_state_kwargs = "shoot", {"shooter": shooter, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
+                next_state_name, next_state_kwargs = "shoot", {
+                    "shooter": shooter,
+                    "next_state_name": next_state_name,
+                    "next_state_kwargs": next_state_kwargs,
+                    "allow_last_words": (self.game.day == 1),
+                }
         
-        # 1. Cleanup: Reset all night-related variables for the next cycle.
+        # Cleanup: Reset all night-related variables for the next cycle.
         self.game.night_kill_target = None
         self.game.saved_this_night = None
         self.game.protected_this_night = None
         self.game.night_poison_target = None
-
-        # Sheriff Death: If the Sheriff died, the badge must be passed or destroyed.
-        sheriff_died = any(p.is_sheriff for p in self.game.killed_this_night)
-        
-        if sheriff_died:
-            # This state is inserted at the beginning of the chain.
-            next_state_name, next_state_kwargs = "sheriff_death", {"sheriff": self.game.sheriff, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
 
         return next_state_name, next_state_kwargs
 
@@ -217,6 +219,8 @@ class VoteState(GameState):
             self.game.player_to_execute = player_to_execute
         else:
             self.game.tied_players = players_with_max_votes
+            for p in players_with_max_votes:
+                p.is_tie = True
             self.game.tie_context = "execution"
             self.game.log(LogEntry(
                 log_type=LogType.VOTE_RESULT,
@@ -270,16 +274,23 @@ class ExecutionState(GameState):
         next_state_name = "day_end"
         next_state_kwargs = {}
 
-        if self.game.shoot_triggers:
-            next_shooter = self.game.shoot_triggers.pop(0)
-            next_state_name, next_state_kwargs = "shoot", {"shooter": next_shooter, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
-        
-        # Check if executed player was Sheriff
-        if player and player.is_sheriff:
-             next_state_name, next_state_kwargs = "sheriff_death", {"sheriff": player, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
-
+        # 3. Last words are placed at the end of the chain so all shootings happen first (c -> b -> a).
         if player:
             next_state_name, next_state_kwargs = "last_words", {"player": player, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
+
+        # 2. Check if executed player was Sheriff
+        if player and player.is_sheriff:
+            next_state_name, next_state_kwargs = "sheriff_death", {"sheriff": player, "next_state_name": next_state_name, "next_state_kwargs": next_state_kwargs}
+
+        # 1. Shooting triggers run first before leaving last words
+        if self.game.shoot_triggers:
+            next_shooter = self.game.shoot_triggers.pop(0)
+            next_state_name, next_state_kwargs = "shoot", {
+                "shooter": next_shooter,
+                "next_state_name": next_state_name,
+                "next_state_kwargs": next_state_kwargs,
+                "allow_last_words": True,
+            }
 
         return next_state_name, next_state_kwargs
 
@@ -372,7 +383,7 @@ class TieVoteState(GameState):
 
         if not voters:
             self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "No one is eligible to vote.", "zh": "没有玩家有资格投票。"}, camps=["All"]))
-            self.game.tied_players = []
+            self._clear_tie_flags()
             return
 
         votes: dict[Player, float] = {p: 0 for p in candidates}
@@ -427,7 +438,7 @@ class TieVoteState(GameState):
             ))
             self.game.record_vote("Tie Breaker", raw_votes, "Tie")
             self.game.player_to_execute = None
-            self.game.tied_players = []
+            self._clear_tie_flags()
             return
 
         max_votes = 0.0
@@ -477,10 +488,14 @@ class TieVoteState(GameState):
             self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "There was another tie. No one will be elected or executed.", "zh": "再次平票。无人当选或被放逐。"}, camps=["All"]))
             self.game.player_to_execute = None
         
+        self._clear_tie_flags()
+
+    def _clear_tie_flags(self):
         # Clear tie and sheriff candidate status
         if self.game.tie_context == "sheriff":
             for p in self.game.players:
                 p.is_sheriff_candidate = False
+            self.game.election_players = []
 
         for p in self.game.players:
             if p.is_tie:

@@ -244,6 +244,89 @@ class TestGameRules(unittest.TestCase):
         self.assertEqual(len(published_events), 1)
         self.assertTrue(published_events[0].is_werewolf)
 
+    # --- 6. Voting-Power Win Condition, Witch Save Visibility, and Reverse Last Words ---
+
+    def test_win_condition_human_sheriff_prevents_equal_count_werewolf_win(self):
+        # 2 werewolves alive (p7, p8: 2.0 votes) vs 2 humans alive (p1, p2)
+        self.p3.is_alive = False
+        self.p4.is_alive = False
+        self.p5.is_alive = False
+        self.p6.is_alive = False
+
+        # When p1 (human) is Sheriff, humans have 2.5 votes vs werewolves' 2.0 votes -> game continues
+        self.p1.is_sheriff = True
+        self.game.sheriff = self.p1
+        self.assertIsNone(self.game.check_win_condition())
+
+        # If Sheriff badge is destroyed, humans have 2.0 votes vs werewolves' 2.0 votes -> Werewolves win
+        self.p1.is_sheriff = False
+        self.game.sheriff = None
+        self.assertEqual(self.game.check_win_condition(), "Werewolves")
+
+    def test_witch_cannot_see_werewolf_target_when_save_potion_used(self):
+        from game.states.night_states import WitchNightState
+        from game.log import LogType
+
+        self.p4.role.has_save = False  # Save potion already used on an earlier night
+        self.game.night_kill_target = self.p1
+        self.game.game_log.clear()
+
+        state = WitchNightState(self.game)
+        state.handle()
+
+        witch_logs = [
+            e.get_text("en")
+            for e in self.game.game_log
+            if e.visible_to_roles and "Witch" in e.visible_to_roles
+        ]
+        self.assertFalse(any("targeted by the werewolves" in msg for msg in witch_logs))
+        self.assertTrue(any("no save potion left" in msg for msg in witch_logs))
+
+    def test_chained_shots_and_reverse_last_words_order(self):
+        from game.states.day_states import ExecutionState
+        from game.log import LogType
+
+        # Execution chain: p3 (Hunter) is executed -> shoots p8 (Black Werewolf King) -> shoots p1 (Villager)
+        # Keep enough humans alive so win condition does not end the chain early
+        self.game.player_to_execute = self.p3
+        self.p3.controller.actions["shoot_target"] = self.p8
+        self.p8.controller.actions["shoot_target"] = self.p1
+
+        self.game.game_log.clear()
+        self.game.set_state("execution")
+        while self.game.state:
+            self.game.state.handle()
+            next_name, next_kwargs = self.game.state.transition()
+            if next_name and next_name != "day_end":
+                self.game.set_state(next_name, **(next_kwargs or {}))
+            else:
+                break
+
+        events_order = []
+        for entry in self.game.game_log:
+            if entry.log_type in (LogType.HUNTER_SHOOT, LogType.BLACKWEREWOLFKING_SHOOT):
+                events_order.append(f"shoot:{entry.source.name}->{entry.target.name}")
+            elif entry.log_type == LogType.SPEECH and "last words):" in entry.get_text("en"):
+                events_order.append(f"last_words:{entry.source.name}")
+
+        self.assertEqual(
+            events_order,
+            [
+                "shoot:P3_Hunter->P8_King",
+                "shoot:P8_King->P1_Villager",
+                "last_words:P1_Villager",
+                "last_words:P8_King",
+                "last_words:P3_Hunter",
+            ],
+        )
+
+    def test_simulation_rule_oracle_suite(self):
+        from simulation.simulation import run_single_simulation
+
+        for sim_id in range(1, 22):
+            result = run_single_simulation(sim_id)
+            self.assertIn(result["winner"], ("Villagers", "Werewolves"))
+
 
 if __name__ == "__main__":
     unittest.main()

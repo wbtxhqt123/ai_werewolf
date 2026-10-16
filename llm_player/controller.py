@@ -406,7 +406,7 @@ class LLMController(Controller):
         if isinstance(player.role, Witch):
             role_info = (f"- You have {'a save potion' if player.role.has_save else 'no save potion'} left.\n"
                          f"- You have {'a poison potion' if player.role.has_poison else 'no poison potion'} left.")
-            if self.game.state.__class__.__name__ == "WitchNightState" and self.game.night_kill_target:
+            if player.role.has_save and self.game.state.__class__.__name__ == "WitchNightState" and self.game.night_kill_target:
                  role_info += f"\n- Tonight, the werewolves targeted: {self.game.night_kill_target.name}."
         elif isinstance(player.role, Werewolf):
             werewolf_team = [p.name for p in self.game.players if p.is_alive and isinstance(p.role, Werewolf)]
@@ -561,7 +561,7 @@ class LLMController(Controller):
         return self._find_player_by_name(target_name, potential_targets)
 
     def get_witch_save_decision(self, player: Player, target: Player) -> bool:
-        poison_targets_str = ", ".join([p.name for p in self.game.players if p.is_alive and p != player])
+        poison_targets_str = ", ".join([p.name for p in self.game.players if p.is_alive])
         self.last_witch_decision = self._get_decision(player, "witch_action", {
             "werewolf_target": target.name if target else "None",
             "poison_targets": poison_targets_str

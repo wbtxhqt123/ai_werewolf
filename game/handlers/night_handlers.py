@@ -89,7 +89,7 @@ def handle_witch_poison(game, event):
 def handle_seer_turn_started(game, event):
     seer = next((p for p in game.players if p.role and p.role.name == "Seer" and p.is_alive), None)
     if seer:
-        alive_players = [p for p in game.players if p.is_alive and p != seer]
+        alive_players = [p for p in game.players if p.is_alive]
         target = seer.controller.get_seer_target(seer, alive_players)
         game.event_bus.publish(SeerCheck(player=seer, target=target))
     else:

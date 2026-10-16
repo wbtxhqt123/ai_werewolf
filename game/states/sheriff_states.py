@@ -98,6 +98,8 @@ class SheriffVoteState(GameState):
 
         if not voters:
             self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "No one is eligible to vote.", "zh": "没有玩家有资格投票。"}, camps=["All"]))
+            for p in self.game.players:
+                p.is_sheriff_candidate = False
             self.game.election_players = [] # Clear candidates
             return
 
@@ -294,4 +296,7 @@ class SheriffDeathState(GameState):
             self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": f"{self.sheriff.name} destroyed the badge. There is no Sheriff.", "zh": f"{self.sheriff.name} 撕毁了警徽。本局游戏不再有警长。"}, source=self.sheriff, camps=["All"]))
 
     def transition(self):
+        winner = self.game.check_win_condition()
+        if winner:
+            return "game_over", {"winner": winner}
         return self.next_state_name, self.next_state_kwargs
