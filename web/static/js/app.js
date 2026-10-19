@@ -552,7 +552,7 @@ function init() {
             document.querySelectorAll('.message.debug').forEach(el => {
                 el.classList.toggle('visible', debugVisible);
             });
-            gameUI.debugBtn.style.opacity = debugVisible ? '1' : '0.5';
+            gameUI.debugBtn.classList.toggle('active', debugVisible);
         });
     }
 
@@ -1161,6 +1161,10 @@ function updateLanguage() {
     if (typeof BGMManager !== 'undefined') {
         BGMManager.updateButtonsUI();
     }
+
+    if (gameState.players && gameState.players.length > 0) {
+        updatePlayers(gameState.players);
+    }
 }
 
 /**
@@ -1392,6 +1396,7 @@ async function pollGameState() {
         }
 
         if (data.players) {
+            gameState.players = data.players;
             updatePlayers(data.players, justDied);
             
             const myPlayer = data.players.find(p => p.name === 'Player 1');
@@ -1701,6 +1706,8 @@ function getLogClass(log) {
 
 /**
  * Updates the player display based on the latest data from the server.
+ * Preserves existing DOM nodes across polls so active speech bubbles, thinking indicators,
+ * and hover animations do not flicker or reset every second.
  * @param {Array<object>} playersData - A list of player objects.
  * @param {Set<string>} justDied - A set of player names who were eliminated in the last update.
  */
@@ -1711,25 +1718,63 @@ function updatePlayers(playersData, justDied = new Set()) {
         return numA - numB;
     });
 
-    if (gameUI.playersLeft) gameUI.playersLeft.innerHTML = '';
-    if (gameUI.playersRight) gameUI.playersRight.innerHTML = '';
-    
     const totalPlayers = playersData.length;
+    const alivePlayers = playersData.filter(p => p.is_alive).length;
+    const aliveCounterEl = document.getElementById('alive-counter-pill');
+    if (aliveCounterEl && totalPlayers > 0) {
+        const label = gameState.lang === 'zh' ? '存活' : 'Alive';
+        aliveCounterEl.innerText = `👥 ${label} ${alivePlayers} / ${totalPlayers}`;
+    }
+
     const midPoint = Math.ceil(totalPlayers / 2);
+    const existingCards = document.querySelectorAll('.player-card');
+    const needsRebuild = existingCards.length !== totalPlayers;
+
+    if (needsRebuild) {
+        if (gameUI.playersLeft) gameUI.playersLeft.innerHTML = '';
+        if (gameUI.playersRight) gameUI.playersRight.innerHTML = '';
+    }
+
+    const statusTexts = I18N[gameState.lang]?.statusLabels || {
+        me: "ME",
+        sheriff: "SHERIFF",
+        candidate: "CANDIDATE",
+        tie: "TIE PK",
+        dead: "DEAD"
+    };
 
     playersData.forEach((p, index) => {
-        const template = document.getElementById('player-card-template');
-        const clone = template.content.cloneNode(true);
-        const card = clone.querySelector('.player-card');
-        
-        card.dataset.name = p.name;
-        
-        if (p.name === 'Player 1') {
-            card.querySelector('.player-avatar').innerText = gameState.myAvatar;
-        } else {
-            card.querySelector('.player-avatar').innerText = getAvatar(p.name);
+        let card = !needsRebuild
+            ? Array.from(existingCards).find(c => c.dataset.name === p.name)
+            : null;
+
+        if (!card) {
+            const template = document.getElementById('player-card-template');
+            const clone = template.content.cloneNode(true);
+            card = clone.querySelector('.player-card');
+            card.dataset.name = p.name;
+            card.onclick = () => handlePlayerClick(p.name);
+
+            if (gameUI.playersLeft && gameUI.playersRight) {
+                if (index < midPoint) {
+                    gameUI.playersLeft.appendChild(card);
+                } else {
+                    gameUI.playersRight.appendChild(card);
+                }
+            }
         }
-        
+
+        const avatarEl = card.querySelector('.player-avatar');
+        const expectedAvatar = p.name === 'Player 1' ? gameState.myAvatar : getAvatar(p.name);
+        if (avatarEl && avatarEl.innerText !== expectedAvatar) {
+            avatarEl.innerText = expectedAvatar;
+        }
+
+        const deadLabel = card.querySelector('.player-dead-label');
+        if (deadLabel) {
+            deadLabel.innerText = statusTexts.dead;
+        }
+
         if (!p.is_alive) {
             if (!justDied.has(p.name)) {
                 card.classList.add('dead');
@@ -1738,16 +1783,7 @@ function updatePlayers(playersData, justDied = new Set()) {
             card.classList.remove('dead');
         }
 
-        const statusTexts = I18N[gameState.lang]?.statusLabels || {
-            me: "ME",
-            sheriff: "SHERIFF",
-            candidate: "CANDIDATE",
-            tie: "TIE PK",
-            dead: "DEAD"
-        };
-
         const isSheriffAlive = Boolean(p.is_sheriff && p.is_alive);
-
         const hideOtherCandidates = isUserDecidingBlindAction() && p.name !== 'Player 1';
         const isCandidateActive = Boolean(p.is_sheriff_candidate && !hideOtherCandidates);
 
@@ -1768,39 +1804,41 @@ function updatePlayers(playersData, justDied = new Set()) {
                 }
             }
 
-            if (isSheriffAlive) {
-                card.classList.add('sheriff');
-            } else {
-                card.classList.remove('sheriff');
-            }
-            if (isCandidateActive) {
-                card.classList.add('sheriff-candidate');
-            } else {
-                card.classList.remove('sheriff-candidate');
-            }
-            if (p.is_tie) card.classList.add('tie');
+            card.classList.toggle('sheriff', isSheriffAlive);
+            card.classList.toggle('sheriff-candidate', isCandidateActive);
+            card.classList.toggle('tie', Boolean(p.is_tie));
         } else {
             const num = p.name.replace('Player ', '');
             card.querySelector('.player-name').innerText = num;
 
+            const tieLabel = card.querySelector('.player-tie-label');
             if (p.is_tie) {
                 card.classList.add('tie');
-                const tieLabel = card.querySelector('.player-tie-label');
                 if (tieLabel) {
                     tieLabel.innerText = `⚔️ ${statusTexts.tie}`;
                     tieLabel.style.display = 'block';
                 }
+            } else {
+                card.classList.remove('tie');
+                if (tieLabel) {
+                    tieLabel.style.display = 'none';
+                }
             }
+
+            const sheriffLabel = card.querySelector('.player-sheriff-label');
             if (isSheriffAlive) {
                 card.classList.add('sheriff');
-                const sheriffLabel = card.querySelector('.player-sheriff-label');
                 if (sheriffLabel) {
                     sheriffLabel.innerText = `👮 ${statusTexts.sheriff}`;
                     sheriffLabel.style.display = 'block';
                 }
             } else {
                 card.classList.remove('sheriff');
+                if (sheriffLabel) {
+                    sheriffLabel.style.display = 'none';
+                }
             }
+
             const candidateLabel = card.querySelector('.player-candidate-label');
             if (isCandidateActive) {
                 card.classList.add('sheriff-candidate');
@@ -1825,16 +1863,6 @@ function updatePlayers(playersData, justDied = new Set()) {
                 statusIcons.innerText = '';
             }
         }
-
-        card.onclick = () => handlePlayerClick(p.name);
-
-        if (gameUI.playersLeft && gameUI.playersRight) {
-            if (index < midPoint) {
-                gameUI.playersLeft.appendChild(card);
-            } else {
-                gameUI.playersRight.appendChild(card);
-            }
-        }
     });
 
     if (gameState.pendingAction && (gameState.pendingAction.type === 'vote' || gameState.pendingAction.type === 'choice')) {
@@ -1849,6 +1877,8 @@ const ALL_TARGET_CLASSES = [
     'non-target',
     'target-werewolf',
     'target-witch',
+    'target-witch-poison',
+    'target-witch-save',
     'target-seer',
     'target-guard',
     'target-hunter',
@@ -1859,7 +1889,7 @@ const ALL_TARGET_CLASSES = [
 
 /**
  * Determines the role or action targeting class based on current pending action.
- * @returns {string} The CSS class for targeting e.g. 'target-werewolf', 'target-witch', etc.
+ * @returns {string} The CSS class for targeting e.g. 'target-werewolf', 'target-witch-poison', etc.
  */
 function getTargetContextClass() {
     if (!gameState.pendingAction) return 'target-default';
@@ -1883,7 +1913,10 @@ function getTargetContextClass() {
     if (role === 'Werewolf' || role === 'Black Werewolf King') {
         return 'target-werewolf';
     } else if (role === 'Witch') {
-        return 'target-witch';
+        if (promptStr.includes('save') || promptStr.includes('救') || promptStr.includes('解药')) {
+            return 'target-witch-save';
+        }
+        return 'target-witch-poison';
     } else if (role === 'Seer') {
         return 'target-seer';
     } else if (role === 'Guard') {
@@ -1897,6 +1930,7 @@ function getTargetContextClass() {
 
 /**
  * Updates player card visuals to indicate which players can be targeted.
+ * Avoids stripping/re-adding identical classes so sticker entrance animations don't replay on every poll tick.
  * @param {Array<string>} targetPlayerNames - Array of selectable player names e.g. ['Player 2', 'Player 3']
  */
 function updatePlayerSelectableState(targetPlayerNames = []) {
@@ -1905,15 +1939,19 @@ function updatePlayerSelectableState(targetPlayerNames = []) {
 
     cards.forEach(card => {
         const name = card.dataset.name;
-        // Clean up any existing target classes
-        ALL_TARGET_CLASSES.forEach(cls => card.classList.remove(cls));
 
         if (targetPlayerNames.length === 0) {
-            // No targets active
+            ALL_TARGET_CLASSES.forEach(cls => card.classList.remove(cls));
         } else if (targetPlayerNames.includes(name)) {
-            card.classList.add('selectable-target', targetClass);
+            if (!card.classList.contains('selectable-target') || !card.classList.contains(targetClass)) {
+                ALL_TARGET_CLASSES.forEach(cls => card.classList.remove(cls));
+                card.classList.add('selectable-target', targetClass);
+            }
         } else {
-            card.classList.add('non-target');
+            if (!card.classList.contains('non-target')) {
+                ALL_TARGET_CLASSES.forEach(cls => card.classList.remove(cls));
+                card.classList.add('non-target');
+            }
         }
     });
 }
@@ -2458,13 +2496,17 @@ function showSpeechBubble(playerName, text) {
     const card = Array.from(document.querySelectorAll('.player-card')).find(c => c.dataset.name === playerName);
     if (card) {
         const bubble = card.querySelector('.player-speech-bubble');
-        bubble.innerText = text.length > 20 ? text.substring(0, 17) + '...' : text;
+        bubble.innerText = text.length > 22 ? text.substring(0, 19) + '...' : text;
         bubble.classList.add('visible');
         card.classList.add('speaking');
-        
-        setTimeout(() => {
+
+        if (card._speechTimeout) {
+            clearTimeout(card._speechTimeout);
+        }
+        card._speechTimeout = setTimeout(() => {
             bubble.classList.remove('visible');
             card.classList.remove('speaking');
+            card._speechTimeout = null;
         }, 4000);
     }
 }

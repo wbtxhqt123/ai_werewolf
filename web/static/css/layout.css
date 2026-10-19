@@ -228,13 +228,13 @@ body.night-mode .stars {
 }
 
 .side-column {
-    width: 120px;
+    width: 126px;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: clamp(4px, 1vh, 10px);
+    gap: clamp(5px, 1vh, 10px);
     padding: 5px;
-    z-index: 50;
+    z-index: 105;
 }
 
 .center-area {

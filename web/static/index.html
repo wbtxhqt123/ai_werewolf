@@ -7,12 +7,12 @@
     <link rel="preconnect" href="https://fonts.loli.net">
     <link rel="preconnect" href="https://gstatic.loli.net" crossorigin>
     <link href="https://fonts.loli.net/css2?family=Cinzel:wght@600;700;800;900&family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/base.css?v=9">
-    <link rel="stylesheet" href="/static/css/layout.css?v=13">
-    <link rel="stylesheet" href="/static/css/components.css?v=10">
-    <link rel="stylesheet" href="/static/css/setup.css?v=9">
-    <link rel="stylesheet" href="/static/css/game.css?v=13">
-    <link rel="stylesheet" href="/static/css/modals.css?v=9">
+    <link rel="stylesheet" href="/static/css/base.css?v=10">
+    <link rel="stylesheet" href="/static/css/layout.css?v=14">
+    <link rel="stylesheet" href="/static/css/components.css?v=11">
+    <link rel="stylesheet" href="/static/css/setup.css?v=10">
+    <link rel="stylesheet" href="/static/css/game.css?v=14">
+    <link rel="stylesheet" href="/static/css/modals.css?v=10">
 </head>
 <body>
     <div id="app">
@@ -131,14 +131,15 @@
             <header class="game-header">
                 <div class="header-left">
                     <div class="phase-indicator" id="phase-indicator">Day 1</div>
+                    <div class="alive-counter-pill" id="alive-counter-pill">👥 9 / 9</div>
                 </div>
                 <div class="header-right">
                     <button id="audio-toggle-btn" class="icon-btn header-pill-btn" title="Toggle Music" aria-label="Toggle Music">🎵 <span class="audio-label">音乐</span></button>
                     <button id="records-btn" class="icon-btn header-pill-btn" title="Game Records" aria-label="Game Records">📖 记录</button>
                     <button id="game-lang-btn" class="icon-btn header-pill-btn" title="Toggle Language" aria-label="Toggle Language">中文/EN</button>
-                    <button id="toggle-debug-btn" title="Toggle Debug Logs" aria-label="Toggle Debug Logs">🐞</button>
+                    <button id="toggle-debug-btn" class="icon-btn" title="Toggle Debug Logs" aria-label="Toggle Debug Logs">🐞</button>
                     <button id="game-settings-btn" class="icon-btn" title="Settings" aria-label="Settings">⚙️</button>
-                    <button id="quit-btn" class="icon-btn" aria-label="Quit Game">✕</button>
+                    <button id="quit-btn" class="icon-btn quit-pill" aria-label="Quit Game">✕</button>
                 </div>
             </header>
 
@@ -292,6 +293,6 @@
         </div>
     </template>
 
-    <script src="/static/js/app.js?v=17"></script>
+    <script src="/static/js/app.js?v=18"></script>
 </body>
 </html>

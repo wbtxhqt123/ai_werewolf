@@ -25,40 +25,52 @@
     --border-radius-md: 15px;
     --border-radius-sm: 10px;
     
-    --shadow-pop: 4px 4px 0px rgba(0,0,0,0.2);
-    --shadow-soft: 0 10px 20px rgba(0,0,0,0.1);
+    /* Unified Comic Ink Shadow Tiers */
+    --ink-color: #2d3436;
+    --shadow-ink-sm: 2px 2px 0px var(--ink-color);
+    --shadow-ink-md: 4px 4px 0px var(--ink-color);
+    --shadow-ink-lg: 6px 6px 0px var(--ink-color);
+    --shadow-pop: 4px 4px 0px var(--ink-color);
+    --shadow-soft: 0 10px 20px rgba(0,0,0,0.12);
     
-    --border-thick: 3px solid #2d3436;
+    --border-thick: 3px solid var(--ink-color);
     --status-me-color: #00bfff;
     --status-sheriff-color: #ffd700;
     --status-candidate-color: #ffa600;
-    --status-tie-color: #ff0000;
+    --status-tie-color: #ff4757;
 
-    /* Theme Tokens - Day Mode Default */
-    --panel-bg: rgba(255, 255, 255, 0.85);
-    --panel-header-bg: rgba(255, 255, 255, 0.95);
+    /* Theme Tokens - Day Mode Default (Storybook Cream & Crisp Ink) */
+    --panel-bg: rgba(255, 253, 247, 0.86);
+    --panel-header-bg: rgba(255, 253, 245, 0.95);
     --panel-border: #2d3436;
     --text-primary: #2d3436;
     --text-muted: #636e72;
     --chat-bubble-ai-bg: #ffffff;
     --chat-bubble-ai-text: #2d3436;
     --chat-bubble-user-bg: var(--accent-secondary);
-    --chat-bubble-user-text: #ffffff;
-    --chat-bubble-system-bg: #dfe6e9;
-    --chat-bubble-system-text: #636e72;
-    --chat-bubble-system-border: #b2bec3;
-    --controls-bg: #ffffff;
+    --chat-bubble-user-text: #2d3436;
+    --chat-bubble-system-bg: #fff8dc;
+    --chat-bubble-system-text: #5c4b18;
+    --chat-bubble-system-border: #d4b146;
+    --controls-bg: #fffdf7;
     --input-box-bg: #ffffff;
     --input-text: #2d3436;
-    --input-placeholder: #a4b0be;
-    --my-info-bg: #f1f2f6;
-    --player-card-bg: rgba(255, 255, 255, 0.15);
-    --player-card-border: rgba(255, 255, 255, 0.25);
+    --input-placeholder: #95a5a6;
+    --my-info-bg: #fff9db;
+    --player-card-bg: rgba(255, 253, 245, 0.85);
+    --player-card-border: #2d3436;
     --player-avatar-bg: #ffffff;
     --player-name-bg: #ffffff;
     --player-name-text: #2d3436;
     --phase-badge-bg: var(--accent-yellow);
     --phase-badge-text: #2d3436;
+
+    /* Theme-Aware Modal Tokens - Day Mode */
+    --modal-bg: #fffdf7;
+    --modal-surface: #ffffff;
+    --modal-subtle: #f4f1ea;
+    --modal-border-subtle: #dcd6c8;
+    --modal-identity-bg: #fff9db;
 }
 
 * {
@@ -81,28 +93,36 @@ body.night-mode {
     color: #f1f2f6;
 
     /* Theme Tokens - Night Mode */
-    --panel-bg: rgba(18, 26, 43, 0.9);
+    --ink-color: #090d16;
+    --panel-bg: rgba(18, 26, 43, 0.88);
     --panel-header-bg: rgba(15, 23, 42, 0.95);
     --panel-border: #3b4d66;
     --text-primary: #f5f6fa;
-    --text-muted: #95afc0;
+    --text-muted: #94a3b8;
     --chat-bubble-ai-bg: #1e293b;
     --chat-bubble-ai-text: #f1f2f6;
-    --chat-bubble-user-bg: #0984e3;
+    --chat-bubble-user-bg: #00b894;
     --chat-bubble-user-text: #ffffff;
-    --chat-bubble-system-bg: rgba(30, 41, 59, 0.75);
-    --chat-bubble-system-text: #94a3b8;
+    --chat-bubble-system-bg: rgba(30, 41, 59, 0.85);
+    --chat-bubble-system-text: #cbd5e1;
     --chat-bubble-system-border: #475569;
     --controls-bg: #0f172a;
     --input-box-bg: #1e293b;
     --input-text: #f1f2f6;
     --input-placeholder: #64748b;
     --my-info-bg: #1e293b;
-    --player-card-bg: rgba(15, 23, 42, 0.7);
-    --player-card-border: rgba(100, 116, 139, 0.45);
+    --player-card-bg: rgba(22, 32, 52, 0.88);
+    --player-card-border: #3b4d66;
     --player-avatar-bg: #1e293b;
     --player-name-bg: #0f172a;
     --player-name-text: #f1f2f6;
     --phase-badge-bg: #6c5ce7;
     --phase-badge-text: #ffffff;
+
+    /* Theme-Aware Modal Tokens - Night Mode */
+    --modal-bg: #131c2e;
+    --modal-surface: #1e293b;
+    --modal-subtle: #0f172a;
+    --modal-border-subtle: #334155;
+    --modal-identity-bg: #262338;
 }

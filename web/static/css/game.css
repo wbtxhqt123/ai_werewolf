@@ -11,16 +11,37 @@
     transition: background-color 0.5s ease, border-color 0.5s ease;
 }
 
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .phase-indicator {
     font-weight: 900;
-    padding: 8px 20px;
+    padding: 7px 18px;
     background: var(--phase-badge-bg);
     color: var(--phase-badge-text);
-    border: 2px solid var(--panel-border);
-    border-radius: 20px;
-    box-shadow: 3px 3px 0px rgba(0,0,0,0.15);
-    font-size: 1.1rem;
+    border: 2.5px solid var(--panel-border);
+    border-radius: 999px;
+    box-shadow: var(--shadow-ink-sm);
+    font-size: 1.05rem;
     text-transform: uppercase;
+    transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease;
+}
+
+.alive-counter-pill {
+    font-weight: 800;
+    font-size: 0.88rem;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: var(--modal-surface, #ffffff);
+    color: var(--text-primary);
+    border: 2px solid var(--panel-border);
+    box-shadow: var(--shadow-ink-sm);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease;
 }
 
@@ -59,9 +80,13 @@
     align-items: center;
     justify-content: center;
     background: var(--player-card-bg);
-    border-radius: 15px;
-    border: 1px solid var(--player-card-border);
-    transition: all 0.2s;
+    border-radius: 16px;
+    border: 2.5px solid var(--player-card-border);
+    box-shadow: var(--shadow-ink-sm);
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.2s ease,
+                background-color 0.3s ease,
+                border-color 0.3s ease;
     cursor: default;
     position: relative;
     gap: 0;
@@ -144,13 +169,24 @@ body.night-mode .player-card.selectable-target:active {
     animation: stickerPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), werewolfHeartbeat 1.6s ease-in-out infinite alternate;
 }
 
-.player-card.selectable-target.target-witch {
+.player-card.selectable-target.target-witch,
+.player-card.selectable-target.target-witch-poison {
     --target-accent: #2ed573;
 }
-.player-card.selectable-target.target-witch::after {
+.player-card.selectable-target.target-witch::after,
+.player-card.selectable-target.target-witch-poison::after {
     content: '🧪';
     background: #2ed573;
     animation: stickerPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), witchPotionBob 1.8s ease-in-out infinite alternate;
+}
+
+.player-card.selectable-target.target-witch-save {
+    --target-accent: #ff6b81;
+}
+.player-card.selectable-target.target-witch-save::after {
+    content: '💖';
+    background: #ff9ff3;
+    animation: stickerPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), werewolfHeartbeat 1.5s ease-in-out infinite alternate;
 }
 
 .player-card.selectable-target.target-seer {
@@ -273,24 +309,22 @@ body.night-mode .player-card.selectable-target:active {
 }
 
 .player-card:hover {
-    transform: scale(1.03) translateY(-2px);
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.3);
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-    z-index: 10;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-ink-md);
+    z-index: 15;
 }
 
 .player-avatar {
     width: clamp(38px, 5.2vh, 50px);
     height: clamp(38px, 5.2vh, 50px);
     background: var(--player-avatar-bg);
-    border: 2px solid var(--panel-border);
+    border: 2.5px solid var(--panel-border);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: clamp(1.2rem, 2.2vh, 1.8rem);
-    box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.16);
     position: relative;
     flex-shrink: 0;
     transition: background-color 0.5s ease, border-color 0.5s ease;
@@ -300,16 +334,16 @@ body.night-mode .player-card.selectable-target:active {
     margin-top: -8px;
     background: var(--player-name-bg);
     border: 2px solid var(--panel-border);
-    padding: 1px 6px;
-    border-radius: 8px;
-    font-size: clamp(0.72rem, 1.2vh, 0.9rem);
-    font-weight: bold;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: clamp(0.72rem, 1.2vh, 0.86rem);
+    font-weight: 900;
     z-index: 2;
     position: relative;
     bottom: auto;
     right: auto;
     transform: none;
-    box-shadow: none;
+    box-shadow: 1px 1px 0 rgba(0,0,0,0.15);
     color: var(--player-name-text);
     text-align: center;
     display: block;
@@ -324,77 +358,95 @@ body.night-mode .player-card.selectable-target:active {
 .player-me-label,
 .player-sheriff-label,
 .player-candidate-label,
-.player-tie-label,
-.player-dead-label {
+.player-tie-label {
     display: none; /* Hidden by default */
     position: absolute;
     top: -10px;
     color: white;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 0.7rem;
-    font-weight: bold;
-    z-index: 10;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 900;
+    border: 2px solid var(--text-dark);
+    box-shadow: 1.5px 1.5px 0 var(--text-dark);
+    z-index: 22;
+    white-space: nowrap;
+}
+
+/* Tilted Comic Stamp Over Avatar for Eliminated Players (Never collides with top pills) */
+.player-dead-label {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -56%) rotate(-12deg);
+    background-color: #ff4757;
+    color: #ffffff;
+    border: 2px solid #2d3436;
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-size: 0.66rem;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    box-shadow: 2px 2px 0 #2d3436;
+    z-index: 30;
+    pointer-events: none;
+    white-space: nowrap;
 }
 
 .player-card.dead .player-dead-label {
     display: block;
-    background-color: var(--text-dark);
 }
 
-/* --- Sheriff Persistent Radiance (Alive) --- */
+/* --- Sheriff Persistent Crisp Comic Frame (Alive) --- */
 .player-card.sheriff:not(.dead) {
+    background: #fffbeb;
+    border-color: #2d3436 !important;
+    box-shadow: 0 0 0 2px #f1c40f, 4px 4px 0 var(--ink-color) !important;
+}
+
+body.night-mode .player-card.sheriff:not(.dead) {
+    background: rgba(45, 38, 20, 0.92);
     border-color: #f1c40f !important;
-    box-shadow: 3px 3px 0 var(--text-dark), 0 0 16px rgba(254, 202, 87, 0.45) !important;
 }
 
 .player-card.sheriff:not(.dead) .player-avatar {
-    border: 3px solid #ffd32a !important;
-    animation: sheriffGlowPulse 1.8s ease-in-out infinite alternate !important;
+    border: 2.5px solid #2d3436 !important;
+    box-shadow: 0 0 0 2.5px #ffd32a, 2px 2px 0 var(--ink-color) !important;
 }
 
 .player-card.sheriff:not(.dead) .player-name {
-    border-color: #f1c40f !important;
-    color: #b7791f !important;
+    background: #FFE66D !important;
+    border-color: #2d3436 !important;
+    color: #2d3436 !important;
 }
 
 .player-card.sheriff:not(.dead) .player-sheriff-label {
     display: block !important;
-    background: linear-gradient(135deg, #f39c12, #f1c40f) !important;
-    color: #1e1b29 !important;
-    border: 1.5px solid #1e1b29;
-    box-shadow: 2px 2px 0 var(--text-dark), 0 0 10px rgba(254, 202, 87, 0.6);
-    font-weight: 800;
+    background: #ffd32a !important;
+    color: #2d3436 !important;
+    border: 2px solid #2d3436;
+    box-shadow: 2px 2px 0 var(--ink-color);
+    font-weight: 900;
 }
 
-/* If Player 1 (ME) is sheriff, combine ME border with sheriff golden pulse */
+/* If Player 1 (ME) is sheriff, combine ME border with sheriff gold comic ring */
 .player-card.me.sheriff:not(.dead) .player-avatar {
-    border: 3px solid #ffd32a !important;
-    box-shadow: 0 0 0 2px #ffffff, 0 0 22px rgba(254, 202, 87, 0.95), 2px 2px 0 rgba(0,0,0,0.15) !important;
-    animation: sheriffGlowPulse 1.8s ease-in-out infinite alternate !important;
+    border: 2.5px solid #2d3436 !important;
+    box-shadow: 0 0 0 3px #ffd32a, 2px 2px 0 var(--ink-color) !important;
 }
 
 .player-card.me.sheriff:not(.dead) {
-    border-color: #f1c40f !important;
-    box-shadow: 3px 3px 0 var(--text-dark), 0 0 16px rgba(254, 202, 87, 0.5) !important;
-}
-
-@keyframes sheriffGlowPulse {
-    0% {
-        box-shadow: 0 0 6px #feca57, 0 0 12px rgba(254, 202, 87, 0.5), 2px 2px 0 rgba(0,0,0,0.15);
-    }
-    100% {
-        box-shadow: 0 0 16px #ffd32a, 0 0 28px rgba(254, 202, 87, 0.9), 2px 2px 0 rgba(0,0,0,0.15);
-    }
+    border-color: #2d3436 !important;
+    box-shadow: 0 0 0 2px #ffd32a, 4px 4px 0 var(--ink-color) !important;
 }
 
 .player-card.sheriff:not(.dead) .player-status-icons {
     display: block;
-    font-size: 1.1rem;
-    filter: drop-shadow(0 0 3px #feca57);
+    font-size: 1.05rem;
 }
 
-/* Extinguish sheriff glow completely upon death */
+/* Extinguish sheriff styling completely upon death */
 .player-card.dead.sheriff .player-avatar,
 .player-card.dead .player-avatar {
     border-color: #636e72 !important;
@@ -423,6 +475,7 @@ body.night-mode .player-card.selectable-target:active {
 .player-card.sheriff-candidate:not(.me) .player-candidate-label {
     display: block;
     background-color: var(--status-candidate-color);
+    color: #2d3436;
 }
 
 .player-card.tie:not(.me) .player-tie-label {
@@ -431,73 +484,77 @@ body.night-mode .player-card.selectable-target:active {
 }
 
 .player-card.tie .player-avatar {
-    animation: glowing 1.5s infinite;
-}
-
-@keyframes glowing {
-    0% { box-shadow: 0 0 5px var(--status-tie-color), 0 0 10px var(--status-tie-color); }
-    50% { box-shadow: 0 0 20px var(--status-tie-color), 0 0 30px var(--status-tie-color); }
-    100% { box-shadow: 0 0 5px var(--status-tie-color), 0 0 10px var(--status-tie-color); }
+    box-shadow: 0 0 0 2.5px var(--status-tie-color), 2px 2px 0 var(--ink-color);
 }
 
 .player-card.sheriff-candidate:not(.me) .player-avatar {
-    border: 3px solid var(--status-candidate-color);
-    box-shadow: 0 0 10px var(--status-candidate-color), 2px 2px 0 rgba(0,0,0,0.1);
+    border: 2.5px solid #2d3436;
+    box-shadow: 0 0 0 2.5px var(--status-candidate-color), 2px 2px 0 var(--ink-color);
 }
 .player-card.sheriff-candidate:not(.me) .player-name {
-    border-color: var(--status-candidate-color);
-    color: var(--status-candidate-color);
+    border-color: #2d3436;
+    background: #fff3cd;
+    color: #b7791f;
 }
 
 .player-card.tie:not(.me) .player-avatar {
-    border-color: var(--status-tie-color);
+    border-color: #2d3436;
 }
 .player-card.tie:not(.me) .player-name {
-    border-color: var(--status-tie-color);
-    color: var(--status-tie-color);
+    border-color: #2d3436;
+    background: #ffe3e3;
+    color: #c92a2a;
 }
 
-/* Unmistakable ME player styling */
+/* Unmistakable ME player styling (Hard-Edge Comic Ring instead of blurry neon) */
+.player-card.me {
+    background: #eefaff;
+    border-color: #2d3436;
+    box-shadow: var(--shadow-ink-sm);
+    transform: none;
+    margin: 0;
+}
+
+body.night-mode .player-card.me {
+    background: rgba(14, 42, 71, 0.92);
+    border-color: #38bdf8;
+}
+
 .player-card.me .player-avatar {
-    width: clamp(42px, 5.6vh, 54px);
-    height: clamp(42px, 5.6vh, 54px);
-    border: 3px solid #00bfff !important;
-    box-shadow: 0 0 0 2px #ffffff, 0 0 14px rgba(0, 191, 255, 0.8), 2px 2px 0 rgba(0,0,0,0.15) !important;
+    width: clamp(40px, 5.4vh, 52px);
+    height: clamp(40px, 5.4vh, 52px);
+    border: 2.5px solid #2d3436 !important;
+    box-shadow: 0 0 0 2.5px #00bfff, 2px 2px 0 var(--ink-color) !important;
 }
 
 .player-card.me .player-me-label {
     display: block !important;
-    background: linear-gradient(135deg, #00c6ff, #0072ff) !important;
+    background: #00bfff !important;
     color: #ffffff !important;
-    border: 1.5px solid #ffffff;
-    box-shadow: 0 2px 8px rgba(0, 114, 255, 0.5);
-    font-weight: 800;
-    font-size: 0.72rem;
-    z-index: 20;
-    top: -12px;
+    border: 2px solid #2d3436;
+    box-shadow: 1.5px 1.5px 0 var(--ink-color);
+    font-weight: 900;
+    font-size: 0.68rem;
+    z-index: 22;
+    top: -11px;
 }
 
 .player-card.me .player-name {
     background: #00bfff !important;
     color: #ffffff !important;
-    border-color: #0099cc !important;
-    font-weight: 800;
-}
-
-.player-card.me {
-    transform: none;
-    margin: 0;
+    border-color: #2d3436 !important;
+    font-weight: 900;
 }
 
 .player-card.me:hover {
-    transform: scale(1.05) translateY(-5px);
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-ink-md);
 }
 
-/* AI Thinking State */
+/* AI Thinking State (Hard-Edge Comic Ring + Floating Thought Bubble) */
 .player-card.thinking .player-avatar {
-    border-color: var(--accent-purple);
-    animation: thinkingGlow 1.5s ease-in-out infinite;
+    border-color: #2d3436;
+    box-shadow: 0 0 0 2.5px var(--accent-purple), 2px 2px 0 var(--ink-color);
 }
 
 .player-card.thinking .player-avatar::after {
@@ -505,7 +562,7 @@ body.night-mode .player-card.selectable-target:active {
     position: absolute;
     top: -8px;
     right: -8px;
-    font-size: 1.1rem;
+    font-size: 1rem;
     background: #fff;
     border: 2px solid var(--text-dark);
     border-radius: 50%;
@@ -514,30 +571,26 @@ body.night-mode .player-card.selectable-target:active {
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 2px 2px 0 rgba(0,0,0,0.15);
-    animation: bounceThinking 1s ease-in-out infinite alternate;
-    z-index: 15;
-}
-
-@keyframes thinkingGlow {
-    0%, 100% { box-shadow: 0 0 5px var(--accent-purple), 2px 2px 0 rgba(0,0,0,0.1); }
-    50% { box-shadow: 0 0 16px var(--accent-purple), 0 0 8px #a29bfe; }
+    box-shadow: 2px 2px 0 var(--text-dark);
+    animation: bounceThinking 0.9s ease-in-out infinite alternate;
+    z-index: 25;
 }
 
 @keyframes bounceThinking {
-    from { transform: translateY(0) scale(0.9); }
-    to { transform: translateY(-4px) scale(1.1); }
+    from { transform: translateY(0) scale(0.95); }
+    to { transform: translateY(-4px) scale(1.08); }
 }
 
 /* Speaking State & Floating Speech Bubble */
 .player-card.speaking .player-avatar {
-    border-color: var(--accent-secondary);
-    animation: speakingPulse 0.8s infinite alternate;
+    border-color: #2d3436;
+    box-shadow: 0 0 0 2.5px var(--accent-secondary), 2px 2px 0 var(--ink-color);
+    animation: speakingPulse 0.7s infinite alternate;
 }
 
 @keyframes speakingPulse {
-    from { transform: scale(1); box-shadow: 0 0 5px var(--accent-secondary); }
-    to { transform: scale(1.08); box-shadow: 0 0 14px var(--accent-secondary); }
+    from { transform: scale(1); }
+    to { transform: scale(1.06); }
 }
 
 .player-speech-bubble {
@@ -546,19 +599,20 @@ body.night-mode .player-card.selectable-target:active {
     bottom: calc(100% + 8px);
     left: 50%;
     transform: translateX(-50%);
-    background: #fff;
-    color: var(--text-dark);
-    border: 2px solid var(--text-dark);
+    background: #ffffff;
+    color: #2d3436;
+    border: 2px solid #2d3436;
     border-radius: 12px;
     padding: 6px 10px;
     font-family: var(--font-body);
-    font-size: 0.8rem;
-    font-weight: 600;
-    max-width: 130px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    width: max-content;
+    max-width: 140px;
     white-space: normal;
     word-break: break-word;
-    box-shadow: 2px 2px 0 var(--text-dark);
-    z-index: 120;
+    box-shadow: 2.5px 2.5px 0 #2d3436;
+    z-index: 150;
     pointer-events: none;
     line-height: 1.3;
 }
@@ -572,17 +626,47 @@ body.night-mode .player-card.selectable-target:active {
     transform: translateX(-50%);
     border-width: 6px 6px 0 6px;
     border-style: solid;
-    border-color: var(--text-dark) transparent transparent transparent;
+    border-color: #2d3436 transparent transparent transparent;
+}
+
+/* Top-row card smart flip: anchors to inner side so it never collides with header */
+.side-column#players-left .player-card:first-child .player-speech-bubble {
+    bottom: auto;
+    top: 50%;
+    left: calc(100% + 10px);
+    transform: translateY(-50%);
+}
+.side-column#players-left .player-card:first-child .player-speech-bubble::before {
+    top: 50%;
+    left: -6px;
+    transform: translateY(-50%);
+    border-width: 6px 6px 6px 0;
+    border-color: transparent #2d3436 transparent transparent;
+}
+
+.side-column#players-right .player-card:first-child .player-speech-bubble {
+    bottom: auto;
+    top: 50%;
+    left: auto;
+    right: calc(100% + 10px);
+    transform: translateY(-50%);
+}
+.side-column#players-right .player-card:first-child .player-speech-bubble::before {
+    top: 50%;
+    left: 100%;
+    transform: translateY(-50%);
+    border-width: 6px 0 6px 6px;
+    border-color: transparent transparent transparent #2d3436;
 }
 
 .player-speech-bubble.visible {
     display: block;
-    animation: bubblePop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    animation: bubblePop 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 @keyframes bubblePop {
-    from { opacity: 0; transform: translateX(-50%) scale(0.7); }
-    to { opacity: 1; transform: translateX(-50%) scale(1); }
+    from { opacity: 0; scale: 0.7; }
+    to { opacity: 1; scale: 1; }
 }
 
 .player-status-icons {
@@ -744,15 +828,15 @@ body.night-mode .player-card.selectable-target:active {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-width: 130px;
+    min-width: 145px;
     background: var(--my-info-bg);
-    padding: 8px 12px;
-    border-radius: 15px;
-    border: 2px solid var(--panel-border);
+    padding: 8px 14px;
+    border-radius: 16px;
+    border: 2.5px solid var(--panel-border);
     position: relative;
     left: auto;
     bottom: auto;
-    box-shadow: none;
+    box-shadow: var(--shadow-ink-sm);
     transition: background-color 0.5s ease, border-color 0.5s ease;
 }
 
@@ -760,17 +844,23 @@ body.night-mode .player-card.selectable-target:active {
     position: absolute;
     top: -10px;
     left: -10px;
-    font-size: 1.8rem;
+    font-size: 1.6rem;
     filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.2));
     z-index: 20;
     animation: shine 2s infinite;
 }
 
 .my-avatar {
-    font-size: 2rem;
-    width: auto;
-    height: auto;
-    display: block;
+    font-size: 1.8rem;
+    width: 42px;
+    height: 42px;
+    background: var(--player-avatar-bg);
+    border: 2px solid var(--panel-border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .my-details {

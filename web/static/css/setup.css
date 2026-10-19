@@ -149,9 +149,9 @@
 }
 
 .role-option.selected {
-    background: #fff;
-    border: 3px solid var(--accent-secondary);
-    box-shadow: 0 0 15px var(--accent-secondary), var(--shadow-pop);
+    background: #fffdf7;
+    border: 3px solid var(--text-dark);
+    box-shadow: 0 0 0 3px var(--accent-secondary), var(--shadow-pop);
     transform: translateY(-5px) scale(1.05);
 }
 
