@@ -1060,6 +1060,38 @@ function toggleLanguage() {
     gameState.lang = gameState.lang === 'zh' ? 'en' : 'zh';
     updateLanguage();
     renderLogs();
+    if (gameState.gameId) {
+        fetch('/api/game/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                game_id: gameState.gameId,
+                language: gameState.lang
+            })
+        }).catch(err => console.warn('Failed to sync language setting to server:', err));
+    }
+}
+
+/**
+ * Localizes player references (e.g. 'Player 3' <-> '3号玩家') and role names in system/prompt text.
+ * @param {string} text - Raw message string in the selected language.
+ * @param {boolean} isZh - Whether the target language is Chinese.
+ * @returns {string}
+ */
+function localizeMessageText(text, isZh) {
+    if (!text || typeof text !== 'string') return '';
+    if (isZh) {
+        let out = text.replace(/\bPlayer\s*(\d{1,2})\b/gi, '$1号玩家');
+        const zhRoles = I18N.zh.roles;
+        ['Black Werewolf King', 'Werewolf', 'Villager', 'Witch', 'Seer', 'Guard', 'Hunter'].forEach(enRole => {
+            if (zhRoles[enRole]) {
+                out = out.replace(new RegExp(`\\b${enRole}\\b`, 'g'), zhRoles[enRole]);
+            }
+        });
+        return out;
+    } else {
+        return text.replace(/(\d{1,2})\s*号玩家/g, 'Player $1');
+    }
 }
 
 /**
@@ -1796,6 +1828,7 @@ function initPlayerCountTooltips() {
  */
 function updateLanguage() {
     const t = I18N[gameState.lang];
+    const isZh = gameState.lang === 'zh';
     
     // Setup Screen
     if (setupUI.title) setupUI.title.innerText = t.title;
@@ -1821,6 +1854,40 @@ function updateLanguage() {
                 opt.text = t.timerOptions[key];
             }
         });
+    }
+    const providerSelect = document.getElementById('provider-select');
+    if (providerSelect) {
+        const providerNames = isZh ? {
+            openai: 'OpenAI',
+            doubao: '豆包 (火山引擎)',
+            gemini: 'Gemini (Google)',
+            qwen: '通义千问 (阿里云)',
+            deepseek: 'DeepSeek',
+            custom: '自定义'
+        } : {
+            openai: 'OpenAI',
+            doubao: 'Doubao (Volcengine)',
+            gemini: 'Gemini (Google)',
+            qwen: 'Qwen (Aliyun)',
+            deepseek: 'DeepSeek',
+            custom: 'Custom'
+        };
+        Array.from(providerSelect.options).forEach(opt => {
+            if (providerNames[opt.value]) {
+                opt.text = providerNames[opt.value];
+            }
+        });
+    }
+    if (setupUI.apiKeyInput) {
+        setupUI.apiKeyInput.placeholder = isZh ? '请输入 API Key' : 'API Key';
+    }
+    const baseUrlInput = document.getElementById('base-url');
+    if (baseUrlInput) {
+        baseUrlInput.placeholder = isZh ? '例如 https://api.openai.com/v1' : 'e.g. https://api.openai.com/v1';
+    }
+    const modelNameInput = document.getElementById('model-name');
+    if (modelNameInput) {
+        modelNameInput.placeholder = isZh ? '例如 gpt-4o' : 'e.g. gpt-4o';
     }
     if (settingsUI.saveBtn) settingsUI.saveBtn.innerText = t.saveSettings;
     if (setupUI.openSettingsBtn) setupUI.openSettingsBtn.innerText = "⚙️ " + t.advancedSettings;
@@ -1863,12 +1930,22 @@ function updateLanguage() {
         }
     }
 
-    if (gameState.pendingAction && gameUI.actionPrompt) {
-        let promptText = gameState.pendingAction.prompt;
-        if (typeof promptText === 'object') {
-            promptText = promptText[gameState.lang] || promptText['zh'] || promptText['en'] || JSON.stringify(promptText);
+    if (gameUI.actionPrompt) {
+        if (gameState.pendingAction) {
+            let promptText = gameState.pendingAction.prompt;
+            if (typeof promptText === 'object') {
+                promptText = promptText[gameState.lang] || promptText['zh'] || promptText['en'] || JSON.stringify(promptText);
+            }
+            gameUI.actionPrompt.innerText = localizeMessageText(String(promptText || ''), isZh);
+            if (gameState.pendingAction.type === 'vote' || gameState.pendingAction.type === 'choice') {
+                const options = [...(gameState.pendingAction.options || [])];
+                const noActionText = isZh ? "不行动 / 弃票" : "No Action / Abstain";
+                const hasAbstain = options.includes(noActionText) || options.includes("Abstain") || options.includes("弃票");
+                renderChoiceButtons(options, !hasAbstain);
+            }
+        } else {
+            gameUI.actionPrompt.innerText = t.waiting;
         }
-        gameUI.actionPrompt.innerText = promptText;
     }
 
     // Evaluation & Game Over Modal
@@ -1894,6 +1971,9 @@ function updateLanguage() {
 
         const warningText = document.querySelector('.warning-text');
         if (warningText) warningText.innerText = t_eval.apiKeyWarning;
+        if (evalUI.apiKeyInput) {
+            evalUI.apiKeyInput.placeholder = isZh ? '请输入 API Key' : 'Enter API Key';
+        }
         if (evalUI.startBtn.disabled) {
              evalUI.startBtn.innerText = t_eval.evaluating;
         } else {
@@ -1901,7 +1981,12 @@ function updateLanguage() {
         }
         evalUI.input.placeholder = t_eval.inputPlaceholder;
         evalUI.sendBtn.innerText = t_eval.send;
-        if (evalUI.newGameBtn) evalUI.newGameBtn.innerText = gameState.lang === 'zh' ? '再来一局' : 'New Game';
+        if (evalUI.newGameBtn) evalUI.newGameBtn.innerText = isZh ? '再来一局' : 'New Game';
+
+        const historyTabView = document.getElementById('history-tab-view');
+        if (evalUI.modal.classList.contains('active') && historyTabView && historyTabView.style.display !== 'none') {
+            loadOperationsHistory();
+        }
     }
 
     // In-game Records Modal
@@ -1922,6 +2007,7 @@ function updateLanguage() {
             if (filterVotes) filterVotes.innerText = t_records.filterVotes;
 
             if (recordsModal.classList.contains('active')) {
+                renderIdentityCard(timelineState.operations);
                 renderCurrentTimeline();
             }
         }
@@ -2873,8 +2959,12 @@ function processLog(log) {
             senderDiv.innerText = (isMe ? `Player ${playerNum} (Me)` : `Player ${playerNum}`) + whisperTag;
         }
 
-        // Strip redundant leading "(Player X): " prefix from speech bubble text if present
-        const cleanSpeechText = text.replace(/^\(Player\s+\d+\):\s*/i, '');
+        // Strip redundant leading "(Player X): " prefix from speech bubble text if present, and localize last words tag
+        const isZh = gameState.lang === 'zh';
+        const cleanSpeechText = text
+            .replace(/^\(Player\s+\d+\):\s*/i, '')
+            .replace(/^\(Player\s+\d+\s*的遗言\):\s*/i, isZh ? '【遗言】' : '[Last Words] ')
+            .replace(/^\(Player\s+\d+'s last words\):\s*/i, isZh ? '【遗言】' : '[Last Words] ');
 
         const bubbleDiv = document.createElement('div');
         bubbleDiv.className = `chat-bubble${log.type === 'WHISPER' ? ' whisper-bubble' : ''}`;
@@ -2893,7 +2983,7 @@ function processLog(log) {
         msgContainer.className = `message-container ${isDebug ? 'debug' : 'system'}${isDebug && debugActive ? ' visible' : ''}`;
         const bubbleDiv = document.createElement('div');
         bubbleDiv.className = `chat-bubble system${isRoleNotice ? ' role-notice-bubble' : ''}`;
-        bubbleDiv.innerText = text;
+        bubbleDiv.innerText = localizeMessageText(String(text || ''), gameState.lang === 'zh');
         msgContainer.appendChild(bubbleDiv);
     }
     
@@ -3302,7 +3392,7 @@ function handleInputRequest(req) {
     if (typeof promptText === 'object') {
         promptText = promptText[gameState.lang] || promptText['zh'] || promptText['en'] || JSON.stringify(promptText);
     }
-    gameUI.actionPrompt.innerText = promptText;
+    gameUI.actionPrompt.innerText = localizeMessageText(String(promptText || ''), gameState.lang === 'zh');
 
     // If this exact request is already active, don't restart the countdown
     if (reqId === currentTurnRequestId) {
@@ -3357,14 +3447,25 @@ function renderChoiceButtons(options, addNoAction) {
     gameUI.choiceButtons.innerHTML = '';
     if (!options) return;
 
+    const isZh = gameState.lang === 'zh';
+    const choiceTranslations = {
+        "Yes": isZh ? "是" : "Yes",
+        "No": isZh ? "否" : "No",
+        "Clockwise": isZh ? "顺时针" : "Clockwise",
+        "Counter-clockwise": isZh ? "逆时针" : "Counter-clockwise",
+        "Abstain": isZh ? "不行动 / 弃票" : "No Action / Abstain"
+    };
+
     options.forEach(opt => {
         const btn = document.createElement('button');
         btn.className = 'choice-btn';
         
-        if (opt.startsWith('Player ')) {
+        if (typeof opt === 'string' && opt.startsWith('Player ')) {
             const avatar = getAvatar(opt);
             const playerNum = opt.replace('Player ', '');
-            btn.innerHTML = `<span class="btn-avatar">${avatar}</span> ${playerNum}`;
+            btn.innerHTML = `<span class="btn-avatar">${avatar}</span> ${isZh ? `${playerNum}号` : playerNum}`;
+        } else if (choiceTranslations[opt]) {
+            btn.innerText = choiceTranslations[opt];
         } else {
             btn.innerText = opt;
         }
@@ -3373,10 +3474,12 @@ function renderChoiceButtons(options, addNoAction) {
         gameUI.choiceButtons.appendChild(btn);
     });
     
-    if (addNoAction) {
+    // Only add the extra "No Action / Abstain" button when options are player targets (not Yes/No or Clockwise/Counter-clockwise)
+    const isBinaryChoice = options.includes('Yes') || options.includes('Clockwise');
+    if (addNoAction && !isBinaryChoice) {
         const btn = document.createElement('button');
         btn.className = 'choice-btn no-action';
-        btn.innerText = gameState.lang === 'zh' ? "不行动 / 弃票" : "No Action / Abstain";
+        btn.innerText = isZh ? "不行动 / 弃票" : "No Action / Abstain";
         btn.onclick = () => sendAction("Abstain");
         gameUI.choiceButtons.appendChild(btn);
     }
@@ -3877,11 +3980,11 @@ function renderIdentityCard(opData) {
         alliesHtml = `<div class="id-allies-row"><span>🐺 ${isZh ? '狼队阵容' : 'Werewolf Pack'}:</span>`;
         if (opData.teammates.length > 0) {
             opData.teammates.forEach(tm => {
-                alliesHtml += `<span class="op-badge teammate">${getAvatar(tm)} ${tm}</span>`;
+                alliesHtml += `<span class="op-badge teammate">${getAvatar(tm)} ${formatPlayerSeatLabel(tm, isZh)}</span>`;
             });
         }
         if (opData.king) {
-            alliesHtml += `<span class="op-badge teammate" style="background:#ffd200;">👑 ${isZh ? '狼王' : 'King'}: ${opData.king}</span>`;
+            alliesHtml += `<span class="op-badge teammate" style="background:#ffd200;">👑 ${isZh ? '狼王' : 'King'}: ${formatPlayerSeatLabel(opData.king, isZh)}</span>`;
         }
         alliesHtml += `</div>`;
     } else if (roleName === 'Seer') {
@@ -3928,7 +4031,7 @@ function renderCurrentTimeline() {
 
     sortedRounds.forEach(roundNum => {
         let roundHasContent = false;
-        let roundHtml = `<div class="timeline-round-divider">${isZh ? `第 ${roundNum} 轮对局 (Round ${roundNum})` : `Round ${roundNum}`}</div>`;
+        let roundHtml = `<div class="timeline-round-divider">${isZh ? `第 ${roundNum} 轮对局` : `Round ${roundNum}`}</div>`;
 
         // 1. NIGHT NODE (🌙)
         if (filter === 'all' || filter === 'actions') {
@@ -3939,7 +4042,7 @@ function renderCurrentTimeline() {
                 const kill = opData.kills.find(k => k.night === roundNum);
                 if (kill) {
                     const targetStr = kill.target 
-                        ? `<strong>${getAvatar(kill.target)} ${kill.target}</strong>` 
+                        ? `<strong>${getAvatar(kill.target)} ${formatPlayerSeatLabel(kill.target, isZh)}</strong>` 
                         : (isZh ? '空刀 (未袭击任何人)' : 'No target');
                     nightActionsHtml += `
                         <div class="timeline-card action-card">
@@ -3957,7 +4060,7 @@ function renderCurrentTimeline() {
                     const campLabel = isWerewolf ? (isZh ? '狼人阵营 🐺' : 'Werewolf 🐺') : (isZh ? '好人阵营 👱' : 'Good 👱');
                     nightActionsHtml += `
                         <div class="timeline-card action-card">
-                            <span>🔮 ${isZh ? '查验身份' : 'Checked'}: <strong>${getAvatar(check.player)} ${check.player}</strong> ➔ <span class="op-camp-tag ${isWerewolf ? 'werewolf' : 'good'}">${campLabel}</span></span>
+                            <span>🔮 ${isZh ? '查验身份' : 'Checked'}: <strong>${getAvatar(check.player)} ${formatPlayerSeatLabel(check.player, isZh)}</strong> ➔ <span class="op-camp-tag ${isWerewolf ? 'werewolf' : 'good'}">${campLabel}</span></span>
                         </div>
                     `;
                 }
@@ -3967,9 +4070,10 @@ function renderCurrentTimeline() {
             if (opData.saved_details) {
                 const save = opData.saved_details.find(s => s.night === roundNum);
                 if (save) {
+                    const targetLabel = formatPlayerSeatLabel(save.target, isZh);
                     nightActionsHtml += `
                         <div class="timeline-card action-card">
-                            <span>💚 ${isZh ? '女巫解药' : 'Witch Save'}: 救活了 <strong>${getAvatar(save.target)} ${save.target}</strong></span>
+                            <span>💚 ${isZh ? `女巫解药: 救活了 <strong>${getAvatar(save.target)} ${targetLabel}</strong>` : `Witch Save: Rescued <strong>${getAvatar(save.target)} ${targetLabel}</strong>`}</span>
                         </div>
                     `;
                 }
@@ -3977,9 +4081,10 @@ function renderCurrentTimeline() {
             if (opData.poisoned_details) {
                 const poison = opData.poisoned_details.find(p => p.night === roundNum);
                 if (poison) {
+                    const targetLabel = formatPlayerSeatLabel(poison.target, isZh);
                     nightActionsHtml += `
                         <div class="timeline-card action-card">
-                            <span>💜 ${isZh ? '女巫毒药' : 'Witch Poison'}: 毒杀了 <strong>${getAvatar(poison.target)} ${poison.target}</strong></span>
+                            <span>💜 ${isZh ? `女巫毒药: 毒杀了 <strong>${getAvatar(poison.target)} ${targetLabel}</strong>` : `Witch Poison: Eliminated <strong>${getAvatar(poison.target)} ${targetLabel}</strong>`}</span>
                         </div>
                     `;
                 }
@@ -3989,9 +4094,10 @@ function renderCurrentTimeline() {
             if (opData.protected_details) {
                 const protect = opData.protected_details.find(p => p.night === roundNum);
                 if (protect) {
+                    const targetLabel = formatPlayerSeatLabel(protect.target, isZh);
                     nightActionsHtml += `
                         <div class="timeline-card action-card">
-                            <span>🛡️ ${isZh ? '守卫守护' : 'Protected'}: 守护了 <strong>${getAvatar(protect.target)} ${protect.target}</strong></span>
+                            <span>🛡️ ${isZh ? `守卫守护: 守护了 <strong>${getAvatar(protect.target)} ${targetLabel}</strong>` : `Protected: Guarded <strong>${getAvatar(protect.target)} ${targetLabel}</strong>`}</span>
                         </div>
                     `;
                 }
@@ -4023,7 +4129,7 @@ function renderCurrentTimeline() {
         if (filter === 'all') {
             const nightDeaths = deaths.filter(d => d.day === roundNum && d.phase === 'night');
             if (nightDeaths.length > 0) {
-                const deathNames = nightDeaths.map(d => `<strong>${getAvatar(d.player)} ${d.player}</strong>`).join(', ');
+                const deathNames = nightDeaths.map(d => `<strong>${getAvatar(d.player)} ${formatPlayerSeatLabel(d.player, isZh)}</strong>`).join(', ');
                 dayContentHtml += `
                     <div class="timeline-card dawn-card">
                         <span>💀 ${isZh ? '昨夜出局' : 'Night Casualties'}: ${deathNames}</span>
@@ -4053,7 +4159,8 @@ function renderCurrentTimeline() {
                 } else if (voteEntry.result === 'Tie') {
                     resultLabel = isZh ? '平票进入PK' : 'Tie vote';
                 } else {
-                    resultLabel = isZh ? `结果: ${voteEntry.result}` : `Result: ${voteEntry.result}`;
+                    const formattedWinner = formatPlayerSeatLabel(voteEntry.result, isZh);
+                    resultLabel = isZh ? `结果: ${formattedWinner}` : `Result: ${formattedWinner}`;
                 }
 
                 // Group voters by target
@@ -4076,19 +4183,20 @@ function renderCurrentTimeline() {
                         const voters = targetMap[tName];
                         const targetBadge = isAbstain
                             ? `<span style="color:#64748b;">⚪ ${isZh ? '弃票' : 'Abstained'} (${voters.length})</span>`
-                            : `<span>🎯 ${getAvatar(tName)} ${tName} (${voters.length})</span>`;
+                            : `<span>🎯 ${getAvatar(tName)} ${formatPlayerSeatLabel(tName, isZh)} (${voters.length})</span>`;
 
                         let votersPills = voters.map(voter => {
                             const isSheriffVoter = voteEntry.sheriff && voteEntry.sheriff === voter && voteEntry.phase !== 'Sheriff Election';
+                            const vLabel = formatPlayerSeatLabel(voter, isZh);
                             return isSheriffVoter
-                                ? `<span class="voter-pill sheriff-voter">${getAvatar(voter)} ${voter} 👮(1.5)</span>`
-                                : `<span class="voter-pill">${getAvatar(voter)} ${voter}</span>`;
+                                ? `<span class="voter-pill sheriff-voter">${getAvatar(voter)} ${vLabel} 👮(1.5)</span>`
+                                : `<span class="voter-pill">${getAvatar(voter)} ${vLabel}</span>`;
                         }).join('');
 
                         targetRowsHtml += `
                             <div class="vote-target-row">
                                 <div class="vote-target-side">${targetBadge}</div>
-                                <span class="vote-arrow-indicator">⟵ 投票者:</span>
+                                <span class="vote-arrow-indicator">⟵ ${isZh ? '投票者:' : 'Voters:'}</span>
                                 <div class="vote-voters-side">${votersPills}</div>
                             </div>
                         `;
@@ -4122,7 +4230,7 @@ function renderCurrentTimeline() {
                     }
                     dayContentHtml += `
                         <div class="timeline-card public-card">
-                            <span>🏹 <strong>${s.shooter}</strong>${shooterRoleLabel} ${isZh ? '死亡开枪带走了' : 'shot'} <strong>${getAvatar(s.target)} ${s.target}</strong></span>
+                            <span>🏹 <strong>${formatPlayerSeatLabel(s.shooter, isZh)}</strong>${shooterRoleLabel} ${isZh ? '死亡开枪带走了' : 'shot'} <strong>${getAvatar(s.target)} ${formatPlayerSeatLabel(s.target, isZh)}</strong></span>
                         </div>
                     `;
                 });
@@ -4206,11 +4314,11 @@ function renderOperationsHistory(data, t) {
             <div class="op-badges-list">`;
         if (data.teammates.length > 0) {
             data.teammates.forEach(tm => {
-                html += `<span class="op-badge teammate">${getAvatar(tm)} ${tm}</span>`;
+                html += `<span class="op-badge teammate">${getAvatar(tm)} ${formatPlayerSeatLabel(tm, isZh)}</span>`;
             });
         }
         if (data.king) {
-            html += `<span class="op-badge teammate" style="background:#ffd200;">👑 ${t.king}: ${data.king}</span>`;
+            html += `<span class="op-badge teammate" style="background:#ffd200;">👑 ${t.king}: ${formatPlayerSeatLabel(data.king, isZh)}</span>`;
         }
         html += `</div></div>`;
     }
@@ -4224,7 +4332,7 @@ function renderOperationsHistory(data, t) {
         data.kills.forEach(k => {
             const nightLabel = isZh ? `第 ${k.night} 夜` : `Night ${k.night}`;
             const targetText = k.target
-                ? `${getAvatar(k.target)} ${k.target}`
+                ? `${getAvatar(k.target)} ${formatPlayerSeatLabel(k.target, isZh)}`
                 : (isZh ? '无人袭击 (空刀)' : 'No one targeted');
             html += `
                 <div class="op-kill-item">
@@ -4244,13 +4352,13 @@ function renderOperationsHistory(data, t) {
                 <div class="op-badges-list" style="align-items:center;">
                     <span style="font-size:0.9rem; font-weight:700;">💚 ${t.saved}:</span>
                     ${(data.saved && data.saved.length > 0) 
-                        ? data.saved.map(p => `<span class="op-badge saved">${p}</span>`).join('') 
+                        ? data.saved.map(p => `<span class="op-badge saved">${formatPlayerSeatLabel(p, isZh)}</span>`).join('') 
                         : `<span style="color:var(--text-muted); font-size:0.85rem;">${isZh ? '未使用' : 'None'}</span>`}
                 </div>
                 <div class="op-badges-list" style="align-items:center;">
                     <span style="font-size:0.9rem; font-weight:700;">💜 ${t.poisoned}:</span>
                     ${(data.poisoned && data.poisoned.length > 0) 
-                        ? data.poisoned.map(p => `<span class="op-badge poisoned">${p}</span>`).join('') 
+                        ? data.poisoned.map(p => `<span class="op-badge poisoned">${formatPlayerSeatLabel(p, isZh)}</span>`).join('') 
                         : `<span style="color:var(--text-muted); font-size:0.85rem;">${isZh ? '未使用' : 'None'}</span>`}
                 </div>
             </div>
@@ -4268,7 +4376,7 @@ function renderOperationsHistory(data, t) {
             const roundPrefix = item.night ? (isZh ? `第 ${item.night} 夜 · ` : `Night ${item.night} · `) : '';
             html += `
                 <div class="op-check-item">
-                    <span style="font-weight:700;">${roundPrefix}${getAvatar(item.player)} ${item.player}</span>
+                    <span style="font-weight:700;">${roundPrefix}${getAvatar(item.player)} ${formatPlayerSeatLabel(item.player, isZh)}</span>
                     <span class="op-camp-tag ${isWerewolf ? 'werewolf' : 'good'}">${campLabel}</span>
                 </div>
             `;
@@ -4281,7 +4389,7 @@ function renderOperationsHistory(data, t) {
         html += `<div class="op-card">
             <div class="op-card-title">🛡️ ${t.protected}</div>
             <div class="op-badges-list">
-                ${data.protected.map(p => `<span class="op-badge protected">${getAvatar(p)} ${p}</span>`).join('')}
+                ${data.protected.map(p => `<span class="op-badge protected">${getAvatar(p)} ${formatPlayerSeatLabel(p, isZh)}</span>`).join('')}
             </div>
         </div>`;
     }
@@ -4291,7 +4399,7 @@ function renderOperationsHistory(data, t) {
         html += `<div class="op-card">
             <div class="op-card-title">🏹 ${t.shot}</div>
             <div class="op-badges-list">
-                ${data.shot.map(p => `<span class="op-badge shot">${getAvatar(p)} ${p}</span>`).join('')}
+                ${data.shot.map(p => `<span class="op-badge shot">${getAvatar(p)} ${formatPlayerSeatLabel(p, isZh)}</span>`).join('')}
             </div>
         </div>`;
     }

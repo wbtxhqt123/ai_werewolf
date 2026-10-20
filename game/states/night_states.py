@@ -249,13 +249,14 @@ class SeerNightState(GameState):
             # And Role.camp returns "Werewolves" or "Villagers".
             
             result = "Werewolf" if target.role.camp == "Werewolves" else "Villager"
+            result_zh = "狼人" if result == "Werewolf" else "好人"
             
             self.game.event_bus.publish(
                 SeerCheckResult(player=seer_player, target=target, is_werewolf=(result == "Werewolf"))
             )
             self.game.log(LogEntry(
                 log_type=LogType.SEER_CHECK,
-                message={"en": f"You checked {target.name}. They are in {result} camp.", "zh": f"你查验了 {target.name}，他是 {result} 阵营。"},
+                message={"en": f"You checked {target.name}. They are in {result} camp.", "zh": f"你查验了 {target.name}，他是 {result_zh} 阵营。"},
                 source=seer_player,
                 target=target,
                 data={"result": result},

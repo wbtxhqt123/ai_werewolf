@@ -132,6 +132,29 @@ class TestLLMRobustness(unittest.TestCase):
         poison_target = controller.get_witch_poison_target(p1, [p1, p2])
         self.assertEqual(poison_target, p2)
 
+    def test_llm_controller_find_player_by_localized_seat_labels(self):
+        controller = LLMController(language="zh")
+        game = Game({"Player 1": controller, "Player 2": RandomController(), "Player 3": RandomController()}, language="zh")
+        p1, p2, p3 = game.players
+        self.assertEqual(controller._find_player_by_name("Player 2", [p2, p3]), p2)
+        self.assertEqual(controller._find_player_by_name("2号玩家", [p2, p3]), p2)
+        self.assertEqual(controller._find_player_by_name("2号", [p2, p3]), p2)
+        self.assertEqual(controller._find_player_by_name("P3", [p2, p3]), p3)
+
+    def test_llm_controller_status_prompt_localized_zh(self):
+        from game.player import Seer
+        controller = LLMController(language="zh")
+        game = Game({"Player 1": controller, "Player 2": RandomController()}, language="zh")
+        p1 = game.players[0]
+        p1.role = Seer()
+        p1.is_sheriff = True
+        status_zh = controller._build_status_prompt(p1)
+        self.assertIn("你的角色是 预言家", status_zh)
+        self.assertIn("你是警长。", status_zh)
+        self.assertIn("存活", status_zh)
+        self.assertNotIn("You are the Sheriff", status_zh)
+        self.assertNotIn("You are the Seer", status_zh)
+
 
 if __name__ == "__main__":
     unittest.main()

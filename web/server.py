@@ -138,6 +138,7 @@ class UpdateSettingsRequest(BaseModel):
     """Defines the structure for updating runtime game settings."""
     game_id: str
     turn_timeout: Optional[float] = None
+    language: Optional[str] = None
 
 class EvaluationRequest(BaseModel):
     """Defines the structure for a request to evaluate a completed game."""
@@ -526,7 +527,16 @@ async def update_settings(request: UpdateSettingsRequest):
         raise HTTPException(status_code=404, detail="Game not found")
     if request.turn_timeout is not None and request.turn_timeout > 0:
         session.web_controller.set_timeout(request.turn_timeout)
-    return {"status": "ok", "turn_timeout": session.web_controller.timeout}
+    if request.language in ("zh", "en") and session.game_instance:
+        session.game_instance.language = request.language
+        for p in session.game_instance.players:
+            if hasattr(p.controller, "language"):
+                p.controller.language = request.language
+    return {
+        "status": "ok",
+        "turn_timeout": session.web_controller.timeout,
+        "language": getattr(session.game_instance, "language", "zh") if session.game_instance else "zh",
+    }
 
 @app.post("/api/game/evaluate")
 async def evaluate_game(request: EvaluationRequest):

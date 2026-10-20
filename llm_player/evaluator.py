@@ -69,8 +69,27 @@ class GameEvaluator:
         """Generates an evaluation of the player's performance."""
         self.current_mode = mode
         self.game_summary = self._generate_game_summary(game_logs, player_name)
-        self.player_role = player_role
-        self.game_result = game_result
+        role_zh_map = {
+            "Villager": "村民",
+            "Werewolf": "狼人",
+            "Witch": "女巫",
+            "Seer": "预言家",
+            "Guard": "守卫",
+            "Hunter": "猎人",
+            "Black Werewolf King": "黑狼王",
+            "Unknown": "未知",
+        }
+        result_zh_map = {
+            "Game Over": "游戏结束",
+            "Winner: Villagers": "获胜阵营：好人阵营（村民）",
+            "Winner: Werewolves": "获胜阵营：狼人阵营",
+        }
+        if self.language == "zh":
+            self.player_role = role_zh_map.get(player_role, player_role)
+            self.game_result = result_zh_map.get(game_result, game_result)
+        else:
+            self.player_role = player_role
+            self.game_result = game_result
 
         prompt_template = self._load_prompt("evaluation", mode)
         prompt = prompt_template.format(

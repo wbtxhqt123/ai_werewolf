@@ -275,6 +275,12 @@ class LLMController(Controller):
         if game:
             self.fallback_controller.game = game
 
+    def _get_effective_language(self) -> str:
+        """Returns the current active language, syncing with self.game.language if set."""
+        if getattr(self, "game", None) and getattr(self.game, "language", None):
+            self.language = self.game.language
+        return self.language
+
     def _load_prompt(self, prompt_type: str, name: str) -> str:
         """Loads a specific prompt template from the filesystem.
 
@@ -288,8 +294,9 @@ class LLMController(Controller):
         Returns:
             The content of the prompt template as a string.
         """
+        lang = self._get_effective_language()
         # Construct path: prompts/{language}/{prompt_type}/{name}.txt
-        path_parts = [self.prompt_dir, self.language]
+        path_parts = [self.prompt_dir, lang]
         if prompt_type:
             path_parts.append(prompt_type)
         path_parts.append(f"{name}.txt")
@@ -301,8 +308,8 @@ class LLMController(Controller):
                 return f.read()
         except FileNotFoundError:
             # Fallback to English if the prompt is not available in the selected language.
-            if self.language != "en":
-                print(f"Warning: Prompt not found for language '{self.language}', falling back to 'en': {file_path}")
+            if lang != "en":
+                print(f"Warning: Prompt not found for language '{lang}', falling back to 'en': {file_path}")
                 path_parts[1] = "en"
                 file_path = os.path.join(*path_parts)
                 with open(file_path, "r", encoding='utf-8') as f:
@@ -313,7 +320,7 @@ class LLMController(Controller):
         """Utility function to find a Player object from their name, optionally restricted to valid targets.
 
         Args:
-            name: The name of the player to find.
+            name: The name of the player to find (supports 'Player N', 'N号玩家', 'N号', 'PN').
             potential_targets: Optional list of valid target players to restrict the lookup.
 
         Returns:
@@ -322,9 +329,17 @@ class LLMController(Controller):
         if not name or not isinstance(name, str):
             return None
         candidates = potential_targets if potential_targets is not None else (self.game.players if getattr(self, "game", None) else [])
+        clean = name.strip()
         for p in candidates:
-            if p.name == name:
+            if p.name == clean:
                 return p
+        # Also match seat numbers like "3号玩家", "3号", "P3", "Player 3" -> "Player 3"
+        m = re.match(r"^(?:player\s*|p\s*)?(\d{1,2})\s*(?:号(?:玩家)?)?$", clean, re.IGNORECASE)
+        if m:
+            seat_name = f"Player {int(m.group(1))}"
+            for p in candidates:
+                if p.name == seat_name:
+                    return p
         return None
 
     def _get_llm_response(self, prompt: str) -> dict:
@@ -385,44 +400,83 @@ class LLMController(Controller):
         Returns:
             A formatted string containing the full status and history for the player.
         """
-        sheriff_status = "You are the Sheriff." if player.is_sheriff else ""
-        player_status = ", ".join([f"{p.name} ({'alive' if p.is_alive else 'dead'})" for p in self.game.players])
+        from game.utils import STATE_TRANSLATIONS
 
-        visible_log = "Nothing has happened yet."
+        lang = self._get_effective_language()
+        is_zh = lang == "zh"
+
+        if is_zh:
+            sheriff_status = "你是警长。" if player.is_sheriff else ""
+            player_status = "，".join([f"{p.name} ({'存活' if p.is_alive else '死亡'})" for p in self.game.players])
+            visible_log = "目前还没有发生任何事情。"
+        else:
+            sheriff_status = "You are the Sheriff." if player.is_sheriff else ""
+            player_status = ", ".join([f"{p.name} ({'alive' if p.is_alive else 'dead'})" for p in self.game.players])
+            visible_log = "Nothing has happened yet."
+
         if player.logs:
             filtered_entries = [
                 entry for entry in player.logs
                 if entry.log_type not in (LogType.PLAYER_THINKING, LogType.PLAYER_DONE_THINKING, LogType.THOUGHT)
             ]
             if filtered_entries:
-                visible_log = "\n".join([f"- {log_entry.get_text(self.language)}" for log_entry in filtered_entries])
+                visible_log = "\n".join([f"- {log_entry.get_text(lang)}" for log_entry in filtered_entries])
 
         long_term_memory = ""
         if player.long_term_memory:
-            long_term_memory = f"\nLong Term Memory:\n{player.long_term_memory}"
+            long_term_memory = f"\n长期记忆：\n{player.long_term_memory}" if is_zh else f"\nLong Term Memory:\n{player.long_term_memory}"
 
         # Role-specific information is added to give the LLM crucial context.
-        role_info = "You have no special information."
-        if isinstance(player.role, Witch):
-            role_info = (f"- You have {'a save potion' if player.role.has_save else 'no save potion'} left.\n"
-                         f"- You have {'a poison potion' if player.role.has_poison else 'no poison potion'} left.")
-            if player.role.has_save and self.game.state.__class__.__name__ == "WitchNightState" and self.game.night_kill_target:
-                 role_info += f"\n- Tonight, the werewolves targeted: {self.game.night_kill_target.name}."
-        elif isinstance(player.role, Werewolf):
-            werewolf_team = [p.name for p in self.game.players if p.is_alive and isinstance(p.role, Werewolf)]
-            role_info = f"- Your fellow werewolves are: {', '.join(werewolf_team)}."
-        elif isinstance(player.role, Seer):
-            role_info = "- You are the Seer. You can check one player's identity each night."
-        elif isinstance(player.role, Guard):
-            role_info = "- You are the Guard. You can protect one player each night."
-            if player.role.last_protected:
-                role_info += f"\n- Last night you protected {player.role.last_protected.name}. You cannot protect them again tonight."
-        elif isinstance(player.role, Hunter):
-            role_info = "- You are the Hunter. If you die (except by poison), you can shoot someone."
+        if is_zh:
+            role_info = "你没有特殊能力信息。"
+            if isinstance(player.role, Witch):
+                role_info = (f"- 你还有{'一瓶解药' if player.role.has_save else '0瓶解药（已用完）'}。\n"
+                             f"- 你还有{'一瓶毒药' if player.role.has_poison else '0瓶毒药（已用完）'}。")
+                if player.role.has_save and self.game.state.__class__.__name__ == "WitchNightState" and self.game.night_kill_target:
+                    role_info += f"\n- 今晚狼人袭击的目标是：{self.game.night_kill_target.name}。"
+            elif isinstance(player.role, Werewolf):
+                werewolf_team = [p.name for p in self.game.players if p.is_alive and isinstance(p.role, Werewolf)]
+                role_info = f"- 你的狼人队友是：{', '.join(werewolf_team)}。"
+            elif isinstance(player.role, Seer):
+                role_info = "- 你是预言家。你每晚可以查验一名玩家的身份。"
+            elif isinstance(player.role, Guard):
+                role_info = "- 你是守卫。你每晚可以守护一名玩家。"
+                if player.role.last_protected:
+                    role_info += f"\n- 昨晚你守护了 {player.role.last_protected.name}，今晚不能连续守护同一个人。"
+            elif isinstance(player.role, Hunter):
+                role_info = "- 你是猎人。如果你出局（被毒死除外），你可以开枪带走一名玩家。"
+        else:
+            role_info = "You have no special information."
+            if isinstance(player.role, Witch):
+                role_info = (f"- You have {'a save potion' if player.role.has_save else 'no save potion'} left.\n"
+                             f"- You have {'a poison potion' if player.role.has_poison else 'no poison potion'} left.")
+                if player.role.has_save and self.game.state.__class__.__name__ == "WitchNightState" and self.game.night_kill_target:
+                     role_info += f"\n- Tonight, the werewolves targeted: {self.game.night_kill_target.name}."
+            elif isinstance(player.role, Werewolf):
+                werewolf_team = [p.name for p in self.game.players if p.is_alive and isinstance(p.role, Werewolf)]
+                role_info = f"- Your fellow werewolves are: {', '.join(werewolf_team)}."
+            elif isinstance(player.role, Seer):
+                role_info = "- You are the Seer. You can check one player's identity each night."
+            elif isinstance(player.role, Guard):
+                role_info = "- You are the Guard. You can protect one player each night."
+                if player.role.last_protected:
+                    role_info += f"\n- Last night you protected {player.role.last_protected.name}. You cannot protect them again tonight."
+            elif isinstance(player.role, Hunter):
+                role_info = "- You are the Hunter. If you die (except by poison), you can shoot someone."
+
+        role_display_name = (
+            getattr(player.role, "name_zh", player.role.name)
+            if (is_zh and player.role)
+            else (player.role.name if player.role else "Unknown")
+        )
+        state_cls_name = self.game.state.__class__.__name__ if getattr(self.game, "state", None) else "None"
+        phase_display_name = STATE_TRANSLATIONS.get(state_cls_name, state_cls_name) if is_zh else state_cls_name
 
         status_prompt_template = self._load_prompt("status", "status")
         return status_prompt_template.format(
             player=player,
+            role_name=role_display_name,
+            phase_name=phase_display_name,
             sheriff_status=sheriff_status,
             game=self.game,
             player_status=player_status,
@@ -457,13 +511,17 @@ class LLMController(Controller):
             max_retries = 3
             for attempt in range(max_retries):
                 try:
+                    lang = self._get_effective_language()
                     base_rules = self._load_prompt("", "base_rules")
                     characteristic_prompt = self._load_prompt("characteristic", self.personality)
                     status_prompt = self._build_status_prompt(player)
                     action_prompt_template = self._load_prompt("action", action_name)
                     action_prompt = action_prompt_template.format(**format_kwargs)
 
-                    prompt = f"{base_rules}\n\n{characteristic_prompt}\n\n--- CURRENT STATUS ---\n{status_prompt}\n\n--- ACTION REQUIRED ---\n{action_prompt}"
+                    if lang == "zh":
+                        prompt = f"{base_rules}\n\n{characteristic_prompt}\n\n--- 当前状态 ---\n{status_prompt}\n\n--- 需要执行的行动 ---\n{action_prompt}"
+                    else:
+                        prompt = f"{base_rules}\n\n{characteristic_prompt}\n\n--- CURRENT STATUS ---\n{status_prompt}\n\n--- ACTION REQUIRED ---\n{action_prompt}"
                     
                     response = self._get_llm_response(prompt)
                     thought = response.get('thought')
@@ -641,19 +699,21 @@ class LLMController(Controller):
             player: The player whose history is being summarized.
             logs_to_summarize: The list of `LogEntry` objects from the current day.
         """
-        visible_log = "Nothing has happened yet."
+        lang = self._get_effective_language()
+        is_zh = lang == "zh"
+        visible_log = "目前还没有发生任何事情。" if is_zh else "Nothing has happened yet."
         if logs_to_summarize:
             filtered_entries = [
                 entry for entry in logs_to_summarize
                 if entry.log_type not in (LogType.PLAYER_THINKING, LogType.PLAYER_DONE_THINKING, LogType.THOUGHT)
             ]
             if filtered_entries:
-                visible_log = "\n".join([f"- {log_entry.get_text(self.language)}" for log_entry in filtered_entries])
+                visible_log = "\n".join([f"- {log_entry.get_text(lang)}" for log_entry in filtered_entries])
 
         prompt_template = self._load_prompt("memory", "summarize_day")
         prompt = prompt_template.format(
             visible_log=visible_log,
-            long_term_memory=player.long_term_memory or "None"
+            long_term_memory=player.long_term_memory or ("无" if is_zh else "None")
         )
 
         response = self._get_llm_response(prompt)

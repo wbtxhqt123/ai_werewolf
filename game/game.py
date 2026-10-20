@@ -200,11 +200,16 @@ class Game:
 
         # Log role counts
         role_counts = {}
+        role_names_zh_map = {}
         for role in roles:
             role_counts[role.name] = role_counts.get(role.name, 0) + 1
+            role_names_zh_map[role.name] = getattr(role, "name_zh", role.name)
         if human_player and human_player.role:
             role_counts[human_player.role.name] = (
                 role_counts.get(human_player.role.name, 0) + 1
+            )
+            role_names_zh_map[human_player.role.name] = getattr(
+                human_player.role, "name_zh", human_player.role.name
             )
 
         setup_msg_en = (
@@ -212,8 +217,8 @@ class Game:
             + ", ".join([f"{count} {name}" for name, count in role_counts.items()])
         )
         setup_msg_zh = (
-            "游戏设置: "
-            + ", ".join([f"{count} {name}" for name, count in role_counts.items()])
+            "游戏配置："
+            + "、".join([f"{count} {role_names_zh_map.get(name, name)}" for name, count in role_counts.items()])
         )
         self.log(
             LogEntry(
@@ -225,27 +230,32 @@ class Game:
 
         # Explicitly tell the human player their role
         if human_player and human_player.role:
+            role_zh = getattr(human_player.role, "name_zh", human_player.role.name)
+            desc_zh = getattr(human_player.role, "description_zh", human_player.role.description)
             self.log(
                 LogEntry(
                     log_type=LogType.SYSTEM,
                     message={
                         "en": f"You have been assigned the role: {human_player.role.name}. {human_player.role.description}",
-                        "zh": f"你被分配的角色是: {human_player.role.name}。{human_player.role.description}",  # We might need localized descriptions later
+                        "zh": f"你被分配的角色是：{role_zh}。{desc_zh}",
                     },
                     visible_to_players=[human_player],
                 )
             )
 
         # Log player roles for history file, not for players
-        player_roles_message = ", ".join(
+        player_roles_message_en = ", ".join(
             [f"{p.name}: {p.role.name if p.role else 'Unknown'}" for p in self.players]
+        )
+        player_roles_message_zh = "，".join(
+            [f"{p.name}: {getattr(p.role, 'name_zh', p.role.name) if p.role else '未知'}" for p in self.players]
         )
         self.log(
             LogEntry(
                 log_type=LogType.SYSTEM,
                 message={
-                    "en": f"Player roles: {player_roles_message}",
-                    "zh": f"玩家角色: {player_roles_message}",
+                    "en": f"Player roles: {player_roles_message_en}",
+                    "zh": f"玩家角色: {player_roles_message_zh}",
                 },
             )
         )

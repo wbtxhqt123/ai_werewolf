@@ -1,4 +1,5 @@
 It's your turn to speak. What do you say?
+You MUST write both your thought and your speech strictly in English (do not output Chinese).
 
 You MUST respond with a valid JSON object in the following format:
-{{ "thought": "...", "action": {{ "speech": "Your speech here." }} }}
+{{ "thought": "...", "action": {{ "speech": "Your speech here in English." }} }}
