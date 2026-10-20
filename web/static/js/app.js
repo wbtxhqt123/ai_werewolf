@@ -27,6 +27,20 @@ let gameState = {
     isAlive: true,
     players: [],
     logs: [],
+    renderedLogs: [],
+    logQueue: [],
+    isProcessingQueue: false,
+    queueTimer: null,
+    focusedSpeaker: null,
+    currentPhaseBodyEl: null,
+    currentPhaseId: null,
+    collapsedPhases: new Set(),
+    toastTimer: null,
+    pacingMultiplier: 1.0,
+    latestServerInputRequired: null,
+    latestServerGameActive: true,
+    seerChecks: {},
+    unreadCount: 0,
     lastLogIndex: 0,
     myRole: 'Random',
     myAvatar: '👤',
@@ -149,6 +163,16 @@ const I18N = {
             filterActions: "🐺 我的行动",
             filterVotes: "🗳️ 投票明细",
             close: "关闭"
+        },
+        pacing: {
+            speed1x: "1x",
+            speed2x: "2x",
+            speedMax: "极速",
+            title1x: "消息速度：正常 (点击切换 2x)",
+            title2x: "消息速度：快速 2x (点击切换极速)",
+            titleMax: "消息速度：极速无延迟 (点击切换 1x)",
+            skip: "快进",
+            skipTitle: "立即显示所有排队中的消息"
         }
     },
     en: {
@@ -254,6 +278,16 @@ const I18N = {
             filterActions: "🐺 My Actions",
             filterVotes: "🗳️ Vote Details",
             close: "Close"
+        },
+        pacing: {
+            speed1x: "1x",
+            speed2x: "2x",
+            speedMax: "MAX",
+            title1x: "Message Speed: Normal 1x (Click for 2x)",
+            title2x: "Message Speed: Fast 2x (Click for Instant)",
+            titleMax: "Message Speed: Instant (Click for 1x)",
+            skip: "Skip",
+            skipTitle: "Show all queued messages immediately"
         }
     }
 };
@@ -340,6 +374,12 @@ const gameUI = {
     lobbyLangBtn: document.getElementById('lobby-lang-btn'),
     audioToggleBtn: document.getElementById('audio-toggle-btn'),
     lobbyAudioBtn: document.getElementById('lobby-audio-btn'),
+    speedToggleBtn: document.getElementById('speed-toggle-btn'),
+    skipQueueBtn: document.getElementById('skip-queue-btn'),
+    spotlightToastBanner: document.getElementById('spotlight-toast-banner'),
+    chatInteractiveBar: document.getElementById('chat-Interactive-bar'),
+    chatInteractiveStatus: document.getElementById('chat-interactive-status'),
+    chatInteractiveAction: document.getElementById('chat-interactive-action'),
     newMessagesIndicator: document.getElementById('new-messages-indicator'),
     togglePlayersBtn: document.getElementById('toggle-players-btn'),
     showPlayersBtn: document.getElementById('show-players-btn'),
@@ -396,6 +436,7 @@ const BGMManager = {
     isMuted: false,
     targetVolume: 0.35,
     unlocked: false,
+    autoplayBlocked: false,
 
     init() {
         Object.entries(this.tracks).forEach(([name, audio]) => {
@@ -405,16 +446,22 @@ const BGMManager = {
             audio.addEventListener('error', (e) => {
                 console.warn(`[BGM] Failed loading track ${name}:`, e);
             });
+            audio.addEventListener('play', () => {
+                this.autoplayBlocked = false;
+                this.unlocked = true;
+                this.updateButtonsUI();
+            });
         });
 
         const storedMute = localStorage.getItem('werewolf_bgm_muted');
         this.isMuted = storedMute === 'true';
 
-        const unlockAudio = () => {
+        const unlockAudio = (e) => {
+            // Do not intercept clicks on the audio toggle button itself — let toggleMute() handle it cleanly
+            if (e && e.target && e.target.closest && e.target.closest('#lobby-audio-btn, #audio-toggle-btn')) {
+                return;
+            }
             this.unlock();
-            ['pointerdown', 'keydown', 'touchstart', 'click'].forEach(evt => {
-                window.removeEventListener(evt, unlockAudio);
-            });
         };
 
         ['pointerdown', 'keydown', 'touchstart', 'click'].forEach(evt => {
@@ -431,7 +478,7 @@ const BGMManager = {
     },
 
     unlock() {
-        if (this.unlocked) return;
+        if (this.unlocked && !this.autoplayBlocked) return;
         this.unlocked = true;
         if (!this.isMuted) {
             const isNight = document.body.classList.contains('night-mode');
@@ -451,14 +498,23 @@ const BGMManager = {
 
     toggleMute() {
         this.unlocked = true;
-        this.isMuted = !this.isMuted;
-        localStorage.setItem('werewolf_bgm_muted', this.isMuted ? 'true' : 'false');
-        
-        if (this.isMuted) {
-            this.stopAll();
-        } else {
+        const activeName = this.currentTrackName || (document.body.classList.contains('night-mode') ? 'night' : 'day');
+        const activeAudio = this.tracks[activeName];
+        const isCurrentlySilent = this.isMuted || this.autoplayBlocked || (activeAudio && activeAudio.paused);
+
+        if (isCurrentlySilent) {
+            // Single click turns music ON immediately when it was muted or blocked by browser autoplay
+            this.isMuted = false;
+            this.autoplayBlocked = false;
+            localStorage.setItem('werewolf_bgm_muted', 'false');
             const isNight = document.body.classList.contains('night-mode');
             this.playTrack(isNight ? 'night' : 'day');
+        } else {
+            // Music was genuinely audible -> mute it
+            this.isMuted = true;
+            this.autoplayBlocked = false;
+            localStorage.setItem('werewolf_bgm_muted', 'true');
+            this.stopAll();
         }
         this.updateButtonsUI();
     },
@@ -482,8 +538,14 @@ const BGMManager = {
         if (targetAudio.paused) {
             const playPromise = targetAudio.play();
             if (playPromise !== undefined) {
-                playPromise.catch(() => {
-                    // Autoplay prevented pending user interaction
+                playPromise.then(() => {
+                    this.autoplayBlocked = false;
+                    this.unlocked = true;
+                    this.updateButtonsUI();
+                }).catch(() => {
+                    // Autoplay prevented pending user interaction; reflect silent state on button
+                    this.autoplayBlocked = true;
+                    this.updateButtonsUI();
                 });
             }
         }
@@ -509,15 +571,16 @@ const BGMManager = {
     updateButtonsUI() {
         const lang = (gameState && gameState.lang) || 'zh';
         const isZh = lang === 'zh';
-        const labelText = this.isMuted ? (isZh ? '静音' : 'Muted') : (isZh ? '音乐' : 'BGM');
-        const icon = this.isMuted ? '🔇' : '🎵';
-        const titleText = this.isMuted 
+        const isSilent = this.isMuted || this.autoplayBlocked;
+        const labelText = isSilent ? (isZh ? '静音' : 'Muted') : (isZh ? '音乐' : 'BGM');
+        const icon = isSilent ? '🔇' : '🎵';
+        const titleText = isSilent 
             ? (I18N[lang]?.bgmTitleMuted || 'BGM: Muted (Click to play)')
             : (I18N[lang]?.bgmTitlePlaying || 'BGM: Playing (Click to mute)');
 
         const updateBtn = (btn) => {
             if (!btn) return;
-            btn.classList.toggle('muted', this.isMuted);
+            btn.classList.toggle('muted', isSilent);
             btn.title = titleText;
             btn.setAttribute('aria-label', titleText);
             btn.innerHTML = `${icon} <span class="audio-label">${labelText}</span>`;
@@ -549,7 +612,10 @@ function init() {
     if (gameUI.debugBtn) {
         gameUI.debugBtn.addEventListener('click', () => {
             debugVisible = !debugVisible;
-            document.querySelectorAll('.message.debug').forEach(el => {
+            if (gameUI.chatBox) {
+                gameUI.chatBox.classList.toggle('show-debug-logs', debugVisible);
+            }
+            document.querySelectorAll('.message-container.debug, .message.debug').forEach(el => {
                 el.classList.toggle('visible', debugVisible);
             });
             gameUI.debugBtn.classList.toggle('active', debugVisible);
@@ -572,6 +638,14 @@ function init() {
         gameUI.audioToggleBtn.addEventListener('click', () => BGMManager.toggleMute());
     }
 
+    if (gameUI.speedToggleBtn) {
+        gameUI.speedToggleBtn.addEventListener('click', togglePacingSpeed);
+    }
+
+    if (gameUI.skipQueueBtn) {
+        gameUI.skipQueueBtn.addEventListener('click', skipLogQueue);
+    }
+
     if (gameUI.newMessagesIndicator) {
         gameUI.newMessagesIndicator.addEventListener('click', () => {
             scrollToBottom(true);
@@ -580,7 +654,42 @@ function init() {
 
     if (gameUI.chatBox) {
         gameUI.chatBox.addEventListener('scroll', checkScrollPosition);
+
+        // Delegate hover and click on @seat mention pills inside chat bubbles
+        gameUI.chatBox.addEventListener('mouseover', (e) => {
+            const pill = e.target.closest('.seat-mention-pill');
+            if (pill && pill.dataset.player) {
+                highlightSidebarPlayerCard(pill.dataset.player, true);
+            }
+        });
+        gameUI.chatBox.addEventListener('mouseout', (e) => {
+            const pill = e.target.closest('.seat-mention-pill');
+            if (pill && pill.dataset.player) {
+                highlightSidebarPlayerCard(pill.dataset.player, false);
+            }
+        });
+        gameUI.chatBox.addEventListener('click', (e) => {
+            const pill = e.target.closest('.seat-mention-pill');
+            if (pill && pill.dataset.player) {
+                e.stopPropagation();
+                toggleSpeakerFocus(pill.dataset.player);
+            }
+        });
     }
+
+    // Spacebar to step/advance the next queued message when not typing in an input
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && gameState.active) {
+            const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+            if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select' || activeTag === 'button') {
+                return;
+            }
+            if (gameState.logQueue && gameState.logQueue.length > 0) {
+                e.preventDefault();
+                stepNextQueuedLogImmediately();
+            }
+        }
+    });
 
     if (gameUI.togglePlayersBtn) {
         gameUI.togglePlayersBtn.addEventListener('click', () => {
@@ -713,10 +822,18 @@ function loadStoredSettings() {
                 selectedTurnTimeoutSeconds = parsed;
             }
         }
+        const savedSpeed = localStorage.getItem('werewolf_pacing_speed');
+        if (savedSpeed !== null) {
+            const parsedSpeed = parseFloat(savedSpeed);
+            if ([1.0, 0.5, 0].includes(parsedSpeed)) {
+                gameState.pacingMultiplier = parsedSpeed;
+            }
+        }
     } catch (e) {
         console.warn('Failed to read settings from localStorage', e);
     }
     syncTimerUIFromState();
+    updatePacingControlsUI();
 }
 
 /**
@@ -970,30 +1087,682 @@ function isHiddenDecisionLog(log) {
 }
 
 /**
+ * Checks if a log entry is a debug-only state boundary log (`--- XXXState Start/End ---`).
+ * @param {object} log - The log entry object.
+ * @returns {boolean}
+ */
+function isDebugStateBoundaryLog(log) {
+    if (!log || log.type !== 'SYSTEM') return false;
+    const msgZh = typeof log.message === 'object' ? (log.message.zh || '') : String(log.message || '');
+    const msgEn = typeof log.message === 'object' ? (log.message.en || '') : String(log.message || '');
+    const zTrim = msgZh.trim();
+    const eTrim = msgEn.trim();
+    if (/^---\s*.*(开始|结束)\s*---$/.test(zTrim) || /^---\s*.*(Start|End)\s*---$/i.test(eTrim)) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Checks if a log entry is redundant individual vote/tally noise or repetitive filler chatter
+ * that should be suppressed from the player chat box.
+ * @param {object} log - The log entry object.
+ * @returns {boolean}
+ */
+function isRedundantChatNoiseLog(log) {
+    if (!log) return false;
+    if (log.type === 'EXECUTION_VOTE' || log.type === 'SHERIFF_VOTE' || log.type === 'SHERIFF_CANDIDATE') {
+        return true;
+    }
+    if (log.type === 'ACTION') {
+        const msgZh = typeof log.message === 'object' ? (log.message.zh || '') : String(log.message || '');
+        const msgEn = typeof log.message === 'object' ? (log.message.en || '') : String(log.message || '');
+        const combined = `${msgZh} ${msgEn}`;
+        // Suppress "open your eyes" / "close your eyes" filler since the prompt & spotlight card already show the action
+        if (
+            combined.includes('请睁眼') ||
+            combined.includes('open your eyes') ||
+            combined.includes('请闭眼') ||
+            combined.includes('close your eyes')
+        ) {
+            return true;
+        }
+    }
+    if (log.type === 'SYSTEM') {
+        const msgZh = typeof log.message === 'object' ? (log.message.zh || '') : String(log.message || '');
+        const msgEn = typeof log.message === 'object' ? (log.message.en || '') : String(log.message || '');
+        const combined = `${msgZh} ${msgEn}`;
+
+        // Filter out "--- Vote Results ---", "--- Sheriff Vote Results ---", "--- Tie-breaker Vote Results ---"
+        if (
+            combined.includes('--- 投票结果 ---') ||
+            combined.includes('--- Vote Results ---') ||
+            combined.includes('--- 警长投票结果 ---') ||
+            combined.includes('--- Sheriff Vote Results ---') ||
+            combined.includes('--- PK投票结果 ---') ||
+            combined.includes('--- Tie-breaker Vote Results ---')
+        ) {
+            return true;
+        }
+
+        // Filter out individual vote tally lines like "Player 1: 2 票" or "Player 1: 2 vote(s)"
+        if (/^Player\s+\d+:\s*[\d.]+\s*(票|vote\(s\))$/.test(msgZh.trim()) || /^Player\s+\d+:\s*[\d.]+\s*(票|vote\(s\))$/.test(msgEn.trim())) {
+            return true;
+        }
+
+        // Filter out redundant summary lines right before/after VOTE_RESULT
+        if (
+            combined.includes('票数最多') ||
+            combined.includes('has the most votes') ||
+            combined.includes('无人投票') ||
+            combined.includes('No votes were cast')
+        ) {
+            return true;
+        }
+
+        // Filter out redundant phase transition filler chatter (since the Night/Day pill divider and celestial banner already announce it)
+        if (
+            msgZh === '太阳落山了，一个新的夜晚开始了...' ||
+            msgEn === 'The sun sets, and a new night begins...' ||
+            msgZh === '长夜已过，黎明将至。' ||
+            msgEn === 'The night is over, and dawn is approaching.' ||
+            msgZh === '天亮了。' ||
+            msgEn === 'A new day begins.' ||
+            msgZh === '天黑了，黄昏降临。' ||
+            msgEn === 'The day is over, and dusk is approaching.' ||
+            msgZh === '玩家们正在回顾今天发生的事情...' ||
+            msgEn === 'Players are reflecting on the day...' ||
+            msgZh === '现在开始竞选警长。' ||
+            msgEn === 'Players can now choose to run for sheriff.' ||
+            msgZh === '请竞选玩家发表竞选演说。' ||
+            msgEn === 'All election players will now give their speeches.' ||
+            msgZh === '请警下玩家开始投票。' ||
+            msgEn === 'All living players who are not candidates will now vote for the sheriff.' ||
+            msgZh === '请所有玩家依次发言。' ||
+            msgEn === 'All living players will now give their speeches.' ||
+            msgZh === '现在开始放逐投票。' ||
+            msgEn === "It's time to vote. Who do you want to execute?" ||
+            msgZh === '没有在场警长。发言将按默认顺序进行。' ||
+            msgEn === 'There is no active Sheriff. Speech will proceed in default order.' ||
+            combined.includes('正在决定发言顺序') ||
+            combined.includes('is deciding the speech order')
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Cycles the message pacing speed between Normal (1x), Fast (2x), and Instant (MAX).
+ */
+function togglePacingSpeed() {
+    if (gameState.pacingMultiplier === 1.0) {
+        gameState.pacingMultiplier = 0.5;
+    } else if (gameState.pacingMultiplier === 0.5) {
+        gameState.pacingMultiplier = 0;
+    } else {
+        gameState.pacingMultiplier = 1.0;
+    }
+    try {
+        localStorage.setItem('werewolf_pacing_speed', String(gameState.pacingMultiplier));
+    } catch (e) {
+        // Ignore storage errors
+    }
+    updatePacingControlsUI();
+    if (gameState.pacingMultiplier === 0 && gameState.logQueue.length > 0) {
+        skipLogQueue();
+    }
+}
+
+/**
+ * Updates the speed toggle and skip queue buttons in the game header.
+ */
+function updatePacingControlsUI() {
+    const lang = (gameState && gameState.lang) || 'zh';
+    const tp = I18N[lang]?.pacing || I18N.zh.pacing;
+
+    if (gameUI.speedToggleBtn) {
+        let icon = '🐢';
+        let label = tp.speed1x;
+        let title = tp.title1x;
+        if (gameState.pacingMultiplier === 0.5) {
+            icon = '🐇';
+            label = tp.speed2x;
+            title = tp.title2x;
+        } else if (gameState.pacingMultiplier === 0) {
+            icon = '⚡';
+            label = tp.speedMax;
+            title = tp.titleMax;
+        }
+        gameUI.speedToggleBtn.title = title;
+        gameUI.speedToggleBtn.setAttribute('aria-label', title);
+        gameUI.speedToggleBtn.innerHTML = `${icon} <span class="speed-label">${label}</span>`;
+    }
+
+    if (gameUI.skipQueueBtn) {
+        const queuedCount = gameState.logQueue ? gameState.logQueue.length : 0;
+        if (queuedCount > 1) {
+            gameUI.skipQueueBtn.classList.remove('hidden');
+            gameUI.skipQueueBtn.title = tp.skipTitle;
+            gameUI.skipQueueBtn.innerHTML = `⏭️ <span class="skip-label">${tp.skip} (${queuedCount})</span>`;
+        } else {
+            gameUI.skipQueueBtn.classList.add('hidden');
+        }
+    }
+}
+
+/**
+ * Computes the adaptive display delay (in ms) after rendering a log entry.
+ * @param {object} log - The log entry just rendered.
+ * @returns {number} Delay in milliseconds before displaying the next queued log.
+ */
+function getLogPacingDelay(log) {
+    if (!log || gameState.pacingMultiplier === 0) return 0;
+    if (log.type === 'PLAYER_THINKING' || log.type === 'PLAYER_DONE_THINKING') return 0;
+    if (isRedundantChatNoiseLog(log) || isDebugStateBoundaryLog(log)) return 0;
+
+    const mult = gameState.pacingMultiplier;
+    const textObj = log.message;
+    const text = typeof textObj === 'object' ? (textObj[gameState.lang] || textObj.zh || textObj.en || '') : String(textObj || '');
+
+    // 1. High-priority secret role operation results (Seer check, Witch action, Guard protect, Werewolf target, Gunshot)
+    if (['SEER_CHECK', 'WITCH_ACTION', 'GUARD_PROTECT', 'WEREWOLF_TARGET', 'HUNTER_SHOOT', 'BLACKWEREWOLFKING_SHOOT', 'PLAYER_SHOOT'].includes(log.type)) {
+        return Math.round(2200 * mult);
+    }
+
+    // 2. Player speeches & werewolf whispers: scale by text length so players can comfortably read
+    if (log.type === 'SPEECH' || log.type === 'WHISPER') {
+        const charDelay = Math.min(1600, Math.max(0, text.length * 28));
+        return Math.round((1500 + charDelay) * mult);
+    }
+
+    // 3. Consolidated vote result or sheriff election signup cards
+    if (log.type === 'VOTE_RESULT' || (log.data && log.data.phase === 'Sheriff Signup')) {
+        return Math.round(1800 * mult);
+    }
+
+    // 4. Dramatic phase transitions & eliminations
+    if (['NIGHT_FALLS', 'DAY_BREAKS', 'PLAYER_ELIMINATED', 'SHERIFF_ELECTED', 'GAME_OVER'].includes(log.type)) {
+        return Math.round(1400 * mult);
+    }
+
+    // 5. Role assignment / critical private notices
+    if (text.includes('你被分配的角色是') || text.includes('You have been assigned the role') || text.includes('被狼人袭击了') || text.includes('targeted by the werewolves')) {
+        return Math.round(1600 * mult);
+    }
+
+    // 6. Standard system / action notices
+    return Math.round(650 * mult);
+}
+
+/**
+ * Enqueues logs for paced rendering in the chat box.
+ * @param {Array<object>} logs - Array of log objects to enqueue.
+ */
+function enqueueLogs(logs) {
+    if (!logs || logs.length === 0) return;
+    logs.forEach(log => {
+        // Record Seer check results immediately into state so the Seer badge is preserved
+        if (log.type === 'SEER_CHECK' && log.target && log.data && log.data.result) {
+            gameState.seerChecks[log.target] = log.data.result;
+        }
+        gameState.logQueue.push(log);
+    });
+    updatePacingControlsUI();
+    if (!gameState.isProcessingQueue) {
+        processNextQueuedLog();
+    }
+}
+
+/**
+ * Updates the floating speaker filter pill above the chat box (zero layout shift).
+ */
+function updateInteractiveBarUI() {
+    const bar = gameUI.chatInteractiveBar || document.getElementById('chat-Interactive-bar');
+    const statusEl = gameUI.chatInteractiveStatus || document.getElementById('chat-interactive-status');
+    const actionBtn = gameUI.chatInteractiveAction || document.getElementById('chat-interactive-action');
+    if (!bar || !statusEl || !actionBtn) return;
+
+    const isZh = gameState.lang === 'zh';
+
+    if (gameState.focusedSpeaker) {
+        const seatLabel = formatPlayerSeatLabel(gameState.focusedSpeaker, isZh);
+        const avatar = getAvatar(gameState.focusedSpeaker);
+        bar.classList.remove('hidden');
+        bar.className = 'chat-interactive-bar speaker-filter-mode';
+        statusEl.innerHTML = isZh
+            ? `🔍 只看 <strong>${avatar} ${seatLabel}</strong> 的发言`
+            : `🔍 Filtering <strong>${avatar} ${seatLabel}</strong>`;
+        actionBtn.innerText = isZh ? '✕ 全部' : '✕ All';
+        actionBtn.onclick = () => toggleSpeakerFocus(null);
+        return;
+    }
+
+    bar.classList.add('hidden');
+}
+
+/**
+ * Steps the next queued log entry immediately (triggered by Spacebar).
+ */
+function stepNextQueuedLogImmediately() {
+    if (!gameState.logQueue || gameState.logQueue.length === 0) return;
+    processNextQueuedLog();
+}
+
+/**
+ * Shows a 2.2-second Center-Stage Comic Toast Banner for major reveals and events.
+ * @param {string} htmlContent - HTML content inside the toast banner.
+ * @param {string} themeClass - Theme class ('toast-wolf', 'toast-good', 'toast-sheriff', 'toast-guard', 'toast-danger').
+ */
+function showSpotlightToast(htmlContent, themeClass = 'toast-default') {
+    const banner = gameUI.spotlightToastBanner || document.getElementById('spotlight-toast-banner');
+    if (!banner) return;
+
+    if (gameState.toastTimer) {
+        clearTimeout(gameState.toastTimer);
+        gameState.toastTimer = null;
+    }
+
+    banner.className = `spotlight-toast-banner ${themeClass}`;
+    banner.innerHTML = htmlContent;
+
+    gameState.toastTimer = setTimeout(() => {
+        banner.classList.add('hidden');
+        gameState.toastTimer = null;
+    }, 2400);
+}
+
+/**
+ * Triggers a Center-Stage Toast Banner if the log is a critical reveal or dramatic event.
+ * @param {object} log - The log entry.
+ */
+function triggerToastIfBigMoment(log) {
+    if (!log) return;
+    const isZh = gameState.lang === 'zh';
+    const type = log.type;
+    const targetName = typeof log.target === 'object' ? log.target?.name : log.target;
+    const sourceName = typeof log.source === 'object' ? log.source?.name : log.source;
+
+    if (type === 'SEER_CHECK' && targetName) {
+        const resultCamp = (log.data && log.data.result) || '';
+        const isWolf = resultCamp === 'Werewolf' || resultCamp === 'Werewolves';
+        const seat = formatPlayerSeatLabel(targetName, isZh);
+        const avatar = getAvatar(targetName);
+        const verdict = isWolf ? (isZh ? '🐺 狼人阵营！' : '🐺 WEREWOLF!') : (isZh ? '👱 好人阵营' : '👱 GOOD CAMP');
+        showSpotlightToast(
+            `<span>🔮 ${isZh ? '查验身份' : 'Seer Check'}:</span> <strong>${avatar} ${seat}</strong> ➔ <span class="toast-verdict-pill">${verdict}</span>`,
+            isWolf ? 'toast-wolf' : 'toast-good'
+        );
+        return;
+    }
+
+    if (type === 'WITCH_ACTION' && targetName) {
+        const isSave = log.data?.action === 'save';
+        const seat = formatPlayerSeatLabel(targetName, isZh);
+        const avatar = getAvatar(targetName);
+        showSpotlightToast(
+            isSave
+                ? `<span>💖 ${isZh ? '解药生效' : 'Saved'}:</span> <strong>${avatar} ${seat}</strong> ${isZh ? '已获救' : 'Rescued'}`
+                : `<span>🧪 ${isZh ? '毒药生效' : 'Poisoned'}:</span> <strong>${avatar} ${seat}</strong> ${isZh ? '已毒杀' : 'Eliminated'}`,
+            isSave ? 'toast-good' : 'toast-wolf'
+        );
+        return;
+    }
+
+    if (type === 'GUARD_PROTECT' && targetName) {
+        const seat = formatPlayerSeatLabel(targetName, isZh);
+        const avatar = getAvatar(targetName);
+        showSpotlightToast(
+            `<span>🛡️ ${isZh ? '守卫守护' : 'Guarded'}:</span> <strong>${avatar} ${seat}</strong>`,
+            'toast-guard'
+        );
+        return;
+    }
+
+    if ((type === 'HUNTER_SHOOT' || type === 'BLACKWEREWOLFKING_SHOOT' || type === 'PLAYER_SHOOT') && sourceName && targetName) {
+        const sSeat = formatPlayerSeatLabel(sourceName, isZh);
+        const tSeat = formatPlayerSeatLabel(targetName, isZh);
+        showSpotlightToast(
+            `<span>💥 ${getAvatar(sourceName)} ${sSeat}</span> ${isZh ? '开枪带走了' : 'shot'} <strong>💀 ${getAvatar(targetName)} ${tSeat}</strong>!`,
+            'toast-wolf'
+        );
+        return;
+    }
+
+    if (type === 'SHERIFF_ELECTED' && targetName) {
+        const seat = formatPlayerSeatLabel(targetName, isZh);
+        const avatar = getAvatar(targetName);
+        showSpotlightToast(
+            `<span>👮 ${isZh ? '新任警长' : 'Sheriff Elected'}:</span> <strong>${avatar} ${seat} ⭐</strong>`,
+            'toast-sheriff'
+        );
+    }
+}
+
+/**
+ * Highlights or un-highlights a player's card on the left/right sidebar when hovering a @seat pill.
+ * @param {string} playerName - e.g. 'Player 3'
+ * @param {boolean} active - Whether to highlight
+ */
+function highlightSidebarPlayerCard(playerName, active) {
+    const card = Array.from(document.querySelectorAll('.player-card')).find(c => c.dataset.name === playerName);
+    if (card) {
+        card.classList.toggle('mention-hovered', Boolean(active));
+    }
+}
+
+/**
+ * Toggles filtering/highlighting of a specific player's speeches in the chat box.
+ * @param {string|null} playerName - e.g. 'Player 3', or null to clear filter.
+ */
+function toggleSpeakerFocus(playerName) {
+    if (!playerName || gameState.focusedSpeaker === playerName) {
+        gameState.focusedSpeaker = null;
+    } else {
+        gameState.focusedSpeaker = playerName;
+    }
+
+    // Update sidebar card active focus indicator
+    document.querySelectorAll('.player-card').forEach(card => {
+        card.classList.toggle('speaker-focused', card.dataset.name === gameState.focusedSpeaker);
+    });
+
+    // Update chat messages dim/highlight state
+    if (gameUI.chatBox) {
+        gameUI.chatBox.classList.toggle('has-speaker-focus', Boolean(gameState.focusedSpeaker));
+        gameUI.chatBox.querySelectorAll('.message-container').forEach(msg => {
+            if (!gameState.focusedSpeaker) {
+                msg.classList.remove('speaker-match', 'speaker-dimmed');
+            } else if (msg.dataset.speaker === gameState.focusedSpeaker) {
+                msg.classList.add('speaker-match');
+                msg.classList.remove('speaker-dimmed');
+            } else {
+                msg.classList.add('speaker-dimmed');
+                msg.classList.remove('speaker-match');
+            }
+        });
+    }
+
+    updateInteractiveBarUI();
+}
+
+/**
+ * Formats plain speech text by converting player seat mentions (e.g. "Player 3", "3号玩家", "3号")
+ * into interactive cartoon avatar mini-pills.
+ * @param {string} rawText - Raw speech text.
+ * @returns {string} Safe HTML string with mention pills.
+ */
+function formatSpeechWithSeatPills(rawText) {
+    const safe = escapeHtml(rawText);
+    const totalPlayers = (gameState.players && gameState.players.length) || 12;
+    const isZh = gameState.lang === 'zh';
+
+    // Match "Player N", "N号玩家", or "N号" (where N is 1..12)
+    return safe.replace(/\bPlayer\s*(\d{1,2})\b|(\d{1,2})\s*号(?:玩家)?/gi, (match, enNum, zhNum) => {
+        const num = parseInt(enNum || zhNum, 10);
+        if (!Number.isFinite(num) || num < 1 || num > totalPlayers) {
+            return match;
+        }
+        const playerName = `Player ${num}`;
+        const avatar = getAvatar(playerName);
+        const label = isZh ? `${num}号` : `P${num}`;
+        return `<span class="seat-mention-pill" data-player="${playerName}" title="${isZh ? '点击高亮该玩家所有发言' : 'Click to highlight this player\'s speeches'}">${avatar}${label}</span>`;
+    });
+}
+
+/**
+ * Processes the next item in the client-side message pacing queue.
+ */
+function processNextQueuedLog() {
+    if (gameState.queueTimer) {
+        clearTimeout(gameState.queueTimer);
+        gameState.queueTimer = null;
+    }
+
+    if (!gameState.logQueue || gameState.logQueue.length === 0) {
+        gameState.isProcessingQueue = false;
+        updatePacingControlsUI();
+        syncPostQueueState();
+        return;
+    }
+
+    gameState.isProcessingQueue = true;
+    const log = gameState.logQueue.shift();
+    updatePacingControlsUI();
+
+    // Skip redundant noise logs immediately without delay
+    if (isRedundantChatNoiseLog(log)) {
+        processNextQueuedLog();
+        return;
+    }
+
+    // Render debug boundary logs silently (hidden unless debug mode is toggled) with 0ms delay
+    if (isDebugStateBoundaryLog(log)) {
+        gameState.renderedLogs.push(log);
+        processLog(log);
+        processNextQueuedLog();
+        return;
+    }
+
+    const wasNearBottom = isUserNearBottom();
+    gameState.renderedLogs.push(log);
+    processLog(log);
+    triggerToastIfBigMoment(log);
+
+    if (log.type === 'PLAYER_ELIMINATED' && log.target) {
+        const targetName = typeof log.target === 'object' ? log.target.name : log.target;
+        const card = Array.from(document.querySelectorAll('.player-card')).find(c => c.dataset.name === targetName);
+        if (card) card.classList.add('dead');
+    }
+
+    if (log.type !== 'PLAYER_THINKING' && log.type !== 'PLAYER_DONE_THINKING') {
+        if (!wasNearBottom) {
+            gameState.unreadCount = (gameState.unreadCount || 0) + 1;
+        }
+        scrollToBottom(wasNearBottom);
+    }
+
+    const delay = getLogPacingDelay(log);
+    if (delay <= 0) {
+        processNextQueuedLog();
+    } else {
+        gameState.queueTimer = setTimeout(() => {
+            processNextQueuedLog();
+        }, delay);
+    }
+}
+
+/**
+ * Instantly flushes all remaining logs in the pacing queue to the chat box.
+ */
+function skipLogQueue() {
+    if (gameState.queueTimer) {
+        clearTimeout(gameState.queueTimer);
+        gameState.queueTimer = null;
+    }
+    const wasNearBottom = isUserNearBottom();
+    while (gameState.logQueue && gameState.logQueue.length > 0) {
+        const log = gameState.logQueue.shift();
+        if (isRedundantChatNoiseLog(log)) continue;
+        gameState.renderedLogs.push(log);
+        processLog(log);
+    }
+    gameState.isProcessingQueue = false;
+    updatePacingControlsUI();
+    scrollToBottom(wasNearBottom || true);
+    syncPostQueueState();
+}
+
+/**
+ * Invoked once the message pacing queue finishes draining so any pending user input
+ * prompt or game-over modal is presented right on cue.
+ */
+function syncPostQueueState() {
+    if (gameState.players && gameState.players.length > 0) {
+        updatePlayers(gameState.players);
+    }
+
+    handleInputRequest(gameState.latestServerInputRequired);
+
+    if (!gameState.latestServerGameActive && !gameState.latestServerInputRequired && gameState.active) {
+        gameState.active = false;
+        stopTurnTimer();
+        clearInterval(pollingInterval);
+        addSystemMessage(I18N[gameState.lang].gameOver);
+
+        setTimeout(() => {
+            showEvaluationModal();
+        }, 1800);
+    }
+}
+
+/**
  * Flushes buffered decision logs once the player has submitted their choice.
  */
 function flushPendingVoteLogs() {
     if (gameState.pendingVoteLogs && gameState.pendingVoteLogs.length > 0) {
         const logsToFlush = gameState.pendingVoteLogs;
         gameState.pendingVoteLogs = [];
-        const shouldScroll = isUserNearBottom();
-        logsToFlush.forEach(log => processLog(log));
-        scrollToBottom(shouldScroll);
+        enqueueLogs(logsToFlush);
     }
 }
 
 /**
- * Re-renders all logs currently stored in the game state.
- * This is used after a language change to update the display.
+ * Appends a message element into the currently active phase section (or directly to chatBox before Night 1).
+ * @param {HTMLElement} msgEl - The message container element.
+ */
+function appendToActiveChatSection(msgEl) {
+    // Apply speaker focus dimming/highlighting if a speaker filter is currently active
+    if (gameState.focusedSpeaker) {
+        if (msgEl.dataset.speaker === gameState.focusedSpeaker) {
+            msgEl.classList.add('speaker-match');
+        } else {
+            msgEl.classList.add('speaker-dimmed');
+        }
+    }
+
+    if (gameState.currentPhaseBodyEl && gameUI.chatBox.contains(gameState.currentPhaseBodyEl)) {
+        // If adding a real visible message to a Night section, remove the sleeping placeholder
+        if (!msgEl.classList.contains('debug') && !msgEl.classList.contains('night-sleep-placeholder')) {
+            const sleepPlaceholder = gameState.currentPhaseBodyEl.querySelector('.night-sleep-placeholder');
+            if (sleepPlaceholder) {
+                sleepPlaceholder.remove();
+            }
+        }
+        gameState.currentPhaseBodyEl.appendChild(msgEl);
+        updatePhaseSectionCount(gameState.currentPhaseBodyEl.parentElement);
+    } else {
+        gameUI.chatBox.appendChild(msgEl);
+    }
+}
+
+/**
+ * Updates the folded message count badge on a Style 1A centered pill divider.
+ * @param {HTMLElement} sectionEl - The .chat-phase-section element.
+ */
+function updatePhaseSectionCount(sectionEl) {
+    if (!sectionEl) return;
+    const bodyEl = sectionEl.querySelector('.chat-phase-body');
+    const countEl = sectionEl.querySelector('.phase-folded-count');
+    if (!bodyEl || !countEl) return;
+    const visibleChildren = Array.from(bodyEl.children).filter(
+        el => !el.classList.contains('debug') && !el.classList.contains('night-sleep-placeholder')
+    );
+    const count = visibleChildren.length;
+    const isZh = gameState.lang === 'zh';
+    countEl.innerText = isZh ? `${count}条` : `${count}`;
+}
+
+/**
+ * Starts a new Style 1A collapsible phase section (Centered Cartoon Pill Divider) in the chat box.
+ * @param {string} phaseType - 'Night' or 'Day'
+ * @param {object} log - The NIGHT_FALLS or DAY_BREAKS log object.
+ */
+function startNewChatPhaseSection(phaseType, log) {
+    const isZh = gameState.lang === 'zh';
+    const isNight = phaseType === 'Night';
+    const dayNum = log.day || 1;
+    const phaseId = `${phaseType}_${dayNum}`;
+
+    gameState.currentPhaseId = phaseId;
+
+    const sectionEl = document.createElement('div');
+    const isCollapsed = gameState.collapsedPhases && gameState.collapsedPhases.has(phaseId);
+    sectionEl.className = `chat-phase-section ${isNight ? 'night-section' : 'day-section'}${isCollapsed ? ' collapsed' : ''}`;
+    sectionEl.dataset.phaseId = phaseId;
+
+    let rawTitle = log.message;
+    if (typeof rawTitle === 'object') {
+        rawTitle = rawTitle[gameState.lang] || rawTitle.zh || rawTitle.en || '';
+    }
+    const cleanTitle = String(rawTitle || '').replace(/[-—]/g, '').trim() || (isNight ? (isZh ? `第 ${dayNum} 夜` : `Night ${dayNum}`) : (isZh ? `第 ${dayNum} 天` : `Day ${dayNum}`));
+
+    const dividerRow = document.createElement('div');
+    dividerRow.className = 'phase-ribbon-divider';
+
+    const pillBtn = document.createElement('button');
+    pillBtn.type = 'button';
+    pillBtn.className = `phase-ribbon-pill ${isNight ? 'night' : 'day'}`;
+    pillBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+    pillBtn.title = isZh ? '点击收起 / 展开本阶段记录' : 'Click to collapse / expand phase';
+    pillBtn.innerHTML = `
+        <span>${isNight ? '🌙' : '☀️'} ${escapeHtml(cleanTitle)}</span>
+        <span class="phase-folded-count">${isZh ? '0条' : '0'}</span>
+        <span class="phase-chevron">▾</span>
+    `;
+
+    dividerRow.appendChild(pillBtn);
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'chat-phase-body';
+
+    // For Night phases, add a subtle peaceful sleeping note by default; if the player has a night role action, it is replaced automatically
+    if (isNight) {
+        const sleepEl = document.createElement('div');
+        sleepEl.className = 'message-container system night-sleep-placeholder';
+        sleepEl.innerHTML = `<div class="chat-bubble system sleep-bubble">${isZh ? '💤 夜深人静，闭眼沉睡中...' : '💤 Sleeping peacefully through the night...'}</div>`;
+        bodyEl.appendChild(sleepEl);
+    }
+
+    pillBtn.addEventListener('click', () => {
+        const nowCollapsed = sectionEl.classList.toggle('collapsed');
+        pillBtn.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
+        if (nowCollapsed) {
+            gameState.collapsedPhases.add(phaseId);
+        } else {
+            gameState.collapsedPhases.delete(phaseId);
+        }
+    });
+
+    sectionEl.appendChild(dividerRow);
+    sectionEl.appendChild(bodyEl);
+    gameUI.chatBox.appendChild(sectionEl);
+
+    gameState.currentPhaseBodyEl = bodyEl;
+}
+
+/**
+ * Re-renders all logs that have already been displayed in the chat box.
+ * This is used after a language change to update the display without dumping unqueued items.
  */
 function renderLogs() {
     gameUI.chatBox.innerHTML = '';
-    gameState.logs.forEach(log => {
+    gameState.currentPhaseBodyEl = null;
+    gameState.currentPhaseId = null;
+    const logsToRender = (gameState.renderedLogs && gameState.renderedLogs.length > 0)
+        ? gameState.renderedLogs
+        : gameState.logs;
+    logsToRender.forEach(log => {
         if (isUserDecidingBlindAction() && isHiddenDecisionLog(log)) {
+            return;
+        }
+        if (isRedundantChatNoiseLog(log)) {
             return;
         }
         processLog(log);
     });
+    updateInteractiveBarUI();
     scrollToBottom();
 }
 
@@ -1161,6 +1930,7 @@ function updateLanguage() {
     if (typeof BGMManager !== 'undefined') {
         BGMManager.updateButtonsUI();
     }
+    updatePacingControlsUI();
 
     if (gameState.players && gameState.players.length > 0) {
         updatePlayers(gameState.players);
@@ -1327,8 +2097,34 @@ async function startGame() {
             gameState.myRole = role;
             gameState.myAvatar = avatar;
             gameState.isAlive = true;
+            gameState.logs = [];
+            gameState.renderedLogs = [];
+            gameState.logQueue = [];
+            gameState.isProcessingQueue = false;
+            gameState.isQueuePausedByHover = false;
+            gameState.focusedSpeaker = null;
+            gameState.currentPhaseBodyEl = null;
+            gameState.currentPhaseId = null;
+            gameState.collapsedPhases = new Set();
+            gameState.seerChecks = {};
+            gameState.unreadCount = 0;
+            gameState.lastLogIndex = 0;
+            gameState.latestServerInputRequired = null;
+            gameState.latestServerGameActive = true;
+            if (gameState.queueTimer) {
+                clearTimeout(gameState.queueTimer);
+                gameState.queueTimer = null;
+            }
+            if (gameState.toastTimer) {
+                clearTimeout(gameState.toastTimer);
+                gameState.toastTimer = null;
+            }
+            gameUI.chatBox.innerHTML = '';
+            gameUI.chatBox.classList.remove('has-speaker-focus');
+            updateInteractiveBarUI();
             switchScreen('game');
             gameState.active = true;
+            updatePacingControlsUI();
             if (typeof BGMManager !== 'undefined') {
                 BGMManager.unlock();
             }
@@ -1376,28 +2172,53 @@ async function pollGameState() {
         const response = await fetch(`/api/game/${gameState.gameId}/state?last_log_index=${gameState.lastLogIndex}`);
         const data = await response.json();
 
+        gameState.latestServerInputRequired = data.input_required || null;
+        gameState.latestServerGameActive = Boolean(data.game_active);
+
+        // Temporarily sync pendingAction check for blind decision buffering
+        const decidingBlind = Boolean(
+            data.input_required && (
+                data.input_required.type === 'vote' ||
+                (data.input_required.prompt && (
+                    JSON.stringify(data.input_required.prompt).includes('竞选警长') ||
+                    JSON.stringify(data.input_required.prompt).includes('run for sheriff')
+                ))
+            )
+        );
+
         const justDied = new Set();
         if (data.logs && data.logs.length > 0) {
-            const shouldScroll = isUserNearBottom();
             gameState.logs = gameState.logs.concat(data.logs);
-            
+            const logsToEnqueue = [];
+
             data.logs.forEach(log => {
-                if (isUserDecidingBlindAction() && isHiddenDecisionLog(log)) {
+                if (decidingBlind && isHiddenDecisionLog(log)) {
                     gameState.pendingVoteLogs.push(log);
                 } else {
-                    processLog(log);
+                    logsToEnqueue.push(log);
                 }
                 if (log.type === 'PLAYER_ELIMINATED' && log.target) {
-                    justDied.add(log.target.name);
+                    const targetName = typeof log.target === 'object' ? log.target.name : log.target;
+                    justDied.add(targetName);
                 }
             });
             gameState.lastLogIndex += data.logs.length;
-            scrollToBottom(shouldScroll);
+            enqueueLogs(logsToEnqueue);
         }
 
         if (data.players) {
             gameState.players = data.players;
-            updatePlayers(data.players, justDied);
+            // While logs are still draining in the queue, avoid prematurely marking newly killed players dead
+            const queuedDeaths = new Set(justDied);
+            if (gameState.logQueue && gameState.logQueue.length > 0) {
+                gameState.logQueue.forEach(qLog => {
+                    if (qLog.type === 'PLAYER_ELIMINATED' && qLog.target) {
+                        const tName = typeof qLog.target === 'object' ? qLog.target.name : qLog.target;
+                        queuedDeaths.add(tName);
+                    }
+                });
+            }
+            updatePlayers(data.players, queuedDeaths);
             
             const myPlayer = data.players.find(p => p.name === 'Player 1');
             if (myPlayer) {
@@ -1423,17 +2244,9 @@ async function pollGameState() {
             }
         }
 
-        handleInputRequest(data.input_required);
-
-        if (!data.game_active && !data.input_required) {
-            gameState.active = false;
-            stopTurnTimer();
-            clearInterval(pollingInterval);
-            addSystemMessage(I18N[gameState.lang].gameOver);
-            
-            setTimeout(() => {
-                showEvaluationModal();
-            }, 2000);
+        // Only present input_required or game-over once the message pacing queue has finished draining
+        if (!gameState.isProcessingQueue && (!gameState.logQueue || gameState.logQueue.length === 0)) {
+            syncPostQueueState();
         }
 
     } catch (error) {
@@ -1606,6 +2419,357 @@ function renderEvaluationChat(message, isUser) {
 }
 
 /**
+ * Formats a player name like 'Player 3' into a localized seat label with avatar.
+ * @param {string} playerName - e.g. 'Player 3'
+ * @param {boolean} isZh - Whether current language is Chinese
+ * @returns {string} HTML string for player badge
+ */
+function formatPlayerSeatLabel(playerName, isZh) {
+    if (!playerName || typeof playerName !== 'string') return '';
+    const num = playerName.replace('Player ', '');
+    const isMe = playerName === 'Player 1';
+    if (isZh) {
+        return `${num}号${isMe ? '(我)' : ''}`;
+    }
+    return `P${num}${isMe ? '(Me)' : ''}`;
+}
+
+/**
+ * Builds a Consolidated Vote Card DOM element for VOTE_RESULT logs.
+ * @param {object} log - The VOTE_RESULT log object.
+ * @returns {HTMLElement}
+ */
+function createConsolidatedVoteCard(log) {
+    const isZh = gameState.lang === 'zh';
+    const data = log.data || {};
+    const votesObj = data.votes || {};
+    const phaseRaw = data.phase || 'Execution Vote';
+    const resultRaw = data.result || 'None';
+    const sheriffName = data.sheriff || null;
+    const isSheriffElection = phaseRaw === 'Sheriff Election' || data.context === 'sheriff';
+
+    let phaseTitle = isZh ? '🗳️ 放逐投票结果' : '🗳️ Execution Vote Results';
+    if (phaseRaw === 'Sheriff Election') {
+        phaseTitle = isZh ? '🎖️ 警长竞选投票' : '🎖️ Sheriff Election Vote';
+    } else if (phaseRaw === 'Tie Breaker') {
+        phaseTitle = isZh ? '⚔️ 平票 PK 投票' : '⚔️ Tie-Breaker PK Vote';
+    }
+
+    let resultBadgeText = '';
+    let resultBadgeClass = 'neutral';
+    if (!resultRaw || resultRaw === 'None') {
+        resultBadgeText = isSheriffElection
+            ? (isZh ? '无人当选' : 'No Sheriff')
+            : (isZh ? '无人出局' : 'No Execution');
+    } else if (resultRaw === 'Tie') {
+        resultBadgeText = isZh ? '⚔️ 平票' : '⚔️ Tie Vote';
+        resultBadgeClass = 'warning';
+    } else {
+        const seatText = formatPlayerSeatLabel(resultRaw, isZh);
+        const avatar = getAvatar(resultRaw);
+        if (isSheriffElection) {
+            resultBadgeText = isZh ? `👮 ${avatar} ${seatText} 当选警长` : `👮 ${avatar} ${seatText} Elected`;
+            resultBadgeClass = 'sheriff';
+        } else {
+            resultBadgeText = isZh ? `💀 ${avatar} ${seatText} 放逐出局` : `💀 ${avatar} ${seatText} Executed`;
+            resultBadgeClass = 'danger';
+        }
+    }
+
+    const entries = Object.entries(votesObj).filter(([targetName, voters]) => {
+        return Array.isArray(voters) && voters.length > 0;
+    });
+
+    // Sort targets: non-abstain targets by vote weight descending, then Abstain last
+    entries.sort(([targetA, votersA], [targetB, votersB]) => {
+        const isAbstainA = targetA === 'Abstained' || targetA === '弃票';
+        const isAbstainB = targetB === 'Abstained' || targetB === '弃票';
+        if (isAbstainA && !isAbstainB) return 1;
+        if (!isAbstainA && isAbstainB) return -1;
+        const calcWeight = (voters) => voters.reduce((sum, v) => {
+            const w = (!isSheriffElection && sheriffName && v === sheriffName) ? 1.5 : 1;
+            return sum + w;
+        }, 0);
+        return calcWeight(votersB) - calcWeight(votersA);
+    });
+
+    let rowsHtml = '';
+    if (entries.length === 0) {
+        rowsHtml = `<div class="chat-vote-empty">${isZh ? '⚪ 全员弃票 / 无人投票' : '⚪ No votes were cast'}</div>`;
+    } else {
+        entries.forEach(([targetName, voters]) => {
+            const isAbstain = targetName === 'Abstained' || targetName === '弃票';
+            const totalWeight = voters.reduce((sum, v) => {
+                const w = (!isSheriffElection && sheriffName && v === sheriffName) ? 1.5 : 1;
+                return sum + w;
+            }, 0);
+
+            const targetHtml = isAbstain
+                ? `<span class="chat-vote-target abstain">⚪ ${isZh ? '弃票' : 'Abstain'} <small>(${voters.length}${isZh ? '人' : ''})</small></span>`
+                : `<span class="chat-vote-target">🎯 ${getAvatar(targetName)} ${formatPlayerSeatLabel(targetName, isZh)} <span class="vote-count-tag">${totalWeight}${isZh ? '票' : 'v'}</span></span>`;
+
+            const voterPillsHtml = voters.map(voter => {
+                const isSheriffWeight = !isSheriffElection && sheriffName && voter === sheriffName;
+                const label = formatPlayerSeatLabel(voter, isZh);
+                return isSheriffWeight
+                    ? `<span class="voter-pill sheriff-voter">${getAvatar(voter)} ${label} ⭐1.5</span>`
+                    : `<span class="voter-pill">${getAvatar(voter)} ${label}</span>`;
+            }).join('');
+
+            rowsHtml += `
+                <div class="chat-vote-row">
+                    <div class="chat-vote-target-col">${targetHtml}</div>
+                    <div class="chat-vote-arrow">⟵</div>
+                    <div class="chat-vote-voters-col">${voterPillsHtml}</div>
+                </div>
+            `;
+        });
+    }
+
+    const card = document.createElement('div');
+    card.className = 'chat-consolidated-card vote-summary-card';
+    card.innerHTML = `
+        <div class="chat-card-header">
+            <span class="chat-card-title">${phaseTitle}</span>
+            <span class="chat-card-badge ${resultBadgeClass}">${resultBadgeText}</span>
+        </div>
+        <div class="chat-card-body">
+            ${rowsHtml}
+        </div>
+    `;
+    return card;
+}
+
+/**
+ * Builds a Consolidated Sheriff Election Signup Card DOM element.
+ * @param {object} log - The log entry containing data.phase === 'Sheriff Signup'.
+ * @returns {HTMLElement}
+ */
+function createSheriffSignupCard(log) {
+    const isZh = gameState.lang === 'zh';
+    const data = log.data || {};
+    const candidates = data.candidates || [];
+    const nonCandidates = data.non_candidates || [];
+
+    const title = isZh ? '🎖️ 警长竞选报名汇总' : '🎖️ Sheriff Election Signups';
+    let badgeText = '';
+    let badgeClass = 'neutral';
+    if (candidates.length === 0) {
+        badgeText = isZh ? '无人上警' : 'No Candidates';
+    } else if (candidates.length === 1) {
+        const only = candidates[0];
+        badgeText = isZh
+            ? `👮 ${getAvatar(only)} ${formatPlayerSeatLabel(only, isZh)} 自动当选`
+            : `👮 ${getAvatar(only)} ${formatPlayerSeatLabel(only, isZh)} Auto-Elected`;
+        badgeClass = 'sheriff';
+    } else {
+        badgeText = isZh ? `${candidates.length}人上警竞选` : `${candidates.length} Candidates`;
+        badgeClass = 'warning';
+    }
+
+    const renderGroup = (list, emptyText, isCandidatePill) => {
+        if (!list || list.length === 0) {
+            return `<span class="chat-signup-empty">${emptyText}</span>`;
+        }
+        return list.map(pName => {
+            const cls = isCandidatePill ? 'voter-pill sheriff-voter' : 'voter-pill';
+            return `<span class="${cls}">${getAvatar(pName)} ${formatPlayerSeatLabel(pName, isZh)}</span>`;
+        }).join('');
+    };
+
+    const card = document.createElement('div');
+    card.className = 'chat-consolidated-card signup-summary-card';
+    card.innerHTML = `
+        <div class="chat-card-header">
+            <span class="chat-card-title">${title}</span>
+            <span class="chat-card-badge ${badgeClass}">${badgeText}</span>
+        </div>
+        <div class="chat-card-body">
+            <div class="chat-vote-row">
+                <div class="chat-vote-target-col"><span class="chat-vote-target">🙋 ${isZh ? '竞选警长' : 'Running'}</span></div>
+                <div class="chat-vote-voters-col">${renderGroup(candidates, isZh ? '无人竞选' : 'None', true)}</div>
+            </div>
+            <div class="chat-vote-row">
+                <div class="chat-vote-target-col"><span class="chat-vote-target abstain">🪑 ${isZh ? '警下观众' : 'Voters'}</span></div>
+                <div class="chat-vote-voters-col">${renderGroup(nonCandidates, isZh ? '无' : 'None', false)}</div>
+            </div>
+        </div>
+    `;
+    return card;
+}
+
+/**
+ * Checks if a log entry is a special role operation or reveal that should render as a
+ * high-visibility Spotlight Card so the human player never misses their action outcome.
+ * @param {object} log - The log entry.
+ * @returns {HTMLElement|null}
+ */
+function createRoleSpotlightCardIfApplicable(log) {
+    if (!log) return null;
+    const isZh = gameState.lang === 'zh';
+    const type = log.type;
+    const targetName = typeof log.target === 'object' ? log.target?.name : log.target;
+    const sourceName = typeof log.source === 'object' ? log.source?.name : log.source;
+
+    // 1. SEER CHECK RESULT (Crystal Ball Reveal Card)
+    if (type === 'SEER_CHECK' && targetName) {
+        const resultCamp = (log.data && log.data.result) || '';
+        const isWolf = resultCamp === 'Werewolf' || resultCamp === 'Werewolves';
+        gameState.seerChecks[targetName] = isWolf ? 'Werewolf' : 'Villager';
+        if (gameState.players && gameState.players.length > 0) {
+            updatePlayers(gameState.players);
+        }
+
+        const seatLabel = formatPlayerSeatLabel(targetName, isZh);
+        const avatar = getAvatar(targetName);
+        const campStamp = isWolf
+            ? (isZh ? '🐺 狼人阵营 (坏人)' : '🐺 WEREWOLF CAMP')
+            : (isZh ? '👱 好人阵营 (村民/神职)' : '👱 VILLAGER CAMP');
+        const campClass = isWolf ? 'wolf-reveal' : 'good-reveal';
+
+        const card = document.createElement('div');
+        card.className = `role-spotlight-card seer-spotlight ${campClass}`;
+        card.innerHTML = `
+            <div class="spotlight-header">
+                <span class="spotlight-icon">🔮</span>
+                <span class="spotlight-title">${isZh ? '预言家查验结果' : 'Seer Vision Result'}</span>
+                <span class="spotlight-private-tag">${isZh ? '仅你可见' : 'Private'}</span>
+            </div>
+            <div class="spotlight-body">
+                <div class="spotlight-target-chip">
+                    <span class="spotlight-avatar">${avatar}</span>
+                    <span class="spotlight-seat">${seatLabel}</span>
+                </div>
+                <div class="spotlight-arrow">➔</div>
+                <div class="spotlight-verdict ${isWolf ? 'verdict-wolf' : 'verdict-good'}">
+                    ${campStamp}
+                </div>
+            </div>
+        `;
+        return card;
+    }
+
+    // 2. WITCH SAVE / POISON ACTION
+    if (type === 'WITCH_ACTION') {
+        const actionType = log.data?.action;
+        const isSave = actionType === 'save';
+        const seatLabel = targetName ? formatPlayerSeatLabel(targetName, isZh) : '';
+        const avatar = targetName ? getAvatar(targetName) : '🧪';
+
+        const card = document.createElement('div');
+        card.className = `role-spotlight-card witch-spotlight ${isSave ? 'witch-save' : 'witch-poison'}`;
+        card.innerHTML = `
+            <div class="spotlight-header">
+                <span class="spotlight-icon">${isSave ? '💖' : '🧪'}</span>
+                <span class="spotlight-title">${isSave ? (isZh ? '女巫解药已使用' : 'Antidote Used') : (isZh ? '女巫毒药已使用' : 'Poison Used')}</span>
+                <span class="spotlight-private-tag">${isZh ? '仅你可见' : 'Private'}</span>
+            </div>
+            <div class="spotlight-body">
+                <div class="spotlight-target-chip">
+                    <span class="spotlight-avatar">${avatar}</span>
+                    <span class="spotlight-seat">${seatLabel}</span>
+                </div>
+                <div class="spotlight-arrow">➔</div>
+                <div class="spotlight-verdict ${isSave ? 'verdict-good' : 'verdict-wolf'}">
+                    ${isSave ? (isZh ? '✨ 成功救活' : '✨ Saved') : (isZh ? '☠️ 已毒杀' : '☠️ Poisoned')}
+                </div>
+            </div>
+        `;
+        return card;
+    }
+
+    // 3. GUARD PROTECTION ACTION
+    if (type === 'GUARD_PROTECT' && targetName) {
+        const seatLabel = formatPlayerSeatLabel(targetName, isZh);
+        const avatar = getAvatar(targetName);
+        const card = document.createElement('div');
+        card.className = 'role-spotlight-card guard-spotlight';
+        card.innerHTML = `
+            <div class="spotlight-header">
+                <span class="spotlight-icon">🛡️</span>
+                <span class="spotlight-title">${isZh ? '守卫守护确认' : 'Guard Protection'}</span>
+                <span class="spotlight-private-tag">${isZh ? '仅你可见' : 'Private'}</span>
+            </div>
+            <div class="spotlight-body">
+                <div class="spotlight-target-chip">
+                    <span class="spotlight-avatar">${avatar}</span>
+                    <span class="spotlight-seat">${seatLabel}</span>
+                </div>
+                <div class="spotlight-arrow">➔</div>
+                <div class="spotlight-verdict verdict-guard">
+                    ${isZh ? '🛡️ 今晚受你守护' : '🛡️ Protected Tonight'}
+                </div>
+            </div>
+        `;
+        return card;
+    }
+
+    // 4. WEREWOLF KILL TARGET
+    if (type === 'WEREWOLF_TARGET') {
+        const seatLabel = targetName ? formatPlayerSeatLabel(targetName, isZh) : (isZh ? '空刀' : 'None');
+        const avatar = targetName ? getAvatar(targetName) : '🌙';
+        const card = document.createElement('div');
+        card.className = 'role-spotlight-card wolf-spotlight';
+        card.innerHTML = `
+            <div class="spotlight-header">
+                <span class="spotlight-icon">🐺</span>
+                <span class="spotlight-title">${isZh ? '狼队袭击目标锁定' : 'Werewolf Pack Target'}</span>
+                <span class="spotlight-private-tag">${isZh ? '狼队可见' : 'Werewolves'}</span>
+            </div>
+            <div class="spotlight-body">
+                <div class="spotlight-target-chip">
+                    <span class="spotlight-avatar">${avatar}</span>
+                    <span class="spotlight-seat">${seatLabel}</span>
+                </div>
+                <div class="spotlight-arrow">➔</div>
+                <div class="spotlight-verdict verdict-wolf">
+                    ${targetName ? (isZh ? '🩸 今晚袭击目标' : '🩸 Targeted for Attack') : (isZh ? '⚪ 今晚放弃袭击' : '⚪ No Attack Tonight')}
+                </div>
+            </div>
+        `;
+        return card;
+    }
+
+    // 5. PUBLIC HUNTER / BLACK WEREWOLF KING SHOT
+    if ((type === 'HUNTER_SHOOT' || type === 'BLACKWEREWOLFKING_SHOOT' || type === 'PLAYER_SHOOT') && sourceName && targetName) {
+        const shooterLabel = formatPlayerSeatLabel(sourceName, isZh);
+        const targetLabel = formatPlayerSeatLabel(targetName, isZh);
+        const isWolfViewer = gameState.myRole === 'Werewolf' || gameState.myRole === 'Black Werewolf King';
+        const isSelfShooter = sourceName === 'Player 1';
+        const knowsShooterRole = (isWolfViewer || isSelfShooter) && type !== 'PLAYER_SHOOT';
+        const isHunter = type === 'HUNTER_SHOOT';
+        const spotlightIcon = !knowsShooterRole ? '🔫' : (isHunter ? '🔫' : '👹');
+        const spotlightTitle = !knowsShooterRole
+            ? (isZh ? '发动技能开枪带人！' : 'Gunshot Skill Triggered!')
+            : (isHunter
+                ? (isZh ? '猎人发动技能开枪！' : 'Hunter Fires!')
+                : (isZh ? '黑狼王发动技能带人！' : 'Black Werewolf King Strikes!'));
+        const card = document.createElement('div');
+        card.className = 'role-spotlight-card gunshot-spotlight';
+        card.innerHTML = `
+            <div class="spotlight-header">
+                <span class="spotlight-icon">${spotlightIcon}</span>
+                <span class="spotlight-title">${spotlightTitle}</span>
+                <span class="spotlight-public-tag">${isZh ? '全员公告' : 'Public'}</span>
+            </div>
+            <div class="spotlight-body">
+                <div class="spotlight-target-chip">
+                    <span class="spotlight-avatar">${getAvatar(sourceName)}</span>
+                    <span class="spotlight-seat">${shooterLabel}</span>
+                </div>
+                <div class="spotlight-arrow">💥➔</div>
+                <div class="spotlight-verdict verdict-wolf">
+                    💀 ${getAvatar(targetName)} ${targetLabel} ${isZh ? '中枪出局' : 'Eliminated'}
+                </div>
+            </div>
+        `;
+        return card;
+    }
+
+    return null;
+}
+
+/**
  * Processes a single log entry and renders it to the chat box.
  * @param {object} log - The log entry object from the server.
  */
@@ -1625,10 +2789,47 @@ function processLog(log) {
         }
         return; // Don't display a message for this log type
     }
+
+    if (isRedundantChatNoiseLog(log)) {
+        return;
+    }
+
     if (log.type === 'NIGHT_FALLS') {
         setPhase('Night', log.message);
+        startNewChatPhaseSection('Night', log);
+        return;
     } else if (log.type === 'DAY_BREAKS') {
         setPhase('Day', log.message);
+        startNewChatPhaseSection('Day', log);
+        return;
+    }
+
+    // 1. Consolidated Vote Result Card
+    if (log.type === 'VOTE_RESULT' && log.data && log.data.votes) {
+        const msgContainer = document.createElement('div');
+        msgContainer.className = 'message-container system consolidated-container';
+        msgContainer.appendChild(createConsolidatedVoteCard(log));
+        appendToActiveChatSection(msgContainer);
+        return;
+    }
+
+    // 2. Consolidated Sheriff Election Signup Card
+    if (log.data && log.data.phase === 'Sheriff Signup') {
+        const msgContainer = document.createElement('div');
+        msgContainer.className = 'message-container system consolidated-container';
+        msgContainer.appendChild(createSheriffSignupCard(log));
+        appendToActiveChatSection(msgContainer);
+        return;
+    }
+
+    // 3. High-Visibility Role Operation Result Spotlight Card
+    const spotlightCard = createRoleSpotlightCardIfApplicable(log);
+    if (spotlightCard) {
+        const msgContainer = document.createElement('div');
+        msgContainer.className = 'message-container system spotlight-container';
+        msgContainer.appendChild(spotlightCard);
+        appendToActiveChatSection(msgContainer);
+        return;
     }
 
     const msgContainer = document.createElement('div');
@@ -1639,11 +2840,23 @@ function processLog(log) {
         text = text[gameState.lang] || text['zh'] || text['en'] || JSON.stringify(text);
     }
 
-    if (log.source && log.source.startsWith('Player')) {
+    // Highlight Witch night victim prompt or initial role assignment as an emphasized system banner
+    const isRoleNotice = log.type === 'ACTION' || (log.type === 'SYSTEM' && (
+        text.includes('你被分配的角色是') ||
+        text.includes('You have been assigned the role') ||
+        text.includes('你的队友是') ||
+        text.includes('Your teammates are')
+    ));
+
+    if (log.source && log.source.startsWith('Player') && (log.type === 'SPEECH' || log.type === 'WHISPER')) {
+        msgContainer.dataset.speaker = log.source;
         const avatar = getAvatar(log.source);
         const avatarDiv = document.createElement('div');
         avatarDiv.className = 'chat-avatar';
         avatarDiv.innerText = avatar;
+        avatarDiv.title = gameState.lang === 'zh' ? '点击高亮该玩家所有发言' : 'Click to highlight this player\'s speeches';
+        avatarDiv.style.cursor = 'pointer';
+        avatarDiv.onclick = () => toggleSpeakerFocus(log.source);
         
         const contentDiv = document.createElement('div');
         contentDiv.className = 'chat-content';
@@ -1653,33 +2866,38 @@ function processLog(log) {
         
         const playerNum = log.source.replace('Player ', '');
         const isMe = log.source === 'Player 1';
+        const whisperTag = log.type === 'WHISPER' ? (gameState.lang === 'zh' ? ' 🐺[狼频]' : ' 🐺[Pack]') : '';
         if (gameState.lang === 'zh') {
-            senderDiv.innerText = isMe ? `${playerNum}号玩家 (我)` : `${playerNum}号玩家`;
+            senderDiv.innerText = (isMe ? `${playerNum}号玩家 (我)` : `${playerNum}号玩家`) + whisperTag;
         } else {
-            senderDiv.innerText = isMe ? `Player ${playerNum} (Me)` : `Player ${playerNum}`;
+            senderDiv.innerText = (isMe ? `Player ${playerNum} (Me)` : `Player ${playerNum}`) + whisperTag;
         }
 
+        // Strip redundant leading "(Player X): " prefix from speech bubble text if present
+        const cleanSpeechText = text.replace(/^\(Player\s+\d+\):\s*/i, '');
+
         const bubbleDiv = document.createElement('div');
-        bubbleDiv.className = 'chat-bubble';
-        bubbleDiv.innerText = text;
+        bubbleDiv.className = `chat-bubble${log.type === 'WHISPER' ? ' whisper-bubble' : ''}`;
+        bubbleDiv.innerHTML = formatSpeechWithSeatPills(cleanSpeechText);
         
         contentDiv.appendChild(senderDiv);
         contentDiv.appendChild(bubbleDiv);
 
         msgContainer.appendChild(avatarDiv);
         msgContainer.appendChild(contentDiv);
+
+        showSpeechBubble(log.source, cleanSpeechText);
     } else {
+        const isDebug = isDebugStateBoundaryLog(log);
+        const debugActive = gameUI.chatBox && gameUI.chatBox.classList.contains('show-debug-logs');
+        msgContainer.className = `message-container ${isDebug ? 'debug' : 'system'}${isDebug && debugActive ? ' visible' : ''}`;
         const bubbleDiv = document.createElement('div');
-        bubbleDiv.className = 'chat-bubble system';
+        bubbleDiv.className = `chat-bubble system${isRoleNotice ? ' role-notice-bubble' : ''}`;
         bubbleDiv.innerText = text;
         msgContainer.appendChild(bubbleDiv);
     }
     
-    gameUI.chatBox.appendChild(msgContainer);
-
-    if (log.source && log.type !== 'SYSTEM') {
-        showSpeechBubble(log.source, text);
-    }
+    appendToActiveChatSection(msgContainer);
 
     if (typeof text === 'string' && (text.startsWith("You are a") || text.startsWith("你的身份是"))) {
         let role = "";
@@ -1698,8 +2916,10 @@ function processLog(log) {
  * @returns {string} The CSS class name.
  */
 function getLogClass(log) {
+    if (isDebugStateBoundaryLog(log)) return 'debug';
+    const msgStr = typeof log.message === 'object' ? (log.message.zh || log.message.en || '') : String(log.message || '');
+    if (msgStr.includes('---') || msgStr.includes('State')) return 'debug';
     if (['SYSTEM', 'GAME_START', 'NIGHT_FALLS', 'DAY_BREAKS'].includes(log.type)) return 'system';
-    if (log.message && typeof log.message === 'string' && (log.message.includes('---') || log.message.includes('State'))) return 'debug';
     if (log.source === 'Player 1') return 'user';
     return 'ai';
 }
@@ -1861,6 +3081,25 @@ function updatePlayers(playersData, justDied = new Set()) {
                 statusIcons.title = statusTexts.sheriff;
             } else {
                 statusIcons.innerText = '';
+            }
+        }
+
+        // Private Seer Checked Badge on sidebar card
+        const seerBadge = card.querySelector('.player-seer-badge');
+        if (seerBadge) {
+            const seerCheckResult = gameState.seerChecks && gameState.seerChecks[p.name];
+            if (seerCheckResult) {
+                const isWolf = seerCheckResult === 'Werewolf' || seerCheckResult === 'Werewolves';
+                const isZh = gameState.lang === 'zh';
+                seerBadge.style.display = 'inline-flex';
+                seerBadge.className = `player-seer-badge ${isWolf ? 'seer-wolf' : 'seer-good'}`;
+                seerBadge.innerText = isWolf ? (isZh ? '🔮狼' : '🔮W') : (isZh ? '🔮好' : '🔮G');
+                seerBadge.title = isWolf
+                    ? (isZh ? '预言家查验：狼人阵营' : 'Seer Checked: Werewolf')
+                    : (isZh ? '预言家查验：好人阵营' : 'Seer Checked: Good');
+            } else {
+                seerBadge.style.display = 'none';
+                seerBadge.innerText = '';
             }
         }
     });
@@ -2152,8 +3391,11 @@ function handlePlayerClick(playerName) {
         const options = gameState.pendingAction.options || [];
         if (options.includes(playerName)) {
             sendAction(playerName);
+            return;
         }
     }
+    // When not actively targeting a choice, clicking a player card toggles highlighting their speeches in chat
+    toggleSpeakerFocus(playerName);
 }
 
 /**
@@ -2280,7 +3522,11 @@ function isUserNearBottom() {
  */
 function scrollToBottom(force = false) {
     if (force || isUserNearBottom()) {
-        gameUI.chatBox.scrollTop = gameUI.chatBox.scrollHeight;
+        gameUI.chatBox.scrollTo({
+            top: gameUI.chatBox.scrollHeight,
+            behavior: gameState.pacingMultiplier === 0 ? 'auto' : 'smooth'
+        });
+        gameState.unreadCount = 0;
         hideNewMessagesIndicator();
     } else {
         showNewMessagesIndicator();
@@ -2292,6 +3538,7 @@ function scrollToBottom(force = false) {
  */
 function checkScrollPosition() {
     if (isUserNearBottom()) {
+        gameState.unreadCount = 0;
         hideNewMessagesIndicator();
     }
 }
@@ -2301,6 +3548,9 @@ function checkScrollPosition() {
  */
 function showNewMessagesIndicator() {
     if (gameUI.newMessagesIndicator) {
+        const baseText = I18N[gameState.lang]?.newMessages || '⬇️ 新消息';
+        const count = gameState.unreadCount || 0;
+        gameUI.newMessagesIndicator.innerText = count > 0 ? `${baseText} (${count})` : baseText;
         gameUI.newMessagesIndicator.classList.remove('hidden');
     }
 }
@@ -2862,12 +4112,17 @@ function renderCurrentTimeline() {
             if (opData.public_shots) {
                 const dayShots = opData.public_shots.filter(s => s.day === roundNum);
                 dayShots.forEach(s => {
-                    const shooterRole = s.role === 'Hunter' 
-                        ? (isZh ? '猎人' : 'Hunter') 
-                        : (isZh ? '黑狼王' : 'Black Werewolf King');
+                    let shooterRoleLabel = '';
+                    if (s.role === 'Hunter') {
+                        shooterRoleLabel = isZh ? ' (猎人)' : ' (Hunter)';
+                    } else if (s.role === 'Black Werewolf King') {
+                        shooterRoleLabel = isZh ? ' (黑狼王)' : ' (Black Werewolf King)';
+                    } else {
+                        shooterRoleLabel = isZh ? ' (猎人/黑狼王)' : ' (Hunter / Wolf King)';
+                    }
                     dayContentHtml += `
                         <div class="timeline-card public-card">
-                            <span>🏹 <strong>${s.shooter}</strong> (${shooterRole}) 死亡开枪带走了 <strong>${getAvatar(s.target)} ${s.target}</strong></span>
+                            <span>🏹 <strong>${s.shooter}</strong>${shooterRoleLabel} ${isZh ? '死亡开枪带走了' : 'shot'} <strong>${getAvatar(s.target)} ${s.target}</strong></span>
                         </div>
                     `;
                 });

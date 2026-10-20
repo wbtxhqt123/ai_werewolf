@@ -9,9 +9,9 @@
     <link href="https://fonts.loli.net/css2?family=Cinzel:wght@600;700;800;900&family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/base.css?v=10">
     <link rel="stylesheet" href="/static/css/layout.css?v=14">
-    <link rel="stylesheet" href="/static/css/components.css?v=11">
+    <link rel="stylesheet" href="/static/css/components.css?v=14">
     <link rel="stylesheet" href="/static/css/setup.css?v=10">
-    <link rel="stylesheet" href="/static/css/game.css?v=14">
+    <link rel="stylesheet" href="/static/css/game.css?v=17">
     <link rel="stylesheet" href="/static/css/modals.css?v=10">
 </head>
 <body>
@@ -134,6 +134,8 @@
                     <div class="alive-counter-pill" id="alive-counter-pill">👥 9 / 9</div>
                 </div>
                 <div class="header-right">
+                    <button id="speed-toggle-btn" class="icon-btn header-pill-btn speed-pill-btn" title="Message Pacing Speed" aria-label="Message Pacing Speed">🐢 <span class="speed-label">1x</span></button>
+                    <button id="skip-queue-btn" class="icon-btn header-pill-btn skip-pill-btn hidden" title="Show All Queued Messages" aria-label="Show All Queued Messages">⏭️ <span class="skip-label">跳过</span></button>
                     <button id="audio-toggle-btn" class="icon-btn header-pill-btn" title="Toggle Music" aria-label="Toggle Music">🎵 <span class="audio-label">音乐</span></button>
                     <button id="records-btn" class="icon-btn header-pill-btn" title="Game Records" aria-label="Game Records">📖 记录</button>
                     <button id="game-lang-btn" class="icon-btn header-pill-btn" title="Toggle Language" aria-label="Toggle Language">中文/EN</button>
@@ -152,6 +154,13 @@
                     
                     <!-- Center Stage -->
                     <div class="center-area">
+                        <!-- Big Moment Comic Toast Banner -->
+                        <div id="spotlight-toast-banner" class="spotlight-toast-banner hidden" aria-live="assertive"></div>
+                        <!-- Hover-to-Pause / Speaker Filter Bar -->
+                        <div id="chat-Interactive-bar" class="chat-interactive-bar hidden">
+                            <span id="chat-interactive-status"></span>
+                            <button id="chat-interactive-action" class="chat-interactive-btn"></button>
+                        </div>
                         <div class="chat-box" id="chat-box" aria-live="polite">
                             <!-- Chat messages -->
                         </div>
@@ -286,6 +295,7 @@
             <div class="player-candidate-label">CANDIDATE</div>
             <div class="player-tie-label">TIE</div>
             <div class="player-dead-label">DEAD</div>
+            <div class="player-seer-badge"></div>
             <div class="player-avatar"></div>
             <div class="player-name"></div>
             <div class="player-status-icons"></div>
@@ -293,6 +303,6 @@
         </div>
     </template>
 
-    <script src="/static/js/app.js?v=18"></script>
+    <script src="/static/js/app.js?v=21"></script>
 </body>
 </html>

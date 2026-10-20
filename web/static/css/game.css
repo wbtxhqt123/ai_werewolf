@@ -810,6 +810,697 @@ body.night-mode .player-card.me {
     transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease;
 }
 
+.chat-bubble.system.role-notice-bubble {
+    background: #fff9db;
+    color: #2d3436;
+    border: 2.5px solid #2d3436;
+    box-shadow: 3px 3px 0px #2d3436;
+    font-size: 0.92rem;
+    font-weight: 900;
+    padding: 10px 16px;
+}
+
+body.night-mode .chat-bubble.system.role-notice-bubble {
+    background: #2d3748;
+    color: #fef08a;
+    border: 2.5px solid #facc15;
+    box-shadow: 3px 3px 0px #0f172a;
+}
+
+.chat-bubble.whisper-bubble {
+    background: #ffe3e3 !important;
+    color: #2d3436 !important;
+    border: 2.5px solid #2d3436 !important;
+}
+
+body.night-mode .chat-bubble.whisper-bubble {
+    background: #451a2b !important;
+    color: #fecdd3 !important;
+    border-color: #f43f5e !important;
+}
+
+/* --- Consolidated Vote & Sheriff Signup Cards in Chat --- */
+.message-container.consolidated-container,
+.message-container.spotlight-container {
+    width: 100%;
+    max-width: 96%;
+    justify-content: center;
+    margin-bottom: 14px;
+}
+
+.chat-consolidated-card {
+    width: 100%;
+    max-width: 560px;
+    background: var(--modal-surface, #ffffff);
+    color: var(--text-primary);
+    border: 2.5px solid var(--panel-border);
+    border-radius: 16px;
+    box-shadow: 4px 4px 0px var(--ink-color);
+    overflow: hidden;
+    font-family: var(--font-body);
+    animation: bubblePop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+body.night-mode .chat-consolidated-card {
+    background: #1e293b;
+    border-color: #475569;
+    box-shadow: 4px 4px 0px #0f172a;
+}
+
+.chat-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 14px;
+    background: #fff3bf;
+    border-bottom: 2px solid var(--panel-border);
+    font-weight: 900;
+}
+
+body.night-mode .chat-card-header {
+    background: #0f172a;
+    border-bottom-color: #475569;
+}
+
+.chat-card-title {
+    font-size: 0.92rem;
+    font-weight: 900;
+    color: #2d3436;
+}
+
+body.night-mode .chat-card-title {
+    color: #f8fafc;
+}
+
+.chat-card-badge {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 900;
+    border: 2px solid #2d3436;
+    box-shadow: 1.5px 1.5px 0px #2d3436;
+    background: #f1f5f9;
+    color: #2d3436;
+    white-space: nowrap;
+}
+
+.chat-card-badge.danger {
+    background: #ff6b6b;
+    color: #ffffff;
+}
+
+.chat-card-badge.sheriff {
+    background: #ffd32a;
+    color: #2d3436;
+}
+
+.chat-card-badge.warning {
+    background: #ff9f43;
+    color: #2d3436;
+}
+
+.chat-card-body {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.chat-vote-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: var(--modal-subtle, #f8fafc);
+    border: 1.5px solid var(--modal-border-subtle, #cbd5e1);
+    border-radius: 11px;
+    padding: 6px 10px;
+}
+
+body.night-mode .chat-vote-row {
+    background: #0f172a;
+    border-color: #334155;
+}
+
+.chat-vote-target-col {
+    display: flex;
+    align-items: center;
+    min-width: 115px;
+    flex-shrink: 0;
+}
+
+.chat-vote-target {
+    font-weight: 900;
+    font-size: 0.86rem;
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.chat-vote-target.abstain {
+    color: var(--text-muted);
+}
+
+.vote-count-tag {
+    background: #ffeaa7;
+    color: #2d3436;
+    border: 1.5px solid #2d3436;
+    border-radius: 999px;
+    padding: 0 6px;
+    font-size: 0.74rem;
+    font-weight: 900;
+    margin-left: 2px;
+}
+
+.chat-vote-arrow {
+    color: var(--text-muted);
+    font-weight: 900;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.chat-vote-voters-col {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.chat-vote-empty,
+.chat-signup-empty {
+    font-size: 0.84rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-align: center;
+    padding: 4px 0;
+}
+
+/* --- High-Visibility Role Operation Result Spotlight Cards --- */
+.role-spotlight-card {
+    width: 100%;
+    max-width: 500px;
+    background: #fffdf7;
+    border: 3px solid #2d3436;
+    border-radius: 18px;
+    box-shadow: 4px 4px 0px #2d3436;
+    overflow: hidden;
+    animation: stickerPop 0.32s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+body.night-mode .role-spotlight-card {
+    background: #1e293b;
+    border-color: #f8fafc;
+    box-shadow: 4px 4px 0px #0f172a;
+}
+
+.role-spotlight-card.seer-spotlight.wolf-reveal {
+    border-color: #ff4757;
+}
+
+.role-spotlight-card.seer-spotlight.good-reveal {
+    border-color: #2ed573;
+}
+
+.spotlight-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 14px;
+    background: #a29bfe;
+    color: #2d3436;
+    border-bottom: 2.5px solid #2d3436;
+    font-weight: 900;
+}
+
+.role-spotlight-card.witch-spotlight.witch-save .spotlight-header {
+    background: #ff9ff3;
+}
+
+.role-spotlight-card.witch-spotlight.witch-poison .spotlight-header {
+    background: #2ed573;
+}
+
+.role-spotlight-card.guard-spotlight .spotlight-header {
+    background: #70a1ff;
+}
+
+.role-spotlight-card.wolf-spotlight .spotlight-header {
+    background: #ff6b81;
+}
+
+.role-spotlight-card.gunshot-spotlight .spotlight-header {
+    background: #ffa502;
+}
+
+.spotlight-icon {
+    font-size: 1.2rem;
+}
+
+.spotlight-title {
+    flex: 1;
+    font-size: 0.95rem;
+    font-weight: 900;
+    color: #2d3436;
+}
+
+.spotlight-private-tag,
+.spotlight-public-tag {
+    background: #2d3436;
+    color: #ffffff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.spotlight-public-tag {
+    background: #c0392b;
+}
+
+.spotlight-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    flex-wrap: wrap;
+}
+
+.spotlight-target-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #ffffff;
+    color: #2d3436;
+    border: 2.5px solid #2d3436;
+    border-radius: 999px;
+    padding: 4px 12px 4px 6px;
+    box-shadow: 2px 2px 0px #2d3436;
+    font-weight: 900;
+}
+
+.spotlight-avatar {
+    font-size: 1.4rem;
+    line-height: 1;
+}
+
+.spotlight-seat {
+    font-size: 0.95rem;
+    font-weight: 900;
+}
+
+.spotlight-arrow {
+    font-size: 1.2rem;
+    font-weight: 900;
+    color: var(--text-primary);
+}
+
+.spotlight-verdict {
+    padding: 6px 14px;
+    border-radius: 12px;
+    border: 2.5px solid #2d3436;
+    box-shadow: 2.5px 2.5px 0px #2d3436;
+    font-size: 0.95rem;
+    font-weight: 900;
+    text-align: center;
+}
+
+.spotlight-verdict.verdict-wolf {
+    background: #ff4757;
+    color: #ffffff;
+}
+
+.spotlight-verdict.verdict-good {
+    background: #2ed573;
+    color: #2d3436;
+}
+
+.spotlight-verdict.verdict-guard {
+    background: #70a1ff;
+    color: #2d3436;
+}
+
+/* --- Private Seer Checked Badge on Player Sidebar Cards --- */
+.player-seer-badge {
+    display: none;
+    position: absolute;
+    bottom: -7px;
+    right: -6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 900;
+    border: 2px solid #2d3436;
+    box-shadow: 1.5px 1.5px 0px #2d3436;
+    z-index: 26;
+    pointer-events: none;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.player-seer-badge.seer-wolf {
+    background: #ff4757;
+    color: #ffffff;
+}
+
+.player-seer-badge.seer-good {
+    background: #2ed573;
+    color: #2d3436;
+}
+
+/* Speed & Skip Header Pill Buttons */
+.icon-btn.header-pill-btn.skip-pill-btn {
+    background: #ff9f43;
+    color: #2d3436;
+    animation: pulse-btn 1.5s infinite;
+}
+
+.icon-btn.header-pill-btn.skip-pill-btn.hidden {
+    display: none !important;
+}
+
+/* --- 1. Center-Stage Big Moment Comic Toast Banner --- */
+.spotlight-toast-banner {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 160;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 18px;
+    border-radius: 999px;
+    border: 3px solid #2d3436;
+    box-shadow: 4px 4px 0px #2d3436;
+    background: #fffdf7;
+    color: #2d3436;
+    font-family: var(--font-body);
+    font-size: 0.96rem;
+    font-weight: 900;
+    white-space: nowrap;
+    max-width: 92%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    animation: toastDropPop 0.32s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.spotlight-toast-banner.hidden {
+    display: none !important;
+}
+
+.spotlight-toast-banner.toast-wolf {
+    background: #ffe3e3;
+    border-color: #2d3436;
+    color: #c92a2a;
+}
+
+.spotlight-toast-banner.toast-good {
+    background: #d3f9d8;
+    border-color: #2d3436;
+    color: #1b4332;
+}
+
+.spotlight-toast-banner.toast-sheriff {
+    background: #fff3bf;
+    border-color: #2d3436;
+    color: #2d3436;
+}
+
+.spotlight-toast-banner.toast-guard {
+    background: #d0ebff;
+    border-color: #2d3436;
+    color: #1864ab;
+}
+
+.toast-verdict-pill {
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 2px solid #2d3436;
+    background: #ffffff;
+    color: #2d3436;
+    font-weight: 900;
+}
+
+@keyframes toastDropPop {
+    0% {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-18px) scale(0.82);
+    }
+    70% {
+        transform: translateX(-50%) translateY(3px) scale(1.04);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+}
+
+/* --- 2. Floating Speaker Filter Pill (Zero Layout Shift) --- */
+.chat-interactive-bar {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: #d0ebff;
+    color: #1864ab;
+    border: 2.5px solid #2d3436;
+    box-shadow: 3px 3px 0px #2d3436;
+    font-size: 0.8rem;
+    font-weight: 800;
+    z-index: 140;
+}
+
+.chat-interactive-bar.hidden {
+    display: none !important;
+}
+
+body.night-mode .chat-interactive-bar {
+    background: #0f172a;
+    color: #38bdf8;
+    border-color: #38bdf8;
+    box-shadow: 3px 3px 0px #020617;
+}
+
+.chat-interactive-btn {
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 2px solid #2d3436;
+    background: #ffffff;
+    color: #2d3436;
+    font-family: var(--font-body);
+    font-size: 0.74rem;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 1.5px 1.5px 0px #2d3436;
+    white-space: nowrap;
+}
+
+.chat-interactive-btn:hover {
+    background: #ffeaa7;
+    transform: translateY(-1px);
+}
+
+/* --- 3. @Seat Number Avatar Mini-Pills & Speaker Focus --- */
+.seat-mention-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0px 6px;
+    margin: 0 2px;
+    border-radius: 999px;
+    background: #fff3bf;
+    color: #2d3436;
+    border: 1.5px solid #2d3436;
+    box-shadow: 1px 1px 0px #2d3436;
+    font-size: 0.84em;
+    font-weight: 900;
+    cursor: pointer;
+    vertical-align: baseline;
+    transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.seat-mention-pill:hover {
+    background: #ffd32a;
+    transform: translateY(-1px) scale(1.06);
+}
+
+.player-card.mention-hovered {
+    transform: translateY(-5px) scale(1.06) !important;
+    box-shadow: 0 0 0 3px #ffd32a, 5px 5px 0px #2d3436 !important;
+    z-index: 40 !important;
+}
+
+.player-card.speaker-focused {
+    box-shadow: 0 0 0 3px #00bfff, 4px 4px 0px #2d3436 !important;
+}
+
+.chat-box.has-speaker-focus .message-container.speaker-dimmed {
+    opacity: 0.32;
+    filter: grayscale(40%);
+    transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+.chat-box.has-speaker-focus .message-container.speaker-match {
+    opacity: 1;
+    transform: scale(1.01);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.chat-box.has-speaker-focus .message-container.speaker-match .chat-bubble {
+    box-shadow: 0 0 0 2.5px #00bfff, 4px 4px 0px #2d3436;
+}
+
+/* --- 4. Style 1A: Centered Cartoon Pill Divider with Click-to-Collapse --- */
+.chat-phase-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.phase-ribbon-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 4px 0 2px;
+    width: 100%;
+    user-select: none;
+}
+
+.phase-ribbon-divider::before,
+.phase-ribbon-divider::after {
+    content: '';
+    flex: 1;
+    height: 2px;
+    background: repeating-linear-gradient(
+        to right,
+        rgba(100, 116, 139, 0.55) 0,
+        rgba(100, 116, 139, 0.55) 6px,
+        transparent 6px,
+        transparent 10px
+    );
+}
+
+body.night-mode .phase-ribbon-divider::before,
+body.night-mode .phase-ribbon-divider::after {
+    background: repeating-linear-gradient(
+        to right,
+        rgba(148, 163, 184, 0.45) 0,
+        rgba(148, 163, 184, 0.45) 6px,
+        transparent 6px,
+        transparent 10px
+    );
+}
+
+.phase-ribbon-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 14px;
+    border-radius: 999px;
+    border: 2px solid #2d3436;
+    box-shadow: 2px 2px 0px #2d3436;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    font-weight: 900;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform 0.14s ease, box-shadow 0.14s ease, background-color 0.15s ease;
+}
+
+.phase-ribbon-pill:hover {
+    transform: translateY(-2px);
+    box-shadow: 3.5px 3.5px 0px #2d3436;
+}
+
+.phase-ribbon-pill:active {
+    transform: translateY(1px);
+    box-shadow: 1px 1px 0px #2d3436;
+}
+
+.phase-ribbon-pill.night {
+    background: #334155;
+    color: #f8fafc;
+}
+
+.phase-ribbon-pill.day {
+    background: #ffd32a;
+    color: #2d3436;
+}
+
+.phase-folded-count {
+    display: none;
+    background: rgba(0, 0, 0, 0.16);
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 900;
+}
+
+.phase-ribbon-pill.night .phase-folded-count {
+    background: rgba(255, 255, 255, 0.22);
+}
+
+.chat-phase-section.collapsed .phase-folded-count {
+    display: inline-block;
+}
+
+.phase-chevron {
+    display: inline-block;
+    transition: transform 0.2s ease;
+    font-size: 0.76rem;
+    opacity: 0.85;
+}
+
+.chat-phase-section.collapsed .phase-chevron {
+    transform: rotate(-90deg);
+}
+
+.chat-phase-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 2px;
+}
+
+.chat-phase-section.collapsed .chat-phase-body {
+    display: none;
+}
+
+/* Debug boundary messages hidden unless Debug Mode is active */
+.message-container.debug {
+    display: none;
+    align-self: center;
+    opacity: 0.65;
+    margin-bottom: 4px;
+}
+
+.message-container.debug.visible,
+.chat-box.show-debug-logs .message-container.debug {
+    display: flex;
+}
+
+.chat-bubble.system.sleep-bubble {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 2px 10px;
+    opacity: 0.82;
+}
+
 .game-controls {
     background: var(--controls-bg);
     padding: 15px 20px;

@@ -415,11 +415,19 @@ async def get_full_logs(game_id: str):
         }
         
     # This approach reconstructs each player's view of the game log.
+    from game.player import Werewolf
+    from game.log import LogType
     for entry in game_instance.game_log:
         for p in target_players:
             if game_instance._is_visible(entry, p):
+                log_type_name = entry.log_type.name
+                if not is_game_over and entry.log_type in (LogType.HUNTER_SHOOT, LogType.BLACKWEREWOLFKING_SHOOT):
+                    is_wolf = bool(p.role and isinstance(p.role, Werewolf))
+                    is_self = (entry.source == p)
+                    if not (is_wolf or is_self):
+                        log_type_name = "PLAYER_SHOOT"
                 player_logs[p.name]["logs"].append({
-                    "type": entry.log_type.name,
+                    "type": log_type_name,
                     "message": entry.message,
                     "source": entry.source.name if entry.source else None,
                     "target": entry.target.name if entry.target else None,
@@ -459,9 +467,21 @@ async def get_game_records(game_id: str):
         return {"votes": [], "deaths": []}
         
     game_instance = session.game_instance
+    is_game_over = session.is_finished() or bool(game_instance.winner)
+    deaths = game_instance.death
+    if not is_game_over:
+        sanitized_deaths = []
+        for d in deaths:
+            d_copy = dict(d)
+            if d_copy.get("phase") == "night":
+                d_copy["reason"] = "night"
+            elif d_copy.get("reason") in ("hunter_shot", "black_werewolf_king_shot"):
+                d_copy["reason"] = "shot"
+            sanitized_deaths.append(d_copy)
+        deaths = sanitized_deaths
     return {
         "votes": game_instance.vote_history,
-        "deaths": game_instance.death
+        "deaths": deaths
     }
 
 @app.get("/api/game/{game_id}/player/{player_name}/operations")

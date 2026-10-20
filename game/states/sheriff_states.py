@@ -47,17 +47,25 @@ class SheriffElectionState(GameState):
         for _, log_entry in pending_election_logs:
             self.game.log(log_entry)
 
+        candidate_names = [p.name for p in self.game.players if p in candidates]
+        non_candidate_names = [p.name for p in self.game.players if p not in candidates]
+        summary_data = {
+            "phase": "Sheriff Signup",
+            "candidates": candidate_names,
+            "non_candidates": non_candidate_names,
+        }
+
         if len(candidates) == 0:
-            self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "No one is running for sheriff.", "zh": "没有人竞选警长。"}, camps=["All"]))
+            self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "No one is running for sheriff.", "zh": "没有人竞选警长。"}, data=summary_data, camps=["All"]))
         elif len(candidates) == 1:
             sheriff = candidates[0]
             self.game.sheriff = sheriff
             sheriff.is_sheriff = True
             sheriff.is_sheriff_candidate = False
-            self.game.log(LogEntry(log_type=LogType.SHERIFF_ELECTED, message={"en": f"{sheriff.name} is the only candidate and has been elected sheriff!", "zh": f"{sheriff.name} 是唯一候选人，自动当选警长！"}, target=sheriff, camps=["All"]))
+            self.game.log(LogEntry(log_type=LogType.SHERIFF_ELECTED, message={"en": f"{sheriff.name} is the only candidate and has been elected sheriff!", "zh": f"{sheriff.name} 是唯一候选人，自动当选警长！"}, target=sheriff, data=summary_data, camps=["All"]))
         else:
             names = ", ".join(p.name for p in candidates)
-            self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": f"The candidates for sheriff are: {names}", "zh": f"警长竞选人有：{names}"}, camps=["All"]))
+            self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": f"The candidates for sheriff are: {names}", "zh": f"警长竞选人有：{names}"}, data=summary_data, camps=["All"]))
 
     def transition(self):
         if len(self.game.election_players) > 1:

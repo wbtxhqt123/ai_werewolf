@@ -219,22 +219,30 @@ class TestOperationsAndVoteHistory(unittest.TestCase):
             )
         )
 
-        # Hunter should see their shot in personal history and in public shots
+        # Hunter should see their own shot role, but not know whether another shooter is Hunter or Black Werewolf King
         hunter_history = self.game.get_player_operations_history(hunter.name)
         self.assertEqual(hunter_history["shot"], [target1.name])
         self.assertEqual(
             hunter_history["shot_details"], [{"day": 2, "target": target1.name}]
         )
+        self.assertEqual(hunter_history["public_shots"][0]["role"], "Hunter")
+        self.assertEqual(hunter_history["public_shots"][1]["role"], "Unknown")
 
-        # Villager can see public shots, but has no private role actions
+        # Werewolves know their teammates, so they can distinguish Hunter vs Black Werewolf King shots
+        werewolf = self.game.players[0]
+        werewolf_history = self.game.get_player_operations_history(werewolf.name)
+        self.assertEqual(werewolf_history["public_shots"][0]["role"], "Hunter")
+        self.assertEqual(werewolf_history["public_shots"][1]["role"], "Black Werewolf King")
+
+        # Villager can see public shots, but does not know whether the shooter is Hunter or Black Werewolf King
         villager_history = self.game.get_player_operations_history(villager.name)
         self.assertEqual(len(villager_history["public_shots"]), 2)
         self.assertEqual(villager_history["public_shots"][0]["shooter"], hunter.name)
-        self.assertEqual(villager_history["public_shots"][0]["role"], "Hunter")
+        self.assertEqual(villager_history["public_shots"][0]["role"], "Unknown")
         self.assertEqual(villager_history["public_shots"][0]["target"], target1.name)
         self.assertEqual(villager_history["public_shots"][1]["shooter"], black_king.name)
         self.assertEqual(
-            villager_history["public_shots"][1]["role"], "Black Werewolf King"
+            villager_history["public_shots"][1]["role"], "Unknown"
         )
         self.assertEqual(villager_history["public_shots"][1]["target"], target2.name)
 
@@ -415,6 +423,120 @@ class TestOperationsAndVoteHistory(unittest.TestCase):
         self.assertTrue(p1.is_sheriff_candidate)
         self.assertTrue(p2.is_sheriff_candidate)
         self.assertFalse(p3.is_sheriff_candidate)
+
+        # Verify structured Sheriff Signup summary data is attached for consolidated chat card
+        signup_summary_logs = [
+            e for e in self.game.game_log if e.data and e.data.get("phase") == "Sheriff Signup"
+        ]
+        self.assertEqual(len(signup_summary_logs), 1)
+        self.assertEqual(signup_summary_logs[0].data["candidates"], ["Player 1", "Player 2"])
+        self.assertEqual(signup_summary_logs[0].data["non_candidates"], ["Player 3"])
+
+    def test_vote_result_log_includes_sheriff_weight_metadata(self):
+        from unittest.mock import MagicMock
+        from game.states.day_states import VoteState
+
+        p1 = self.game.players[0]
+        p2 = self.game.players[1]
+        p3 = self.game.players[2]
+        for p in self.game.players[3:]:
+            p.is_alive = False
+
+        # Make Player 1 the Sheriff
+        self.game.sheriff = p1
+        p1.is_sheriff = True
+
+        p1.controller.get_vote = MagicMock(return_value=p2)
+        p2.controller.get_vote = MagicMock(return_value=p3)
+        p3.controller.get_vote = MagicMock(return_value=p2)
+
+        state = VoteState(self.game)
+        state.handle()
+
+        vote_result_logs = [
+            e for e in self.game.game_log if e.log_type == LogType.VOTE_RESULT
+        ]
+        self.assertEqual(len(vote_result_logs), 1)
+        data = vote_result_logs[0].data
+        self.assertEqual(data["phase"], "Execution Vote")
+        self.assertEqual(data["result"], "Player 2")
+        self.assertEqual(data["sheriff"], "Player 1")
+        self.assertIn("Player 1", data["votes"]["Player 2"])
+        self.assertIn("Player 3", data["votes"]["Player 2"])
+
+    def test_web_controller_masks_shooter_role_for_non_werewolves(self):
+        from web.controller import WebController
+
+        villager = self.game.players[8]  # Villager
+        werewolf = self.game.players[0]  # Werewolf
+        black_king = self.game.players[2]  # Black Werewolf King
+        hunter = self.game.players[6]  # Hunter
+        target = self.game.players[7]
+
+        villager_ctrl = WebController()
+        villager_ctrl.game = self.game
+        villager.controller = villager_ctrl
+
+        wolf_ctrl = WebController()
+        wolf_ctrl.game = self.game
+        werewolf.controller = wolf_ctrl
+
+        king_shot = LogEntry(
+            log_type=LogType.BLACKWEREWOLFKING_SHOOT,
+            message="Player 3 shoots Player 8!",
+            source=black_king,
+            target=target,
+            camps=["All"],
+        )
+        hunter_shot = LogEntry(
+            log_type=LogType.HUNTER_SHOOT,
+            message="Player 7 shoots Player 8!",
+            source=hunter,
+            target=target,
+            camps=["All"],
+        )
+
+        villager_ctrl.add_log(king_shot)
+        villager_ctrl.add_log(hunter_shot)
+        v_logs = villager_ctrl.get_logs()
+        self.assertEqual(v_logs[0]["type"], "PLAYER_SHOOT")
+        self.assertEqual(v_logs[1]["type"], "PLAYER_SHOOT")
+
+        wolf_ctrl.add_log(king_shot)
+        wolf_ctrl.add_log(hunter_shot)
+        w_logs = wolf_ctrl.get_logs()
+        self.assertEqual(w_logs[0]["type"], "BLACKWEREWOLFKING_SHOOT")
+        self.assertEqual(w_logs[1]["type"], "HUNTER_SHOOT")
+
+    def test_multiple_night_deaths_hide_reason_and_order_by_seat(self):
+        from game.states.night_states import NightEndState
+        from game.states.day_states import DayAnnouncementState
+
+        p2 = self.game.players[1]  # Player 2
+        p8 = self.game.players[7]  # Player 8
+
+        # Suppose Player 8 is attacked by werewolves (with Guard+Save conflict) and Player 2 is poisoned by Witch
+        self.game.night_kill_target = p8
+        self.game.saved_this_night = p8
+        self.game.protected_this_night = p8
+        self.game.night_poison_target = p2
+
+        night_end = NightEndState(self.game)
+        night_end.handle()
+
+        # Ensure no log entry reveals "conflicting magic" or poison publicly
+        for entry in self.game.game_log:
+            msg_str = str(entry.message)
+            self.assertNotIn("conflicting magic", msg_str)
+            self.assertNotIn("同守同救", msg_str)
+
+        day_announce = DayAnnouncementState(self.game)
+        day_announce.handle()
+
+        # Eliminations must be announced and recorded in seat order (Player 2, then Player 8)
+        elim_logs = [e for e in self.game.game_log if e.log_type == LogType.PLAYER_ELIMINATED]
+        self.assertEqual([e.target.name for e in elim_logs], ["Player 2", "Player 8"])
+        self.assertEqual([d["player"] for d in self.game.death], ["Player 2", "Player 8"])
 
 
 if __name__ == "__main__":

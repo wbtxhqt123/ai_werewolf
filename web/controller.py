@@ -4,7 +4,7 @@ import time
 import uuid
 from typing import Any, TYPE_CHECKING
 from game.controllers import Controller
-from game.player import Player
+from game.player import Player, Werewolf
 from game.log import LogEntry, LogType
 
 if TYPE_CHECKING:
@@ -65,14 +65,23 @@ class WebController(Controller):
                     is_visible = True
 
             if is_visible:
+                log_type_name = entry.log_type.name
+                if entry.log_type in (LogType.HUNTER_SHOOT, LogType.BLACKWEREWOLFKING_SHOOT):
+                    is_wolf = bool(my_player and my_player.role and isinstance(my_player.role, Werewolf))
+                    is_self = bool(my_player and entry.source == my_player)
+                    if not (is_wolf or is_self):
+                        log_type_name = "PLAYER_SHOOT"
+
                 self.visible_logs.append({
                     "id": entry.id,
-                    "type": entry.log_type.name,
+                    "type": log_type_name,
                     "message": entry.message,
                     "source": entry.source.name if entry.source else None,
                     "target": entry.target.name if entry.target else None,
                     "data": entry.data,
-                    "camps": entry.camps
+                    "camps": entry.camps,
+                    "day": entry.day,
+                    "state": entry.state,
                 })
 
     def get_logs(self, start_index: int = 0) -> list[dict]:

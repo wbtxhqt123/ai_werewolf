@@ -569,14 +569,26 @@ class Game:
             history["shot"] = shot
             history["shot_details"] = shot_details
 
-        # Public Shots: Hunter and Black Werewolf King shots are public daytime events
+        # Public Shots: Hunter and Black Werewolf King shots are public daytime events,
+        # but non-werewolf players (unless they are the shooter themselves) do not know
+        # whether the shooter is the Hunter or the Black Werewolf King.
+        is_werewolf_camp = isinstance(player.role, Werewolf)
         public_shots = []
         for log in self.game_log:
             if log.log_type in [LogType.HUNTER_SHOOT, LogType.BLACKWEREWOLFKING_SHOOT]:
+                knows_shooter_role = is_werewolf_camp or (log.source == player)
+                if knows_shooter_role:
+                    shooter_role = (
+                        "Hunter"
+                        if log.log_type == LogType.HUNTER_SHOOT
+                        else "Black Werewolf King"
+                    )
+                else:
+                    shooter_role = "Unknown"
                 public_shots.append({
                     "day": log.day or 1,
                     "shooter": log.source.name if log.source else "Unknown",
-                    "role": "Hunter" if log.log_type == LogType.HUNTER_SHOOT else "Black Werewolf King",
+                    "role": shooter_role,
                     "target": log.target.name if log.target else "no one",
                 })
         history["public_shots"] = public_shots

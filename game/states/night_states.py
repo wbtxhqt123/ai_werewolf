@@ -304,7 +304,6 @@ class NightEndState(GameState):
                 if allow_conflict:
                     werewolf_target.death_reason = "werewolf"
                     self.game.killed_this_night.add(werewolf_target)
-                    self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": f"{werewolf_target.name} died due to conflicting magic (guarded and saved).", "zh": f"{werewolf_target.name} 因同守同救失效而死亡。"}, camps=["All"]))
                 else:
                     # If conflict is not allowed, the player is safe (double protection)
                     pass

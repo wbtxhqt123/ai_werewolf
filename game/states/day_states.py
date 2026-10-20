@@ -47,20 +47,32 @@ class DayAnnouncementState(GameState):
             p.is_sheriff_candidate = False
 
         # This state is now primarily for setting up the consequences of night deaths.
-        # The actual death announcements have been moved to NightEndState.
-        if self.game.killed_this_night:
-            sorted_killed = sorted(list(self.game.killed_this_night), key=lambda p: self.game.players.index(p))
+        # Night deaths are always sorted and announced by seat number so neither the
+        # chronological order of deaths nor the cause of death is leaked to players.
+        sorted_killed = sorted(list(self.game.killed_this_night), key=lambda p: self.game.players.index(p))
+        if sorted_killed:
+            if len(sorted_killed) > 1:
+                names_en = ", ".join(p.name for p in sorted_killed)
+                names_zh = "、".join(p.name for p in sorted_killed)
+                self.game.log(LogEntry(
+                    log_type=LogType.SYSTEM,
+                    message={
+                        "en": f"Last night, {names_en} were eliminated (announced in seat order; cause and order of death unknown).",
+                        "zh": f"昨晚死亡的是 {names_zh}（排名不分先后，死因不详）。",
+                    },
+                    camps=["All"],
+                ))
             for player in sorted_killed:
                 player.is_alive = False
                 self.game.log(LogEntry(log_type=LogType.PLAYER_ELIMINATED, message={"en": f"Last night, {player.name} was eliminated.", "zh": f"昨晚，{player.name} 死亡。"}, target=player, camps=["All"]))
-                # Record to historical log
+                # Record to historical log in seat order
                 self.game.record_death(player, player.death_reason, phase="night")
         else:
             self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "A peaceful night... no one was eliminated.", "zh": "昨晚是平安夜，无人死亡。"}, camps=["All"]))
         
-        # Check for Hunter or Black Werewolf King death to trigger shooting
+        # Check for Hunter or Black Werewolf King death to trigger shooting (in seat order)
         self.game.shoot_triggers = []
-        for player in self.game.killed_this_night:
+        for player in sorted_killed:
             # A player killed by poison cannot shoot
             if isinstance(player.role, (Hunter, BlackWerewolfKing)) and player.death_reason != "poison":
                 self.game.shoot_triggers.append(player)
@@ -189,7 +201,12 @@ class VoteState(GameState):
             self.game.log(LogEntry(
                 log_type=LogType.VOTE_RESULT,
                 message={"en": "No one executed.", "zh": "无人被放逐。"},
-                data={"phase": "Execution Vote", "votes": vote_details, "result": "None"},
+                data={
+                    "phase": "Execution Vote",
+                    "votes": vote_details,
+                    "result": "None",
+                    "sheriff": self.game.sheriff.name if self.game.sheriff else None,
+                },
                 camps=["All"]
             ))
             self.game.record_vote("Execution Vote", raw_votes, "None")
@@ -212,7 +229,12 @@ class VoteState(GameState):
             self.game.log(LogEntry(
                 log_type=LogType.VOTE_RESULT,
                 message={"en": f"{player_to_execute.name} executed.", "zh": f"{player_to_execute.name} 被放逐。"},
-                data={"phase": "Execution Vote", "votes": vote_details, "result": player_to_execute.name},
+                data={
+                    "phase": "Execution Vote",
+                    "votes": vote_details,
+                    "result": player_to_execute.name,
+                    "sheriff": self.game.sheriff.name if self.game.sheriff else None,
+                },
                 camps=["All"]
             ))
             self.game.record_vote("Execution Vote", raw_votes, player_to_execute.name)
@@ -225,7 +247,12 @@ class VoteState(GameState):
             self.game.log(LogEntry(
                 log_type=LogType.VOTE_RESULT,
                 message={"en": "Tie vote.", "zh": "平票。"},
-                data={"phase": "Execution Vote", "votes": vote_details, "result": "Tie"},
+                data={
+                    "phase": "Execution Vote",
+                    "votes": vote_details,
+                    "result": "Tie",
+                    "sheriff": self.game.sheriff.name if self.game.sheriff else None,
+                },
                 camps=["All"]
             ))
             self.game.record_vote("Execution Vote", raw_votes, "Tie")
@@ -433,7 +460,13 @@ class TieVoteState(GameState):
             self.game.log(LogEntry(
                 log_type=LogType.VOTE_RESULT,
                 message={"en": "Tie remains.", "zh": "依然平票。"},
-                data={"phase": "Tie Breaker", "votes": vote_details, "result": "Tie"},
+                data={
+                    "phase": "Tie Breaker",
+                    "context": self.game.tie_context,
+                    "votes": vote_details,
+                    "result": "Tie",
+                    "sheriff": self.game.sheriff.name if self.game.sheriff else None,
+                },
                 camps=["All"]
             ))
             self.game.record_vote("Tie Breaker", raw_votes, "Tie")
@@ -461,7 +494,13 @@ class TieVoteState(GameState):
                 self.game.log(LogEntry(
                     log_type=LogType.VOTE_RESULT,
                     message={"en": f"{winner.name} elected Sheriff.", "zh": f"{winner.name} 当选警长。"},
-                    data={"phase": "Tie Breaker", "votes": vote_details, "result": winner.name},
+                    data={
+                        "phase": "Tie Breaker",
+                        "context": "sheriff",
+                        "votes": vote_details,
+                        "result": winner.name,
+                        "sheriff": None,
+                    },
                     camps=["All"]
                 ))
                 self.game.record_vote("Tie Breaker", raw_votes, winner.name)
@@ -471,7 +510,13 @@ class TieVoteState(GameState):
                 self.game.log(LogEntry(
                     log_type=LogType.VOTE_RESULT,
                     message={"en": f"{winner.name} executed.", "zh": f"{winner.name} 被放逐。"},
-                    data={"phase": "Tie Breaker", "votes": vote_details, "result": winner.name},
+                    data={
+                        "phase": "Tie Breaker",
+                        "context": "execution",
+                        "votes": vote_details,
+                        "result": winner.name,
+                        "sheriff": self.game.sheriff.name if self.game.sheriff else None,
+                    },
                     camps=["All"]
                 ))
                 self.game.record_vote("Tie Breaker", raw_votes, winner.name)
@@ -481,7 +526,13 @@ class TieVoteState(GameState):
             self.game.log(LogEntry(
                 log_type=LogType.VOTE_RESULT,
                 message={"en": "Tie remains.", "zh": "依然平票。"},
-                data={"phase": "Tie Breaker", "votes": vote_details, "result": "Tie"},
+                data={
+                    "phase": "Tie Breaker",
+                    "context": self.game.tie_context,
+                    "votes": vote_details,
+                    "result": "Tie",
+                    "sheriff": self.game.sheriff.name if self.game.sheriff else None,
+                },
                 camps=["All"]
             ))
             self.game.record_vote("Tie Breaker", raw_votes, "Tie")

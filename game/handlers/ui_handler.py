@@ -21,10 +21,15 @@ class UIEventHandler:
 
     def handle_event(self, event):
         if isinstance(event, PlayerDied):
+            public_reason = event.reason
+            if public_reason in ("werewolf", "poison", "killed by werewolves", "poisoned by witch"):
+                public_reason = "night"
+            elif public_reason in ("hunter_shot", "black_werewolf_king_shot", "shot by hunter", "shot by black werewolf king"):
+                public_reason = "shot"
             payload = {
                 "type": "player_died",
                 "player": event.player.name,
-                "reason": event.reason,
+                "reason": public_reason,
             }
             self._dispatch(self.websocket_manager.broadcast(payload))
         elif isinstance(event, SeerCheckResult):
