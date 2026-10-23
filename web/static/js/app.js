@@ -819,6 +819,35 @@ async function sendAudioForTranscription(audioBlob) {
 let selectedTurnTimeoutSeconds = null;
 
 /**
+ * Saves current LLM & lobby settings (provider, API key, base URL, model name, language, avatar, player count, role) to localStorage.
+ */
+function saveStoredSettings() {
+    try {
+        const providerEl = document.getElementById('provider-select');
+        const apiKeyEl = document.getElementById('api-key');
+        const baseUrlEl = document.getElementById('base-url');
+        const modelNameEl = document.getElementById('model-name');
+        const selectedAvatarEl = document.querySelector('.avatar-option.selected');
+        const selectedCountEl = document.querySelector('.toggle-btn.active');
+        const selectedRoleEl = document.querySelector('.role-option.selected');
+
+        const payload = {
+            provider: providerEl ? providerEl.value : 'openai',
+            apiKey: apiKeyEl ? apiKeyEl.value : '',
+            baseUrl: baseUrlEl ? baseUrlEl.value : '',
+            modelName: modelNameEl ? modelNameEl.value : '',
+            lang: gameState.lang || 'zh',
+            avatar: selectedAvatarEl ? selectedAvatarEl.dataset.avatar : (gameState.myAvatar || '🐶'),
+            playerCount: selectedCountEl ? parseInt(selectedCountEl.dataset.value, 10) : 9,
+            role: selectedRoleEl ? selectedRoleEl.dataset.role : (gameState.myRole || 'Random')
+        };
+        localStorage.setItem('werewolf_llm_settings', JSON.stringify(payload));
+    } catch (e) {
+        console.warn('Failed to save settings to localStorage', e);
+    }
+}
+
+/**
  * Loads stored settings from localStorage and applies them to UI state.
  */
 function loadStoredSettings() {
@@ -828,6 +857,53 @@ function loadStoredSettings() {
             const parsedSpeed = parseFloat(savedSpeed);
             if ([1.0, 0.5, 0].includes(parsedSpeed)) {
                 gameState.pacingMultiplier = parsedSpeed;
+            }
+        }
+
+        const rawSettings = localStorage.getItem('werewolf_llm_settings');
+        if (rawSettings) {
+            const saved = JSON.parse(rawSettings);
+            if (saved && typeof saved === 'object') {
+                const providerEl = document.getElementById('provider-select');
+                const apiKeyEl = document.getElementById('api-key');
+                const baseUrlEl = document.getElementById('base-url');
+                const modelNameEl = document.getElementById('model-name');
+
+                if (saved.provider && providerEl) {
+                    providerEl.value = saved.provider;
+                }
+                if (typeof saved.apiKey === 'string' && apiKeyEl) {
+                    apiKeyEl.value = saved.apiKey;
+                    if (evalUI.apiKeyInput) evalUI.apiKeyInput.value = saved.apiKey;
+                }
+                if (typeof saved.baseUrl === 'string' && baseUrlEl) {
+                    baseUrlEl.value = saved.baseUrl;
+                }
+                if (typeof saved.modelName === 'string' && modelNameEl) {
+                    modelNameEl.value = saved.modelName;
+                }
+                if (saved.lang === 'zh' || saved.lang === 'en') {
+                    gameState.lang = saved.lang;
+                }
+                if (saved.playerCount && [6, 9, 12].includes(Number(saved.playerCount)) && setupUI.playerCountGroup) {
+                    const count = Number(saved.playerCount);
+                    setupUI.playerCountGroup.querySelectorAll('.toggle-btn').forEach(btn => {
+                        btn.classList.toggle('active', parseInt(btn.dataset.value, 10) === count);
+                    });
+                    renderRoleSelection(count);
+                }
+                if (saved.role) {
+                    gameState.myRole = saved.role;
+                    document.querySelectorAll('.role-option').forEach(el => {
+                        el.classList.toggle('selected', el.dataset.role === saved.role);
+                    });
+                }
+                if (saved.avatar) {
+                    gameState.myAvatar = saved.avatar;
+                    document.querySelectorAll('.avatar-option').forEach(el => {
+                        el.classList.toggle('selected', el.dataset.avatar === saved.avatar);
+                    });
+                }
             }
         }
     } catch (e) {
@@ -949,6 +1025,7 @@ function setupSettingsListeners() {
 
     if (settingsUI.saveBtn) {
         settingsUI.saveBtn.addEventListener('click', async () => {
+            saveStoredSettings();
             settingsUI.modal.classList.remove('active');
         });
     }
@@ -1130,6 +1207,7 @@ function setupEvaluationListeners() {
  */
 function toggleLanguage() {
     gameState.lang = gameState.lang === 'zh' ? 'en' : 'zh';
+    saveStoredSettings();
     updateLanguage();
     renderLogs();
     if (gameState.gameId) {
@@ -2195,6 +2273,7 @@ function setupEventListeners() {
             document.querySelectorAll('.role-option').forEach(el => el.classList.remove('selected'));
             option.classList.add('selected');
             gameState.myRole = option.dataset.role;
+            saveStoredSettings();
         }
     });
 
@@ -2206,6 +2285,7 @@ function setupEventListeners() {
                 document.querySelectorAll('.role-option').forEach(el => el.classList.remove('selected'));
                 option.classList.add('selected');
                 gameState.myRole = option.dataset.role;
+                saveStoredSettings();
             }
         }
     });
@@ -2215,6 +2295,8 @@ function setupEventListeners() {
         if (option) {
             document.querySelectorAll('.avatar-option').forEach(el => el.classList.remove('selected'));
             option.classList.add('selected');
+            gameState.myAvatar = option.dataset.avatar;
+            saveStoredSettings();
         }
     });
 
@@ -2225,6 +2307,8 @@ function setupEventListeners() {
             if (option) {
                 document.querySelectorAll('.avatar-option').forEach(el => el.classList.remove('selected'));
                 option.classList.add('selected');
+                gameState.myAvatar = option.dataset.avatar;
+                saveStoredSettings();
             }
         }
     });
@@ -2236,6 +2320,7 @@ function setupEventListeners() {
             btn.classList.add('active');
             const count = parseInt(btn.dataset.value);
             renderRoleSelection(count);
+            saveStoredSettings();
         }
     });
 
@@ -2275,6 +2360,7 @@ async function startGame() {
     const baseUrl = document.getElementById('base-url').value;
     const modelName = document.getElementById('model-name').value;
     const provider = document.getElementById('provider-select').value;
+    saveStoredSettings();
 
     try {
         const response = await fetch('/api/game/start', {
