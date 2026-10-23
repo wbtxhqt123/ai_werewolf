@@ -65,6 +65,12 @@ class GameEvaluator:
             summary.append(f"- {msg}")
         return "\n".join(summary)
 
+    def _call_llm_text(self, prompt: str) -> str:
+        try:
+            return self.llm_client.get_completion(prompt, json_mode=False)
+        except TypeError:
+            return self.llm_client.get_completion(prompt)
+
     def evaluate(self, game_logs: List[dict], player_name: str, player_role: str, game_result: str, mode: str) -> str:
         """Generates an evaluation of the player's performance."""
         self.current_mode = mode
@@ -98,7 +104,7 @@ class GameEvaluator:
             game_result=self.game_result
         )
 
-        self.previous_evaluation = self.llm_client.get_completion(prompt)
+        self.previous_evaluation = self._call_llm_text(prompt)
         return self.previous_evaluation
 
     def chat(self, user_message: str) -> str:
@@ -131,4 +137,4 @@ class GameEvaluator:
             user_message=user_message
         )
 
-        return self.llm_client.get_completion(prompt)
+        return self._call_llm_text(prompt)

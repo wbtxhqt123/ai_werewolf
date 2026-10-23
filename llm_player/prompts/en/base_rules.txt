@@ -5,4 +5,4 @@
 4. Night Deaths Announcement: If multiple players die during the night, casualties are announced in seat number order at dawn; other players do not know the cause of death or the chronological order in which they died.
 5. Winning Conditions:
    - Villagers win if all Werewolves are eliminated.
-   - Werewolves win if the number of living Werewolves is greater than or equal to the number of living Villagers.
+   - Werewolves win if all plain Villagers are eliminated OR all God roles (Seer, Witch, Guard, Hunter) are eliminated (Slaughter-the-Side rule).

@@ -319,31 +319,48 @@ class Game:
 
     def check_win_condition(self) -> str | None:
         """
-        Checks if a win condition has been met.
+        Checks if a win condition has been met (Slaughter-the-Side / 屠边 rules).
         Returns the winning team ('Villagers' or 'Werewolves') or None.
-        Werewolves win when their total voting power is >= the humans' total voting power.
+        - Villagers win when all Werewolves are dead.
+        - Werewolves win when all plain Villagers are dead OR all God roles (non-Villager good roles) are dead.
         """
         living_players = [p for p in self.players if p.is_alive]
         living_werewolves = [
             p for p in living_players if isinstance(p.role, Werewolf)
         ]
-        living_villagers = [
-            p for p in living_players if not isinstance(p.role, Werewolf)
-        ]
 
         if len(living_werewolves) == 0:
             return "Villagers"
 
-        werewolf_votes = sum(1.5 if p.is_sheriff else 1.0 for p in living_werewolves)
-        villager_votes = sum(1.5 if p.is_sheriff else 1.0 for p in living_villagers)
+        total_plain_villagers = [
+            p for p in self.players if type(p.role) is Villager
+        ]
+        total_god_villagers = [
+            p
+            for p in self.players
+            if p.role is not None
+            and not isinstance(p.role, Werewolf)
+            and type(p.role) is not Villager
+        ]
 
-        # If a dead Sheriff has not yet passed or destroyed the badge, and passing it to a human
-        # would give humans more votes than werewolves, wait for SheriffDeathState to resolve first.
-        pending_sheriff_handoff = any((not p.is_alive) and p.is_sheriff for p in self.players)
-        if pending_sheriff_handoff and werewolf_votes < villager_votes + 0.5:
-            return None
+        living_plain_villagers = [
+            p for p in living_players if type(p.role) is Villager
+        ]
+        living_god_villagers = [
+            p
+            for p in living_players
+            if p.role is not None
+            and not isinstance(p.role, Werewolf)
+            and type(p.role) is not Villager
+        ]
 
-        if werewolf_votes >= villager_votes:
+        if total_plain_villagers and len(living_plain_villagers) == 0:
+            return "Werewolves"
+
+        if total_god_villagers and len(living_god_villagers) == 0:
+            return "Werewolves"
+
+        if len(living_plain_villagers) + len(living_god_villagers) == 0:
             return "Werewolves"
 
         return None

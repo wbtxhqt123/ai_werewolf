@@ -155,6 +155,34 @@ class TestLLMRobustness(unittest.TestCase):
         self.assertNotIn("You are the Sheriff", status_zh)
         self.assertNotIn("You are the Seer", status_zh)
 
+    def test_llm_controller_retries_on_wrong_action_schema_and_recovers(self):
+        mock_client = MagicMock()
+        # 1st attempt: valid JSON, but wrong key ("target" instead of "vote")
+        # 2nd attempt: valid JSON with expected "vote" key
+        mock_client.get_completion.side_effect = [
+            '{"thought": "Voting player 2", "action": {"target": "Player 2"}}',
+            '{"thought": "Fixed key", "action": {"vote": "Player 2"}}',
+        ]
+        controller = LLMController(llm_client=mock_client, language="en")
+        game = Game({"Player 1": controller, "Player 2": RandomController()}, language="en")
+        p1, p2 = game.players
+        target = controller.get_vote(p1, [p2])
+        self.assertEqual(target, p2)
+        self.assertEqual(mock_client.get_completion.call_count, 2)
+        second_prompt = mock_client.get_completion.call_args_list[1][0][0]
+        self.assertIn("Missing required key 'vote'", second_prompt)
+
+    def test_llm_controller_normalizes_top_level_action_keys(self):
+        mock_client = MagicMock()
+        # LLM forgot to nest under "action" and returned {"thought": "...", "speech": "..."}
+        mock_client.get_completion.return_value = '{"thought": "Speak directly", "speech": "I am a villager."}'
+        controller = LLMController(llm_client=mock_client, language="en")
+        game = Game({"Player 1": controller, "Player 2": RandomController()}, language="en")
+        p1 = game.players[0]
+        speech = controller.get_speech(p1)
+        self.assertEqual(speech, "I am a villager.")
+        self.assertEqual(mock_client.get_completion.call_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

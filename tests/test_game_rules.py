@@ -105,12 +105,19 @@ class TestGameRules(unittest.TestCase):
         winner = self.game.check_win_condition()
         self.assertEqual(winner, "Villagers")
 
-    def test_win_condition_equal_werewolves_and_villagers(self):
-        # Kill all villagers except p1 and p2 (2 villagers alive, 2 werewolves alive: p7, p8)
+    def test_win_condition_all_gods_dead(self):
+        # Kill all god roles (p3 Hunter, p4 Witch, p5 Guard, p6 Seer); p1 and p2 (plain villagers) still alive
         self.p3.is_alive = False
         self.p4.is_alive = False
         self.p5.is_alive = False
         self.p6.is_alive = False
+        winner = self.game.check_win_condition()
+        self.assertEqual(winner, "Werewolves")
+
+    def test_win_condition_all_plain_villagers_dead(self):
+        # Kill all plain villagers (p1, p2); all god roles (p3, p4, p5, p6) still alive
+        self.p1.is_alive = False
+        self.p2.is_alive = False
         winner = self.game.check_win_condition()
         self.assertEqual(winner, "Werewolves")
 
@@ -244,23 +251,18 @@ class TestGameRules(unittest.TestCase):
         self.assertEqual(len(published_events), 1)
         self.assertTrue(published_events[0].is_werewolf)
 
-    # --- 6. Voting-Power Win Condition, Witch Save Visibility, and Reverse Last Words ---
+    # --- 6. Slaughter-the-Side Win Condition, Witch Save Visibility, and Reverse Last Words ---
 
-    def test_win_condition_human_sheriff_prevents_equal_count_werewolf_win(self):
-        # 2 werewolves alive (p7, p8: 2.0 votes) vs 2 humans alive (p1, p2)
+    def test_win_condition_slaughter_the_side_keeps_game_going_when_both_sides_have_survivor(self):
+        # 2 werewolves alive (p7, p8) vs 1 plain villager (p1) + 1 god (p6 Seer) -> game continues under Slaughter-the-Side
+        self.p2.is_alive = False
         self.p3.is_alive = False
         self.p4.is_alive = False
         self.p5.is_alive = False
-        self.p6.is_alive = False
-
-        # When p1 (human) is Sheriff, humans have 2.5 votes vs werewolves' 2.0 votes -> game continues
-        self.p1.is_sheriff = True
-        self.game.sheriff = self.p1
         self.assertIsNone(self.game.check_win_condition())
 
-        # If Sheriff badge is destroyed, humans have 2.0 votes vs werewolves' 2.0 votes -> Werewolves win
-        self.p1.is_sheriff = False
-        self.game.sheriff = None
+        # Once the last god (p6) dies, Werewolves win (all gods dead)
+        self.p6.is_alive = False
         self.assertEqual(self.game.check_win_condition(), "Werewolves")
 
     def test_witch_cannot_see_werewolf_target_when_save_potion_used(self):

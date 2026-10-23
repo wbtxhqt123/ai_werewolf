@@ -64,17 +64,19 @@ class RuleOracle:
 
         living = [p for p in self.game.players if p.is_alive]
         wolves = [p for p in living if isinstance(p.role, Werewolf)]
-        humans = [p for p in living if not isinstance(p.role, Werewolf)]
-        wolf_votes = sum(1.5 if p.is_sheriff else 1.0 for p in wolves)
-        human_votes = sum(1.5 if p.is_sheriff else 1.0 for p in humans)
+        living_plain_villagers = [p for p in living if type(p.role) is not Werewolf and getattr(p.role, "name", None) == "Villager"]
+        living_gods = [
+            p for p in living
+            if p.role is not None and not isinstance(p.role, Werewolf) and getattr(p.role, "name", None) != "Villager"
+        ]
 
         if event.winner == "Villagers":
             if len(wolves) != 0:
                 self._fail(f"Villagers won but {len(wolves)} werewolves are still alive")
         elif event.winner == "Werewolves":
-            if wolf_votes < human_votes:
+            if len(living_plain_villagers) > 0 and len(living_gods) > 0:
                 self._fail(
-                    f"Werewolves won prematurely: wolf_votes={wolf_votes} < human_votes={human_votes}"
+                    f"Werewolves won prematurely: living_plain_villagers={len(living_plain_villagers)}, living_gods={len(living_gods)}"
                 )
 
     def on_log(self, entry: LogEntry):

@@ -75,26 +75,38 @@ class LLMClient:
             api_key=self.api_key,
         )
 
-    def get_completion(self, prompt: str) -> str:
+    def get_completion(self, prompt: str, json_mode: bool = True) -> str:
         """Sends a prompt to the LLM and returns the generated completion.
 
         Args:
             prompt: The complete prompt to send to the model.
+            json_mode: When True, requests structured JSON object output from the API.
 
         Returns:
             The content of the LLM's response as a string. In case of an API error,
             it returns a JSON string with an error message.
         """
+        messages = [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            )
+            kwargs: dict[str, Any] = {
+                "model": self.model,
+                "messages": messages,
+            }
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+            try:
+                response = self.client.chat.completions.create(**kwargs)
+            except Exception as api_err:
+                if json_mode and ("response_format" in str(api_err).lower() or "json_object" in str(api_err).lower()):
+                    kwargs.pop("response_format", None)
+                    response = self.client.chat.completions.create(**kwargs)
+                else:
+                    raise
             return response.choices[0].message.content
         except Exception as e:
             import traceback
@@ -230,6 +242,176 @@ def extract_json(response_str: str) -> dict:
     raise json.JSONDecodeError(f"Could not extract valid JSON object from response: {text[:100]}...", text, 0)
 
 
+ACTION_SCHEMAS: dict[str, dict[str, Any]] = {
+    "speech": {
+        "keys": ("speech",),
+        "type": "non_empty_str",
+        "example": '{"thought": "...", "action": {"speech": "Your speech here"}}',
+    },
+    "vote": {
+        "keys": ("vote",),
+        "type": "optional_target",
+        "example": '{"thought": "...", "action": {"vote": "Player 1"}}',
+    },
+    "werewolf_kill": {
+        "keys": ("kill",),
+        "type": "optional_target",
+        "example": '{"thought": "...", "action": {"kill": "Player 1"}}',
+    },
+    "witch_action": {
+        "keys": ("save", "poison"),
+        "type": "witch",
+        "example": '{"thought": "...", "action": {"save": false, "poison": null}}',
+    },
+    "vote_for_sheriff": {
+        "keys": ("vote_for_sheriff",),
+        "type": "optional_target",
+        "example": '{"thought": "...", "action": {"vote_for_sheriff": "Player 1"}}',
+    },
+    "run_for_sheriff": {
+        "keys": ("run_for_sheriff",),
+        "type": "bool",
+        "example": '{"thought": "...", "action": {"run_for_sheriff": true}}',
+    },
+    "seer_action": {
+        "keys": ("check",),
+        "type": "optional_target",
+        "example": '{"thought": "...", "action": {"check": "Player 1"}}',
+    },
+    "guard_protect": {
+        "keys": ("protect",),
+        "type": "optional_target",
+        "example": '{"thought": "...", "action": {"protect": "Player 1"}}',
+    },
+    "hunter_shoot": {
+        "keys": ("shoot",),
+        "type": "optional_target",
+        "example": '{"thought": "...", "action": {"shoot": "Player 1"}}',
+    },
+    "decide_speech_order": {
+        "keys": ("speech_order",),
+        "type": "speech_order",
+        "example": '{"thought": "...", "action": {"speech_order": "clockwise"}}',
+    },
+    "sheriff_death": {
+        "keys": ("pass_badge",),
+        "type": "optional_target",
+        "example": '{"thought": "...", "action": {"pass_badge": "Player 1"}}',
+    },
+    "summarize_day": {
+        "keys": ("summary",),
+        "type": "top_level_str",
+        "example": '{"summary": "..."}',
+    },
+}
+
+
+def _coerce_bool(val: Any) -> bool | None:
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        low = val.strip().lower()
+        if low in ("true", "yes", "1"):
+            return True
+        if low in ("false", "no", "0", "none", "null", ""):
+            return False
+    return None
+
+
+def _coerce_optional_target(val: Any) -> tuple[bool, str | None]:
+    if val is None or val is False:
+        return True, None
+    if isinstance(val, int) and not isinstance(val, bool):
+        return True, f"Player {val}"
+    if isinstance(val, str):
+        clean = val.strip()
+        if clean.lower() in ("", "none", "null", "abstain", "弃票", "不投", "不使用", "不开枪"):
+            return True, None
+        return True, clean
+    return False, None
+
+
+def validate_and_normalize_response(parsed: dict, action_name: str | None = None) -> dict:
+    """Validates and normalizes a parsed LLM JSON response against the expected schema for `action_name`.
+
+    Raises:
+        ValueError: If the JSON structure does not match the required schema for `action_name`.
+    """
+    if not isinstance(parsed, dict):
+        raise ValueError("Top-level JSON value must be an object/dictionary.")
+
+    if not action_name or action_name not in ACTION_SCHEMAS:
+        return parsed
+
+    schema = ACTION_SCHEMAS[action_name]
+    expected_keys: tuple[str, ...] = schema["keys"]
+    schema_type: str = schema["type"]
+    example: str = schema["example"]
+
+    if schema_type == "top_level_str":
+        key = expected_keys[0]
+        val = parsed.get(key)
+        if val is None and isinstance(parsed.get("action"), dict):
+            val = parsed["action"].get(key)
+        if not isinstance(val, str) or not val.strip():
+            raise ValueError(f"Missing or empty '{key}' string. Expected format: {example}")
+        parsed[key] = val.strip()
+        return parsed
+
+    action = parsed.get("action")
+    # Auto-normalize if the LLM placed the action key(s) at the top level instead of inside "action"
+    if not isinstance(action, dict) or not any(k in action for k in expected_keys):
+        if any(k in parsed for k in expected_keys):
+            action = {k: parsed[k] for k in expected_keys if k in parsed}
+            parsed["action"] = action
+
+    if not isinstance(action, dict) or not action:
+        raise ValueError(f"Missing or empty 'action' object for '{action_name}'. Expected format: {example}")
+
+    if schema_type == "witch":
+        if "save" not in action and "poison" not in action:
+            raise ValueError(f"Witch action must contain 'save' and/or 'poison'. Expected format: {example}")
+        save_val = _coerce_bool(action.get("save", False))
+        if save_val is None:
+            raise ValueError(f"Invalid 'save' value in witch_action (must be boolean). Expected format: {example}")
+        ok, poison_val = _coerce_optional_target(action.get("poison"))
+        if not ok:
+            raise ValueError(f"Invalid 'poison' value in witch_action (must be player name or null). Expected format: {example}")
+        action["save"] = save_val
+        action["poison"] = poison_val
+        return parsed
+
+    key = expected_keys[0]
+    if key not in action:
+        raise ValueError(f"Missing required key '{key}' inside 'action'. Expected format: {example}")
+
+    raw_val = action[key]
+    if schema_type == "non_empty_str":
+        if not isinstance(raw_val, str) or not raw_val.strip():
+            raise ValueError(f"Field 'action.{key}' must be a non-empty string. Expected format: {example}")
+        action[key] = raw_val.strip()
+    elif schema_type == "bool":
+        coerced = _coerce_bool(raw_val)
+        if coerced is None:
+            raise ValueError(f"Field 'action.{key}' must be a boolean (true/false). Expected format: {example}")
+        action[key] = coerced
+    elif schema_type == "speech_order":
+        if not isinstance(raw_val, str) or raw_val.strip() not in ("clockwise", "counter_clockwise"):
+            raise ValueError(
+                f"Field 'action.{key}' must be 'clockwise' or 'counter_clockwise'. Expected format: {example}"
+            )
+        action[key] = raw_val.strip()
+    elif schema_type == "optional_target":
+        ok, target_val = _coerce_optional_target(raw_val)
+        if not ok:
+            raise ValueError(
+                f"Field 'action.{key}' must be a player name string or null. Expected format: {example}"
+            )
+        action[key] = target_val
+
+    return parsed
+
+
 class LLMController(Controller):
     """A sophisticated controller that uses an LLM to drive player decisions.
 
@@ -342,45 +524,58 @@ class LLMController(Controller):
                     return p
         return None
 
-    def _get_llm_response(self, prompt: str) -> dict:
-        """Retrieves and parses a JSON response from the LLM.
+    def _get_llm_response(self, prompt: str, action_name: str | None = None) -> dict:
+        """Retrieves, parses, and validates a JSON response from the LLM.
 
         This method includes a retry mechanism to handle cases where the LLM returns
-        malformed JSON. If parsing fails, it sends corrective feedback on subsequent
-        attempts. If parsing fails after multiple attempts, it returns a default
-        error dictionary.
+        malformed JSON or a JSON object missing required action keys. If parsing or
+        schema validation fails, it sends corrective feedback on subsequent attempts.
+        If all attempts fail, it returns a default error dictionary.
 
         Args:
             prompt: The prompt to send to the LLM.
+            action_name: Optional action identifier to validate the response schema against.
 
         Returns:
-            A dictionary parsed from the LLM's JSON response.
+            A dictionary parsed and normalized from the LLM's JSON response.
         """
         max_retries = 3
         current_prompt = prompt
         last_error = ""
+        lang = self._get_effective_language()
 
         for attempt in range(max_retries):
             response_str = self.llm_client.get_completion(current_prompt)
             try:
-                return extract_json(response_str)
+                parsed = extract_json(response_str)
+                return validate_and_normalize_response(parsed, action_name=action_name)
             except (json.JSONDecodeError, ValueError) as e:
                 last_error = str(e)
-                print(f"Attempt {attempt + 1}/{max_retries} failed: LLM returned invalid JSON: {response_str}")
+                print(f"Attempt {attempt + 1}/{max_retries} failed: LLM returned invalid JSON/schema: {last_error} | raw={response_str}")
                 if attempt == max_retries - 1:
                     return {"thought": "Invalid JSON response from LLM after retries.", "action": {}}
 
                 # Construct corrective feedback for the next retry attempt
                 snippet = response_str[:200] if response_str else ""
-                if self.language == "en":
+                schema_hint = ""
+                if action_name and action_name in ACTION_SCHEMAS:
+                    schema_hint = f" Required format: {ACTION_SCHEMAS[action_name]['example']}."
+                if lang == "en":
                     feedback = (
-                        f"\n\n[Correction Notice: Your previous output was not valid JSON ({last_error}). "
+                        f"\n\n[Correction Notice: Your previous output was not valid JSON or did not match the required schema ({last_error})."
+                        f"{schema_hint} "
                         f"Previous raw output: {snippet!r}. "
                         "Please return strictly valid JSON matching the required format, without markdown fences or extraneous text.]"
                     )
                 else:
+                    zh_hint = (
+                        f" 期望的 JSON 格式示例：{ACTION_SCHEMAS[action_name]['example']}。"
+                        if (action_name and action_name in ACTION_SCHEMAS)
+                        else ""
+                    )
                     feedback = (
-                        f"\n\n[修正提示：您上一次的输出不是合法的 JSON 格式（错误：{last_error}）。"
+                        f"\n\n[修正提示：您上一次的输出不是合法的 JSON 格式或缺少必需字段（错误：{last_error}）。"
+                        f"{zh_hint}"
                         f"原输出片段：{snippet!r}。"
                         "请严格仅返回符合格式要求的有效 JSON 对象，不要添加 markdown 代码块标记或无关的文字。]"
                     )
@@ -508,46 +703,40 @@ class LLMController(Controller):
             ))
 
         try:
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    lang = self._get_effective_language()
-                    base_rules = self._load_prompt("", "base_rules")
-                    characteristic_prompt = self._load_prompt("characteristic", self.personality)
-                    status_prompt = self._build_status_prompt(player)
-                    action_prompt_template = self._load_prompt("action", action_name)
-                    action_prompt = action_prompt_template.format(**format_kwargs)
+            try:
+                lang = self._get_effective_language()
+                base_rules = self._load_prompt("", "base_rules")
+                characteristic_prompt = self._load_prompt("characteristic", self.personality)
+                status_prompt = self._build_status_prompt(player)
+                action_prompt_template = self._load_prompt("action", action_name)
+                action_prompt = action_prompt_template.format(**format_kwargs)
 
-                    if lang == "zh":
-                        prompt = f"{base_rules}\n\n{characteristic_prompt}\n\n--- 当前状态 ---\n{status_prompt}\n\n--- 需要执行的行动 ---\n{action_prompt}"
-                    else:
-                        prompt = f"{base_rules}\n\n{characteristic_prompt}\n\n--- CURRENT STATUS ---\n{status_prompt}\n\n--- ACTION REQUIRED ---\n{action_prompt}"
-                    
-                    response = self._get_llm_response(prompt)
-                    thought = response.get('thought')
-                    print(f"LLM ({player.name}) thought: {thought}")
-                    
-                    # Log the thought process for debugging and transparency.
-                    if thought and self.game:
-                        self.game.log(LogEntry(
-                            log_type=LogType.THOUGHT,
-                            message={"en": f"({player.name} thought): {thought}", "zh": f"({player.name} 思考): {thought}"},
-                            source=player,
-                            visible_to_players=[player]
-                        ))
+                if lang == "zh":
+                    prompt = f"{base_rules}\n\n{characteristic_prompt}\n\n--- 当前状态 ---\n{status_prompt}\n\n--- 需要执行的行动 ---\n{action_prompt}"
+                else:
+                    prompt = f"{base_rules}\n\n{characteristic_prompt}\n\n--- CURRENT STATUS ---\n{status_prompt}\n\n--- ACTION REQUIRED ---\n{action_prompt}"
 
-                    action = response.get("action", {})
-                    if not action:
-                         raise ValueError("Empty action received from LLM")
-                    return action
+                response = self._get_llm_response(prompt, action_name=action_name)
+                thought = response.get('thought')
+                print(f"LLM ({player.name}) thought: {thought}")
 
-                except Exception as e:
-                    print(f"Attempt {attempt + 1}/{max_retries} failed for {player.name}: {e}")
-                    if attempt == max_retries - 1:
-                        print(f"All attempts failed. Falling back to SafeController.")
-                        return self._get_fallback_decision(player, action_name, format_kwargs)
-            
-            return self._get_fallback_decision(player, action_name, format_kwargs)
+                # Log the thought process for debugging and transparency.
+                if thought and self.game:
+                    self.game.log(LogEntry(
+                        log_type=LogType.THOUGHT,
+                        message={"en": f"({player.name} thought): {thought}", "zh": f"({player.name} 思考): {thought}"},
+                        source=player,
+                        visible_to_players=[player]
+                    ))
+
+                action = response.get("action", {})
+                if not action:
+                    raise ValueError("Empty action received from LLM")
+                return action
+
+            except Exception as e:
+                print(f"All attempts failed for {player.name}: {e}. Falling back to SafeController.")
+                return self._get_fallback_decision(player, action_name, format_kwargs)
         finally:
             if self.game:
                 self.game.log(LogEntry(
@@ -716,7 +905,7 @@ class LLMController(Controller):
             long_term_memory=player.long_term_memory or ("无" if is_zh else "None")
         )
 
-        response = self._get_llm_response(prompt)
+        response = self._get_llm_response(prompt, action_name="summarize_day")
         summary = response.get("summary")
         
         if summary:
