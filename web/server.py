@@ -132,7 +132,7 @@ class StartGameRequest(BaseModel):
     provider: Optional[str] = None
     player_configs: Optional[dict] = None
     language: str = "zh"
-    turn_timeout: Optional[float] = 120.0
+    turn_timeout: Optional[float] = None
 
 class UpdateSettingsRequest(BaseModel):
     """Defines the structure for updating runtime game settings."""
@@ -234,7 +234,7 @@ async def start_game(request: StartGameRequest):
     rest of the game with AI players. It supports both a global LLM configuration
     and per-player configurations.
     """
-    timeout = float(request.turn_timeout) if request.turn_timeout and request.turn_timeout > 0 else 120.0
+    timeout = float(request.turn_timeout) if request.turn_timeout and request.turn_timeout > 0 else None
     web_controller = WebController(timeout=timeout)
     
     players_with_controllers = {
@@ -250,7 +250,18 @@ async def start_game(request: StartGameRequest):
             provider=request.provider
         )
 
-    personalities = ["cautious", "aggressive", "analytical", "emotional", "random"]
+    personalities = [
+        "cautious",
+        "aggressive",
+        "analytical",
+        "emotional",
+        "diplomat",
+        "follower",
+        "manipulative",
+        "paranoid",
+        "silent",
+    ]
+    random.shuffle(personalities)
     for i in range(request.num_players - 1):
         player_name = f"Player {i+2}"
         

@@ -807,21 +807,14 @@ async function sendAudioForTranscription(audioBlob) {
     }
 }
 
-/** @type {number} - Selected turn timeout in seconds. Default 120s (2 minutes). */
-let selectedTurnTimeoutSeconds = 120;
+/** @type {number|null} - Selected turn timeout in seconds (null = no limit). */
+let selectedTurnTimeoutSeconds = null;
 
 /**
  * Loads stored settings from localStorage and applies them to UI state.
  */
 function loadStoredSettings() {
     try {
-        const savedTimeout = localStorage.getItem('werewolf_turn_timeout');
-        if (savedTimeout) {
-            const parsed = parseInt(savedTimeout, 10);
-            if (Number.isFinite(parsed) && parsed >= 10) {
-                selectedTurnTimeoutSeconds = parsed;
-            }
-        }
         const savedSpeed = localStorage.getItem('werewolf_pacing_speed');
         if (savedSpeed !== null) {
             const parsedSpeed = parseFloat(savedSpeed);
@@ -832,7 +825,6 @@ function loadStoredSettings() {
     } catch (e) {
         console.warn('Failed to read settings from localStorage', e);
     }
-    syncTimerUIFromState();
     updatePacingControlsUI();
 }
 
@@ -949,51 +941,6 @@ function setupSettingsListeners() {
 
     if (settingsUI.saveBtn) {
         settingsUI.saveBtn.addEventListener('click', async () => {
-            if (settingsUI.timerSelect) {
-                if (settingsUI.timerSelect.value === 'custom') {
-                    const mins = parseFloat(settingsUI.customTimerInput ? settingsUI.customTimerInput.value : '');
-                    if (Number.isFinite(mins) && mins > 0) {
-                        selectedTurnTimeoutSeconds = Math.round(mins * 60);
-                    } else {
-                        selectedTurnTimeoutSeconds = 120;
-                    }
-                } else {
-                    selectedTurnTimeoutSeconds = parseInt(settingsUI.timerSelect.value, 10) || 120;
-                }
-            }
-            if (selectedTurnTimeoutSeconds < 10) {
-                selectedTurnTimeoutSeconds = 10;
-            }
-            try {
-                localStorage.setItem('werewolf_turn_timeout', String(selectedTurnTimeoutSeconds));
-            } catch (e) {
-                console.warn('Could not save turn timer to localStorage:', e);
-            }
-
-            // Sync with backend if a game is active
-            if (gameState.gameId) {
-                try {
-                    await fetch('/api/game/settings', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            game_id: gameState.gameId,
-                            turn_timeout: selectedTurnTimeoutSeconds
-                        })
-                    });
-                } catch (err) {
-                    console.warn('Failed to update game settings on server:', err);
-                }
-
-                if (turnTimerInterval && gameState.pendingAction) {
-                    const timerEl = gameUI.turnTimer || document.getElementById('turn-timer');
-                    if (turnSecondsRemaining > selectedTurnTimeoutSeconds) {
-                        turnSecondsRemaining = selectedTurnTimeoutSeconds;
-                        if (timerEl) updateTimerDisplay(timerEl, turnSecondsRemaining);
-                    }
-                }
-            }
-
             settingsUI.modal.classList.remove('active');
         });
     }
@@ -2172,8 +2119,7 @@ async function startGame() {
                 base_url: baseUrl,
                 model_name: modelName,
                 provider: provider,
-                language: gameState.lang,
-                turn_timeout: selectedTurnTimeoutSeconds
+                language: gameState.lang
             })
         });
 
@@ -3298,6 +3244,9 @@ let currentTurnRequestId = null;
  */
 function startTurnTimer(onTimeout, totalSeconds = selectedTurnTimeoutSeconds) {
     stopTurnTimer();
+    if (!totalSeconds || !Number.isFinite(totalSeconds) || totalSeconds <= 0) {
+        return;
+    }
     const timerEl = gameUI.turnTimer || document.getElementById('turn-timer');
     if (!timerEl) return;
 
@@ -3400,7 +3349,7 @@ function handleInputRequest(req) {
     }
     currentTurnRequestId = reqId;
 
-    const timeoutSeconds = (req.timeout && Number.isFinite(req.timeout)) ? Math.round(req.timeout) : selectedTurnTimeoutSeconds;
+    const timeoutSeconds = (req.timeout && Number.isFinite(req.timeout) && req.timeout > 0) ? Math.round(req.timeout) : null;
 
     if (req.type === 'speech') {
         gameUI.input.disabled = false;

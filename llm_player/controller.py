@@ -623,41 +623,51 @@ class LLMController(Controller):
 
         # Role-specific information is added to give the LLM crucial context.
         if is_zh:
-            role_info = "你没有特殊能力信息。"
+            role_info = "- 你是普通村民，没有夜间特殊技能。请通过白天发言与投票找出狼人，同时注意掩护神职避免狼人屠边。"
             if isinstance(player.role, Witch):
-                role_info = (f"- 你还有{'一瓶解药' if player.role.has_save else '0瓶解药（已用完）'}。\n"
-                             f"- 你还有{'一瓶毒药' if player.role.has_poison else '0瓶毒药（已用完）'}。")
+                role_info = (f"- 你是女巫。你还有{'一瓶解药' if player.role.has_save else '0瓶解药（已用完）'}。\n"
+                             f"- 你还有{'一瓶毒药' if player.role.has_poison else '0瓶毒药（已用完）'}。\n"
+                             "- 战术提示：屠边局中神职全部出局则狼人直接获胜，前期请谨慎隐藏神职身份，在关键轮次或带队归票时再亮明身份。")
                 if player.role.has_save and self.game.state.__class__.__name__ == "WitchNightState" and self.game.night_kill_target:
                     role_info += f"\n- 今晚狼人袭击的目标是：{self.game.night_kill_target.name}。"
             elif isinstance(player.role, Werewolf):
                 werewolf_team = [p.name for p in self.game.players if p.is_alive and isinstance(p.role, Werewolf)]
-                role_info = f"- 你的狼人队友是：{', '.join(werewolf_team)}。"
+                role_info = (f"- 你的狼人队友是：{', '.join(werewolf_team)}。\n"
+                             "- 战术提示：本局为屠边规则（杀光所有神职或杀光所有普通村民即可获胜）。夜间密谋时请与队友商议刀人目标及白天战术（如谁上警竞选警长、谁悍跳预言家、谁在警下倒钩或冲票）；白天公开发言时切勿暴露狼队友。")
             elif isinstance(player.role, Seer):
-                role_info = "- 你是预言家。你每晚可以查验一名玩家的身份。"
+                role_info = ("- 你是预言家。你每晚可以查验一名玩家的身份。\n"
+                             "- 战术提示：作为核心信息位，你通常应当竞选警长并在发言中报出查验结果（金水/查杀）与警徽流，带领好人放逐狼人。")
             elif isinstance(player.role, Guard):
-                role_info = "- 你是守卫。你每晚可以守护一名玩家。"
+                role_info = ("- 你是守卫。你每晚可以守护一名玩家。\n"
+                             "- 战术提示：注意尽量低调隐藏身份避免被狼人针对，且第 1 夜女巫大概率使用解药时需谨防“同守同救（奶穿）”。")
                 if player.role.last_protected:
                     role_info += f"\n- 昨晚你守护了 {player.role.last_protected.name}，今晚不能连续守护同一个人。"
             elif isinstance(player.role, Hunter):
-                role_info = "- 你是猎人。如果你出局（被毒死除外），你可以开枪带走一名玩家。"
+                role_info = ("- 你是猎人。如果你出局（被女巫毒死除外），你可以开枪带走一名玩家。\n"
+                             "- 战术提示：前期尽量隐藏神职身份，避免过早成为狼人屠神目标。")
         else:
-            role_info = "You have no special information."
+            role_info = "- You are a plain Villager with no night ability. Use daytime logic and voting to eliminate Werewolves and help protect God roles under Slaughter-the-Side rules."
             if isinstance(player.role, Witch):
                 role_info = (f"- You have {'a save potion' if player.role.has_save else 'no save potion'} left.\n"
-                             f"- You have {'a poison potion' if player.role.has_poison else 'no poison potion'} left.")
+                             f"- You have {'a poison potion' if player.role.has_poison else 'no poison potion'} left.\n"
+                             "- Tactical Tip: Under Slaughter-the-Side rules, Werewolves win if all God roles die; stay hidden early and reveal only when decisive.")
                 if player.role.has_save and self.game.state.__class__.__name__ == "WitchNightState" and self.game.night_kill_target:
                      role_info += f"\n- Tonight, the werewolves targeted: {self.game.night_kill_target.name}."
             elif isinstance(player.role, Werewolf):
                 werewolf_team = [p.name for p in self.game.players if p.is_alive and isinstance(p.role, Werewolf)]
-                role_info = f"- Your fellow werewolves are: {', '.join(werewolf_team)}."
+                role_info = (f"- Your fellow werewolves are: {', '.join(werewolf_team)}.\n"
+                             "- Tactical Tip: Under Slaughter-the-Side rules, your pack wins by eliminating either all God roles or all plain Villagers. During night whispers, coordinate tonight's kill and daytime strategy (who runs for Sheriff, who fake-claims Seer, who busses or supports). Never expose teammates in public daytime speeches.")
             elif isinstance(player.role, Seer):
-                role_info = "- You are the Seer. You can check one player's identity each night."
+                role_info = ("- You are the Seer. You can check one player's identity each night.\n"
+                             "- Tactical Tip: As the village's information leader, consider running for Sheriff and sharing your check results and badge plan to guide the village.")
             elif isinstance(player.role, Guard):
-                role_info = "- You are the Guard. You can protect one player each night."
+                role_info = ("- You are the Guard. You can protect one player each night.\n"
+                             "- Tactical Tip: Keep a low profile so Werewolves cannot easily hunt Gods, and beware of Guard+Witch save conflict on Night 1.")
                 if player.role.last_protected:
                     role_info += f"\n- Last night you protected {player.role.last_protected.name}. You cannot protect them again tonight."
             elif isinstance(player.role, Hunter):
-                role_info = "- You are the Hunter. If you die (except by poison), you can shoot someone."
+                role_info = ("- You are the Hunter. If you die (except by poison), you can shoot someone.\n"
+                             "- Tactical Tip: Hide your God identity early so Werewolves cannot easily complete a God-wipe.")
 
         role_display_name = (
             getattr(player.role, "name_zh", player.role.name)
@@ -791,8 +801,84 @@ class LLMController(Controller):
             
         return {}
 
+    def _build_speech_context(self, player: Player) -> str:
+        """Builds phase-specific tactical guidance for the player's speech."""
+        lang = self._get_effective_language()
+        is_zh = lang == "zh"
+        state_cls_name = self.game.state.__class__.__name__ if (getattr(self, "game", None) and getattr(self.game, "state", None)) else ""
+        day_num = getattr(self.game, "day", 1) if getattr(self, "game", None) else 1
+
+        if state_cls_name == "WerewolfNightState":
+            if is_zh:
+                night1_extra = "特别是今晚是第 1 夜，请重点商量天亮后谁去上警竞选警长、谁悍跳预言家（发谁金水或查杀）、谁在警下投票或倒钩，以及白天如何打配合；" if day_num == 1 else "请结合白天各玩家的发言与投票表现，分析谁是神职、谁是村民，商量今晚刀谁以及明天白天谁主推带节奏；"
+                return (
+                    f"【当前场景：狼人夜间秘密频道（仅狼人队友可见，好人听不到）】"
+                    f"请直接对你的狼队友说话：{night1_extra}"
+                    f"明确提出你建议今晚袭击的目标座位号与白天战术安排（控制在 2-4 句话）。"
+                )
+            else:
+                night1_extra = "Especially since this is Night 1, coordinate who will run for Sheriff at dawn, who will fake-claim Seer, who will stay off the badge to vote, and how to align daytime speeches. " if day_num == 1 else "Based on daytime speeches and votes, analyze who the remaining Gods or Villagers are, agree on tonight's kill target, and plan tomorrow's narrative. "
+                return (
+                    f"[Context: Private Werewolf Night Channel (visible ONLY to werewolf teammates)] "
+                    f"Speak directly to your werewolf pack: {night1_extra}"
+                    f"State clearly who you suggest killing tonight and your daytime tactical plan (keep it to 2-4 sentences)."
+                )
+
+        if state_cls_name == "SheriffSpeechState":
+            if is_zh:
+                return (
+                    "【当前场景：警长竞选演说】你正在竞选警长（拥有 1.5 票投票权并决定发言顺序）。"
+                    "请向全场发表你的竞选演说：如果你是预言家，请直接报出昨晚的查验结果（金水/查杀）并留好警徽流；"
+                    "如果你是其他好人，请说明上警理由与盘逻辑方向；如果你是狼人，可以选择悍跳预言家争夺警徽，或伪装好人拉票（控制在 2-4 句话）。"
+                )
+            else:
+                return (
+                    "[Context: Sheriff Election Campaign Speech] You are campaigning for Sheriff (1.5x vote weight and speech order control). "
+                    "If you are the Seer, reveal your Night 1 check result and badge plan; if you are another good role, explain why you should hold the badge; "
+                    "if you are a Werewolf, you may fake-claim Seer or campaign as a villager to secure the badge (keep it to 2-4 sentences)."
+                )
+
+        if state_cls_name == "TieSpeechState":
+            if is_zh:
+                return (
+                    "【当前场景：平票 PK 辩护发言】你目前处于平票 PK 环节。"
+                    "请指出平票对手发言中的逻辑漏洞，坚定为自己的身份辩护，并号召其他玩家把票投给对手（控制在 2-4 句话）。"
+                )
+            else:
+                return (
+                    "[Context: Tie-Breaker PK Speech] You are in a tie-breaker runoff. "
+                    "Point out flaws in your tied opponent's statements, defend your own role/stance, and rally voters to vote for your side (keep it to 2-4 sentences)."
+                )
+
+        if state_cls_name == "LastWordsState":
+            if is_zh:
+                return (
+                    "【当前场景：出局遗言】你已经出局，正在发表最后的遗言。"
+                    "注意你已无法继续参与后续投票，切勿说“看大家一会儿怎么投我”之类的话；"
+                    "如果你是好人或神职，请交代清楚你的真实底牌、技能使用记录以及你最怀疑的狼人座位号；"
+                    "如果你是狼人，请在遗言中继续伪装好人误导好人视线或掩护狼队友（控制在 2-4 句话）。"
+                )
+            else:
+                return (
+                    "[Context: Last Words (Eliminated)] You have been eliminated and are giving your final Last Words. "
+                    "Do NOT speak as if you are still alive to vote; if you are on the Villager side, clearly leave your role, ability history, and top suspects; "
+                    "if you are a Werewolf, use your final words to mislead the village or protect your pack (keep it to 2-4 sentences)."
+                )
+
+        if is_zh:
+            return (
+                "【当前场景：白天公开发言】请结合昨晚死讯、警上竞选情况、已有的发言与投票记录进行分析："
+                "点出具体的玩家座位号（如“X号”），说明你怀疑谁、相信谁，并明确表态你今天准备归票/投票给谁（控制在 2-4 句话，避免空洞套话）。"
+            )
+        else:
+            return (
+                "[Context: Daytime Public Speech] Analyze last night's casualties, sheriff election, and prior speeches/votes: "
+                "reference specific seat numbers (e.g., 'Player X'), explain who you suspect or trust, and state clearly who you intend to vote for today (keep it to 2-4 sentences, avoid generic filler)."
+            )
+
     def get_speech(self, player: Player) -> str:
-        action = self._get_decision(player, "speech", {})
+        speech_context = self._build_speech_context(player)
+        action = self._get_decision(player, "speech", {"speech_context": speech_context})
         return action.get("speech", "...")
 
     def get_vote(self, player: Player, potential_targets: list[Player]) -> Player | None:

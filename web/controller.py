@@ -21,7 +21,7 @@ class WebController(Controller):
     """
     is_human = True
 
-    def __init__(self, timeout: float = 120.0):
+    def __init__(self, timeout: float | None = None):
         """Initializes the WebController.
 
         Attributes:
@@ -31,7 +31,7 @@ class WebController(Controller):
             pending_request: A dictionary representing the input required from the user.
             logs: A list of `LogEntry` objects visible to this player.
             log_lock: A lock to ensure thread-safe access to the logs.
-            timeout: Maximum seconds to wait for player input before falling back.
+            timeout: Optional maximum seconds to wait for player input before falling back (None = no limit).
         """
         self.game: Game | None = None
         self.input_event = threading.Event()
@@ -40,11 +40,11 @@ class WebController(Controller):
         self.logs: list[LogEntry] = []
         self.visible_logs: list[dict] = []
         self.log_lock = threading.Lock()
-        self.timeout = timeout
+        self.timeout: float | None = timeout
 
-    def set_timeout(self, timeout: float):
+    def set_timeout(self, timeout: float | None):
         """Updates the input timeout for this controller."""
-        self.timeout = max(1.0, float(timeout))
+        self.timeout = max(1.0, float(timeout)) if (timeout is not None and timeout > 0) else None
         if self.pending_request is not None:
             self.pending_request["timeout"] = self.timeout
 
@@ -140,19 +140,24 @@ class WebController(Controller):
         start_time = time.time()
         signaled = False
         while True:
-            remaining = self.timeout - (time.time() - start_time)
-            if remaining <= 0:
-                break
-            step_wait = min(0.2, remaining)
+            if self.timeout is not None and self.timeout > 0:
+                remaining = self.timeout - (time.time() - start_time)
+                if remaining <= 0:
+                    break
+                step_wait = min(0.2, remaining)
+            else:
+                step_wait = 0.2
             if self.input_event.wait(timeout=step_wait):
                 signaled = True
+                break
+            if self.game and not getattr(self.game, "running", True):
                 break
 
         self.pending_request = None
         
         if not signaled:
             default_val = self._get_default_action(request_type, options)
-            if self.game:
+            if self.game and self.timeout:
                 self.game.log(LogEntry(
                     log_type=LogType.SYSTEM,
                     message={
