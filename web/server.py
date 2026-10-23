@@ -16,7 +16,7 @@ import tempfile
 from game.game import Game
 from game.controllers import RandomController
 from llm_player.controller import LLMController, LLMClient
-from llm_player.evaluator import GameEvaluator
+from llm_player.evaluator import GameEvaluator, PostGameDebateRoom
 from game.log import LogEntry
 from game.history import GameHistory
 from web.controller import WebController
@@ -43,6 +43,7 @@ class GameSession:
         self.web_controller = web_controller
         self.game_thread = game_thread
         self.game_evaluator: GameEvaluator | None = None
+        self.debate_room: PostGameDebateRoom | None = None
         self.llm_config = llm_config or {}
         self.created_at = time.time()
         self.last_accessed_at = time.time()
@@ -155,6 +156,17 @@ class ChatRequest(BaseModel):
     game_id: str
     message: str
 
+class ArgueRequest(BaseModel):
+    """Defines the structure for a post-game multi-AI argument request."""
+    game_id: str
+    selected_players: List[str]
+    message: str
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    model_name: Optional[str] = None
+    provider: Optional[str] = None
+    language: str = "zh"
+
 class GameStateResponse(BaseModel):
     """Defines the structure of the game state response sent to the client."""
     logs: List[dict]
@@ -162,6 +174,7 @@ class GameStateResponse(BaseModel):
     game_active: bool
     players: List[dict] = []
     game_id: Optional[str] = None
+    winner: Optional[str] = None
 
 def run_game_thread(game_instance: Game):
     """The target function for the game thread. Simply starts the game loop."""
@@ -340,13 +353,17 @@ async def get_game_state(game_id: str, last_log_index: int = 0):
     is_active = game_thread.is_alive() if game_thread else False
 
     players_data = []
+    winner_val = None
     if game_instance:
+        winner_val = game_instance.winner
         reveal_all_roles = (not is_active) or bool(game_instance.winner)
         for p in game_instance.players:
             visible_role = (p.role.name if p.role else "Unknown") if (reveal_all_roles or p.name == "Player 1") else "Unknown"
+            personality_val = getattr(p.controller, "personality", None) if reveal_all_roles else None
             players_data.append({
                 "name": p.name,
                 "role": visible_role,
+                "personality": personality_val,
                 "is_alive": p.is_alive,
                 "is_sheriff": p.is_sheriff,
                 "is_sheriff_candidate": getattr(p, 'is_sheriff_candidate', False),
@@ -361,7 +378,8 @@ async def get_game_state(game_id: str, last_log_index: int = 0):
         input_required=input_req,
         game_active=is_active,
         players=players_data,
-        game_id=game_id
+        game_id=game_id,
+        winner=winner_val
     )
 
 def save_game_history_if_ended(session: GameSession):
@@ -574,9 +592,6 @@ async def evaluate_game(request: EvaluationRequest):
         raise HTTPException(status_code=400, detail="Human player not found")
 
     api_key = request.api_key or session.llm_config.get("api_key")
-    if not api_key:
-         raise HTTPException(status_code=400, detail="API Key required for evaluation")
-
     base_url = request.base_url or session.llm_config.get("base_url")
     model_name = request.model_name or session.llm_config.get("model_name")
     provider = request.provider or session.llm_config.get("provider")
@@ -620,6 +635,40 @@ async def evaluation_chat(request: ChatRequest):
         
     reply = session.game_evaluator.chat(request.message)
     return {"reply": reply}
+
+@app.post("/api/game/argue")
+async def argue_with_ai_players(request: ArgueRequest):
+    """Allows the human player to pick one or more AI players after the game ends to argue/debrief."""
+    session = game_manager.get_game(request.game_id)
+    if not session or not session.game_instance:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    if not request.selected_players:
+        raise HTTPException(status_code=400, detail="Please select at least one AI player to argue with")
+
+    if session.debate_room is None:
+        session.debate_room = PostGameDebateRoom(
+            game=session.game_instance,
+            default_llm_config=session.llm_config,
+        )
+
+    override_cfg = None
+    if request.api_key or request.base_url or request.model_name or request.provider:
+        override_cfg = {
+            "api_key": request.api_key or session.llm_config.get("api_key"),
+            "base_url": request.base_url or session.llm_config.get("base_url"),
+            "model_name": request.model_name or session.llm_config.get("model_name"),
+            "provider": request.provider or session.llm_config.get("provider"),
+        }
+
+    replies = await asyncio.to_thread(
+        session.debate_room.argue,
+        request.selected_players,
+        request.message,
+        request.language,
+        override_cfg,
+    )
+    return {"replies": replies}
 
 @app.post("/api/transcribe")
 async def transcribe_audio(file: UploadFile = File(...), language: Optional[str] = None):

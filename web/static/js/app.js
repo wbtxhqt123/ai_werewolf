@@ -48,6 +48,9 @@ let gameState = {
     pendingAction: null,
     lang: 'zh',
     gameId: null,
+    winner: null,
+    hasEvaluated: false,
+    selectedArguePlayers: new Set(),
     isSending: false,
     isPolling: false,
     pendingVoteLogs: []
@@ -366,8 +369,9 @@ const gameUI = {
     input: document.getElementById('game-input'),
     sendBtn: document.getElementById('send-action-btn'),
     choiceButtons: document.getElementById('choice-buttons'),
-    quitBtn: document.getElementById('quit-btn'),
+        quitBtn: document.getElementById('quit-btn'),
     debugBtn: document.getElementById('toggle-debug-btn'),
+    postgameHubBtn: document.getElementById('postgame-hub-btn'),
     recordsBtn: document.getElementById('records-btn'),
     gameSettingsBtn: document.getElementById('game-settings-btn'),
     gameLangBtn: document.getElementById('game-lang-btn'),
@@ -401,7 +405,11 @@ const evalUI = {
     chatBox: document.getElementById('eval-chat-box'),
     input: document.getElementById('eval-input'),
     sendBtn: document.getElementById('send-eval-btn'),
-    newGameBtn: document.getElementById('new-game-btn')
+    newGameBtn: document.getElementById('new-game-btn'),
+    argueGrid: document.getElementById('argue-player-grid'),
+    argueChatBox: document.getElementById('argue-chat-box'),
+    argueInput: document.getElementById('argue-input'),
+    sendArgueBtn: document.getElementById('send-argue-btn')
 };
 
 /** @const {object} settingsUI - References to DOM elements in the settings modal. */
@@ -950,31 +958,57 @@ function setupSettingsListeners() {
  * Sets up event listeners for the post-game evaluation modal.
  */
 function setupEvaluationListeners() {
-    evalUI.closeBtn.onclick = () => {
-        evalUI.modal.classList.remove('active');
-    };
-
-    const tabEvalBtn = document.getElementById('tab-eval-btn');
-    const tabHistoryBtn = document.getElementById('tab-history-btn');
-    const evalTabView = document.getElementById('eval-tab-view');
-    const historyTabView = document.getElementById('history-tab-view');
-
-    if (tabEvalBtn && tabHistoryBtn) {
-        tabEvalBtn.onclick = () => {
-            tabEvalBtn.classList.add('active');
-            tabHistoryBtn.classList.remove('active');
-            if (evalTabView) evalTabView.style.display = 'block';
-            if (historyTabView) historyTabView.style.display = 'none';
-        };
-
-        tabHistoryBtn.onclick = () => {
-            tabHistoryBtn.classList.add('active');
-            tabEvalBtn.classList.remove('active');
-            if (historyTabView) historyTabView.style.display = 'block';
-            if (evalTabView) evalTabView.style.display = 'none';
-            loadOperationsHistory();
+    if (evalUI.closeBtn) {
+        evalUI.closeBtn.onclick = () => {
+            evalUI.modal.classList.remove('active');
         };
     }
+
+    if (evalUI.modal) {
+        evalUI.modal.addEventListener('click', (e) => {
+            if (e.target === evalUI.modal) {
+                evalUI.modal.classList.remove('active');
+            }
+        });
+    }
+
+    if (gameUI.postgameHubBtn) {
+        gameUI.postgameHubBtn.addEventListener('click', () => {
+            showEvaluationModal(true);
+        });
+    }
+
+    const tabEvalBtn = document.getElementById('tab-eval-btn');
+    const tabArgueBtn = document.getElementById('tab-argue-btn');
+    const tabHistoryBtn = document.getElementById('tab-history-btn');
+    const evalTabView = document.getElementById('eval-tab-view');
+    const argueTabView = document.getElementById('argue-tab-view');
+    const historyTabView = document.getElementById('history-tab-view');
+
+    const activatePostGameTab = (tabName) => {
+        [tabEvalBtn, tabArgueBtn, tabHistoryBtn].forEach(b => b && b.classList.remove('active'));
+        if (evalTabView) evalTabView.style.display = 'none';
+        if (argueTabView) argueTabView.style.display = 'none';
+        if (historyTabView) historyTabView.style.display = 'none';
+
+        if (tabName === 'eval') {
+            if (tabEvalBtn) tabEvalBtn.classList.add('active');
+            if (evalTabView) evalTabView.style.display = 'flex';
+        } else if (tabName === 'argue') {
+            if (tabArgueBtn) tabArgueBtn.classList.add('active');
+            if (argueTabView) argueTabView.style.display = 'flex';
+            renderArguePlayerRoster();
+        } else if (tabName === 'history') {
+            if (tabHistoryBtn) tabHistoryBtn.classList.add('active');
+            if (historyTabView) historyTabView.style.display = 'flex';
+            renderPostGameRolesOverview();
+            loadOperationsHistory();
+        }
+    };
+
+    if (tabEvalBtn) tabEvalBtn.onclick = () => activatePostGameTab('eval');
+    if (tabArgueBtn) tabArgueBtn.onclick = () => activatePostGameTab('argue');
+    if (tabHistoryBtn) tabHistoryBtn.onclick = () => activatePostGameTab('history');
 
     evalUI.modeBtns = document.querySelectorAll('.eval-mode-btn');
     evalUI.modeBtns.forEach(btn => {
@@ -985,12 +1019,103 @@ function setupEvaluationListeners() {
         };
     });
 
-    evalUI.startBtn.onclick = startEvaluation;
+    if (evalUI.startBtn) {
+        evalUI.startBtn.onclick = () => startEvaluation();
+    }
 
-    evalUI.sendBtn.onclick = sendEvaluationMessage;
-    evalUI.input.onkeydown = (e) => {
-        if (e.key === 'Enter') sendEvaluationMessage();
-    };
+    if (evalUI.sendBtn) {
+        evalUI.sendBtn.onclick = () => sendEvaluationMessage();
+    }
+    if (evalUI.input) {
+        evalUI.input.onkeydown = (e) => {
+            if (e.key === 'Enter') sendEvaluationMessage();
+        };
+    }
+
+    // Quick chips for AI Evaluator chat
+    const evalQuickChips = document.getElementById('eval-quick-chips');
+    if (evalQuickChips) {
+        evalQuickChips.addEventListener('click', async (e) => {
+            const chip = e.target.closest('.quick-chip');
+            if (!chip) return;
+            const text = gameState.lang === 'zh' ? chip.dataset.promptZh : chip.dataset.promptEn;
+            if (!text) return;
+            if (!gameState.hasEvaluated) {
+                await startEvaluation();
+            }
+            evalUI.input.value = text;
+            sendEvaluationMessage();
+        });
+    }
+
+    // Quick selection buttons for Post-Game AI Argument (#7)
+    const selectWolvesBtn = document.getElementById('argue-select-wolves');
+    const selectGodsBtn = document.getElementById('argue-select-gods');
+    const selectAllBtn = document.getElementById('argue-select-all');
+    const selectClearBtn = document.getElementById('argue-select-clear');
+
+    if (selectWolvesBtn) {
+        selectWolvesBtn.onclick = () => {
+            gameState.selectedArguePlayers.clear();
+            (gameState.players || []).forEach(p => {
+                if (p.name !== 'Player 1' && (p.role === 'Werewolf' || p.role === 'Black Werewolf King')) {
+                    gameState.selectedArguePlayers.add(p.name);
+                }
+            });
+            renderArguePlayerRoster();
+        };
+    }
+    if (selectGodsBtn) {
+        selectGodsBtn.onclick = () => {
+            gameState.selectedArguePlayers.clear();
+            (gameState.players || []).forEach(p => {
+                if (p.name !== 'Player 1' && ['Seer', 'Witch', 'Guard', 'Hunter'].includes(p.role)) {
+                    gameState.selectedArguePlayers.add(p.name);
+                }
+            });
+            renderArguePlayerRoster();
+        };
+    }
+    if (selectAllBtn) {
+        selectAllBtn.onclick = () => {
+            gameState.selectedArguePlayers.clear();
+            (gameState.players || []).forEach(p => {
+                if (p.name !== 'Player 1') {
+                    gameState.selectedArguePlayers.add(p.name);
+                }
+            });
+            renderArguePlayerRoster();
+        };
+    }
+    if (selectClearBtn) {
+        selectClearBtn.onclick = () => {
+            gameState.selectedArguePlayers.clear();
+            renderArguePlayerRoster();
+        };
+    }
+
+    if (evalUI.sendArgueBtn) {
+        evalUI.sendArgueBtn.onclick = () => sendArgueMessage();
+    }
+    if (evalUI.argueInput) {
+        evalUI.argueInput.onkeydown = (e) => {
+            if (e.key === 'Enter') sendArgueMessage();
+        };
+    }
+
+    const argueQuickChips = document.getElementById('argue-quick-chips');
+    if (argueQuickChips) {
+        argueQuickChips.addEventListener('click', (e) => {
+            const chip = e.target.closest('.quick-chip');
+            if (!chip) return;
+            const text = gameState.lang === 'zh' ? chip.dataset.promptZh : chip.dataset.promptEn;
+            if (!text) return;
+            if (evalUI.argueInput) {
+                evalUI.argueInput.value = text;
+                sendArgueMessage();
+            }
+        });
+    }
 
     const newGameBtn = document.getElementById('new-game-btn');
     if (newGameBtn) {
@@ -1589,10 +1714,13 @@ function syncPostQueueState() {
         stopTurnTimer();
         clearInterval(pollingInterval);
         addSystemMessage(I18N[gameState.lang].gameOver);
+        if (gameUI.postgameHubBtn) {
+            gameUI.postgameHubBtn.classList.remove('hidden');
+        }
 
         setTimeout(() => {
-            showEvaluationModal();
-        }, 1800);
+            showEvaluationModal(false);
+        }, 1500);
     }
 }
 
@@ -1898,13 +2026,22 @@ function updateLanguage() {
     // Evaluation & Game Over Modal
     if (evalUI.modal) {
         const t_eval = I18N[gameState.lang].eval;
+        const postgameTitle = document.getElementById('postgame-modal-title');
+        if (postgameTitle) postgameTitle.innerText = isZh ? '赛后复盘中心' : 'Post-Game Hub';
+        if (gameUI.postgameHubBtn) {
+            gameUI.postgameHubBtn.innerText = isZh ? '🏆 复盘' : '🏆 Review';
+        }
+        updatePostGameWinnerBanner();
+
         const tabEvalBtn = document.getElementById('tab-eval-btn');
+        const tabArgueBtn = document.getElementById('tab-argue-btn');
         const tabHistoryBtn = document.getElementById('tab-history-btn');
-        if (tabEvalBtn) tabEvalBtn.innerText = `🤖 ${t_eval.title}`;
-        if (tabHistoryBtn) tabHistoryBtn.innerText = `📜 ${I18N[gameState.lang].operationsHistory}`;
+        if (tabEvalBtn) tabEvalBtn.innerText = isZh ? '🤖 AI 毒舌点评' : '🤖 AI Evaluator';
+        if (tabArgueBtn) tabArgueBtn.innerText = isZh ? '🗣️ 揪 AI 复盘互辩' : '🗣️ Argue with AIs';
+        if (tabHistoryBtn) tabHistoryBtn.innerText = isZh ? '📜 身份与操作' : '📜 Roles & Ops';
 
         const evalIntro = document.getElementById('eval-intro');
-        if (evalIntro) evalIntro.innerText = t_eval.intro;
+        if (evalIntro) evalIntro.innerText = isZh ? 'AI 评价员性格：' : 'Evaluator Style:';
 
         const modeBtns = document.querySelectorAll('.eval-mode-btn');
         const modeKeys = ['mild', 'neutral', 'mean'];
@@ -1916,22 +2053,54 @@ function updateLanguage() {
             }
         });
 
-        const warningText = document.querySelector('.warning-text');
-        if (warningText) warningText.innerText = t_eval.apiKeyWarning;
         if (evalUI.apiKeyInput) {
-            evalUI.apiKeyInput.placeholder = isZh ? '请输入 API Key' : 'Enter API Key';
+            evalUI.apiKeyInput.placeholder = isZh ? '可选：输入 API Key 获取大模型深度点评' : 'Optional: Enter API Key for LLM review';
         }
-        if (evalUI.startBtn.disabled) {
-             evalUI.startBtn.innerText = t_eval.evaluating;
-        } else {
-             evalUI.startBtn.innerText = t_eval.startBtn;
+        if (evalUI.startBtn) {
+            evalUI.startBtn.innerText = evalUI.startBtn.disabled ? t_eval.evaluating : (isZh ? '⚡ 生成点评' : '⚡ Evaluate');
         }
-        evalUI.input.placeholder = t_eval.inputPlaceholder;
-        evalUI.sendBtn.innerText = t_eval.send;
-        if (evalUI.newGameBtn) evalUI.newGameBtn.innerText = isZh ? '再来一局' : 'New Game';
+        if (evalUI.input) {
+            evalUI.input.placeholder = isZh ? '向 AI 评价员提问或为自己辩解...' : 'Ask the AI Evaluator or defend your plays...';
+        }
+        if (evalUI.sendBtn) evalUI.sendBtn.innerText = t_eval.send;
+        if (evalUI.newGameBtn) evalUI.newGameBtn.innerText = isZh ? '🔄 再来一局' : '🔄 New Game';
+
+        const argueRosterTitle = document.getElementById('argue-roster-title');
+        if (argueRosterTitle) {
+            argueRosterTitle.innerText = isZh ? '👇 点选要拉出来对线的 AI 玩家（可多选）：' : '👇 Pick AI players to argue with (multi-select):';
+        }
+        const btnWolves = document.getElementById('argue-select-wolves');
+        const btnGods = document.getElementById('argue-select-gods');
+        const btnAll = document.getElementById('argue-select-all');
+        const btnClear = document.getElementById('argue-select-clear');
+        if (btnWolves) btnWolves.innerText = isZh ? '🐺 选狼队' : '🐺 Wolves';
+        if (btnGods) btnGods.innerText = isZh ? '🔮 选神职' : '🔮 Gods';
+        if (btnAll) btnAll.innerText = isZh ? '👥 全选' : '👥 All';
+        if (btnClear) btnClear.innerText = isZh ? '🧹 清空' : '🧹 Clear';
+
+        if (evalUI.argueInput) {
+            evalUI.argueInput.placeholder = isZh ? '对选中的 AI 玩家开火提问...' : 'Challenge the selected AI players...';
+        }
+        if (evalUI.sendArgueBtn) {
+            evalUI.sendArgueBtn.innerText = isZh ? '开辩' : 'Argue';
+        }
+
+        document.querySelectorAll('#eval-quick-chips .quick-chip, #argue-quick-chips .quick-chip').forEach(chip => {
+            const label = isZh ? chip.dataset.promptZh : chip.dataset.promptEn;
+            if (label) {
+                const icon = chip.innerText.split(' ')[0] || '💬';
+                chip.innerText = `${icon} ${label}`;
+            }
+        });
+
+        const argueTabView = document.getElementById('argue-tab-view');
+        if (evalUI.modal.classList.contains('active') && argueTabView && argueTabView.style.display !== 'none') {
+            renderArguePlayerRoster();
+        }
 
         const historyTabView = document.getElementById('history-tab-view');
         if (evalUI.modal.classList.contains('active') && historyTabView && historyTabView.style.display !== 'none') {
+            renderPostGameRolesOverview();
             loadOperationsHistory();
         }
     }
@@ -2141,8 +2310,14 @@ async function startGame() {
             gameState.seerChecks = {};
             gameState.unreadCount = 0;
             gameState.lastLogIndex = 0;
+            gameState.winner = null;
+            gameState.hasEvaluated = false;
+            gameState.selectedArguePlayers = new Set();
             gameState.latestServerInputRequired = null;
             gameState.latestServerGameActive = true;
+            if (gameUI.postgameHubBtn) {
+                gameUI.postgameHubBtn.classList.add('hidden');
+            }
             if (gameState.queueTimer) {
                 clearTimeout(gameState.queueTimer);
                 gameState.queueTimer = null;
@@ -2206,6 +2381,9 @@ async function pollGameState() {
 
         gameState.latestServerInputRequired = data.input_required || null;
         gameState.latestServerGameActive = Boolean(data.game_active);
+        if (data.winner) {
+            gameState.winner = data.winner;
+        }
 
         // Temporarily sync pendingAction check for blind decision buffering
         const decidingBlind = Boolean(
@@ -2288,33 +2466,98 @@ async function pollGameState() {
     }
 }
 
-/**
- * Displays the post-game evaluation modal.
- */
-function showEvaluationModal() {
-    const tabEvalBtn = document.getElementById('tab-eval-btn');
-    const tabHistoryBtn = document.getElementById('tab-history-btn');
-    const evalTabView = document.getElementById('eval-tab-view');
-    const historyTabView = document.getElementById('history-tab-view');
+const PERSONALITY_LABELS = {
+    zh: {
+        cautious: '谨慎分析',
+        aggressive: '激进强势',
+        analytical: '逻辑推理',
+        emotional: '感性直觉',
+        diplomat: '温和斡旋',
+        follower: '顺势跟票',
+        manipulative: '话术博弈',
+        paranoid: '多疑敏感',
+        silent: '冷静寡言',
+        random: '跳脱奇招'
+    },
+    en: {
+        cautious: 'Cautious',
+        aggressive: 'Aggressive',
+        analytical: 'Analytical',
+        emotional: 'Emotional',
+        diplomat: 'Diplomat',
+        follower: 'Follower',
+        manipulative: 'Strategic',
+        paranoid: 'Paranoid',
+        silent: 'Silent',
+        random: 'Creative'
+    }
+};
 
-    if (tabEvalBtn) tabEvalBtn.classList.add('active');
-    if (tabHistoryBtn) tabHistoryBtn.classList.remove('active');
-    if (evalTabView) evalTabView.style.display = 'block';
-    if (historyTabView) historyTabView.style.display = 'none';
+function updatePostGameWinnerBanner() {
+    const badge = document.getElementById('postgame-winner-badge');
+    if (!badge) return;
+    const isZh = gameState.lang === 'zh';
+    badge.classList.remove('villagers-win', 'wolves-win');
+    if (gameState.winner === 'Villagers') {
+        badge.classList.add('villagers-win');
+        badge.innerText = isZh ? '🎉 好人阵营获胜' : '🎉 Villagers Win';
+    } else if (gameState.winner === 'Werewolves') {
+        badge.classList.add('wolves-win');
+        badge.innerText = isZh ? '🐺 狼人阵营获胜' : '🐺 Werewolves Win';
+    } else {
+        badge.innerText = isZh ? '🏁 对局结束' : '🏁 Game Over';
+    }
+}
+
+/**
+ * Displays the post-game evaluation & debate hub modal.
+ * @param {boolean} isReopen - Whether reopening from the header button.
+ */
+function showEvaluationModal(isReopen = false) {
+    updatePostGameWinnerBanner();
+
+    if (!isReopen) {
+        const tabEvalBtn = document.getElementById('tab-eval-btn');
+        const tabArgueBtn = document.getElementById('tab-argue-btn');
+        const tabHistoryBtn = document.getElementById('tab-history-btn');
+        const evalTabView = document.getElementById('eval-tab-view');
+        const argueTabView = document.getElementById('argue-tab-view');
+        const historyTabView = document.getElementById('history-tab-view');
+
+        if (tabEvalBtn) tabEvalBtn.classList.add('active');
+        if (tabArgueBtn) tabArgueBtn.classList.remove('active');
+        if (tabHistoryBtn) tabHistoryBtn.classList.remove('active');
+        if (evalTabView) evalTabView.style.display = 'flex';
+        if (argueTabView) argueTabView.style.display = 'none';
+        if (historyTabView) historyTabView.style.display = 'none';
+
+        // Pre-select up to 2 AI players (e.g., 1 wolf + 1 god/villager) for the Debate tab
+        if (gameState.selectedArguePlayers.size === 0 && gameState.players && gameState.players.length > 1) {
+            const aiPlayers = gameState.players.filter(p => p.name !== 'Player 1');
+            const oneWolf = aiPlayers.find(p => p.role === 'Werewolf' || p.role === 'Black Werewolf King');
+            const oneGood = aiPlayers.find(p => p.role !== 'Werewolf' && p.role !== 'Black Werewolf King');
+            if (oneWolf) gameState.selectedArguePlayers.add(oneWolf.name);
+            if (oneGood) gameState.selectedArguePlayers.add(oneGood.name);
+            if (gameState.selectedArguePlayers.size === 0 && aiPlayers[0]) {
+                gameState.selectedArguePlayers.add(aiPlayers[0].name);
+            }
+        }
+    }
 
     evalUI.modal.classList.add('active');
     trapFocus(evalUI.modal);
-    const firstModeBtn = evalUI.modal.querySelector('.eval-mode-btn');
-    if (firstModeBtn) firstModeBtn.focus();
-    evalUI.setupSection.style.display = 'block';
-    evalUI.chatSection.style.display = 'none';
-    
-    const cachedKey = setupUI.apiKeyInput.value;
+
+    const cachedKey = setupUI.apiKeyInput ? setupUI.apiKeyInput.value : '';
     if (cachedKey) {
+        if (evalUI.apiKeySection) evalUI.apiKeySection.style.display = 'none';
+        if (evalUI.apiKeyInput) evalUI.apiKeyInput.value = cachedKey;
+    } else if (evalUI.apiKeySection) {
         evalUI.apiKeySection.style.display = 'none';
-        evalUI.apiKeyInput.value = cachedKey;
-    } else {
-        evalUI.apiKeySection.style.display = 'block';
+    }
+
+    // Automatically trigger initial evaluation on first open so the user can immediately read & chat
+    if (!isReopen && !gameState.hasEvaluated) {
+        startEvaluation();
     }
 }
 
@@ -2322,25 +2565,23 @@ function showEvaluationModal() {
  * Starts the game evaluation process.
  */
 async function startEvaluation() {
-    const selectedModeBtn = document.querySelector('.eval-mode-btn.selected');
+    let selectedModeBtn = document.querySelector('.eval-mode-btn.selected');
+    if (!selectedModeBtn) {
+        selectedModeBtn = document.querySelector('.eval-mode-btn[data-mode="mild"]') || document.querySelector('.eval-mode-btn');
+        if (selectedModeBtn) selectedModeBtn.classList.add('selected');
+    }
     if (!selectedModeBtn) return;
-    
-    const mode = selectedModeBtn.dataset.mode;
-    const apiKey = evalUI.apiKeyInput.value;
+
+    const mode = selectedModeBtn.dataset.mode || 'mild';
+    const apiKey = (evalUI.apiKeyInput && evalUI.apiKeyInput.value) || (setupUI.apiKeyInput && setupUI.apiKeyInput.value) || '';
     const baseUrlEl = document.getElementById('base-url');
     const modelNameEl = document.getElementById('model-name');
     const providerEl = document.getElementById('provider-select');
     const baseUrl = baseUrlEl ? baseUrlEl.value : '';
     const modelName = modelNameEl ? modelNameEl.value : '';
     const provider = providerEl ? providerEl.value : '';
-    
-    if (!apiKey) {
-        alert(I18N[gameState.lang].eval.apiKeyWarning);
-        evalUI.startBtn.disabled = false;
-        evalUI.startBtn.innerText = I18N[gameState.lang].eval.startBtn;
-        return;
-    }
 
+    const isZh = gameState.lang === 'zh';
     evalUI.startBtn.disabled = true;
     evalUI.startBtn.innerText = I18N[gameState.lang].eval.evaluating;
 
@@ -2351,7 +2592,7 @@ async function startEvaluation() {
             body: JSON.stringify({
                 game_id: gameState.gameId,
                 mode: mode,
-                api_key: apiKey,
+                api_key: apiKey || null,
                 base_url: baseUrl || null,
                 model_name: modelName || null,
                 provider: provider || null,
@@ -2360,40 +2601,45 @@ async function startEvaluation() {
         });
 
         const data = await response.json();
-        
+
         if (response.ok) {
-            evalUI.setupSection.style.display = 'none';
-            evalUI.chatSection.style.display = 'flex';
+            gameState.hasEvaluated = true;
             evalUI.chatBox.innerHTML = '';
-            
-            renderEvaluationChat(data.evaluation, false);
+            const modeEmoji = mode === 'mean' ? '😈' : (mode === 'neutral' ? '😐' : '😊');
+            const modeTitle = I18N[gameState.lang].eval.modes[mode] || mode;
+            renderEvaluationChat(data.evaluation, false, `${modeEmoji} ${isZh ? 'AI 评价员' : 'AI Evaluator'} (${modeTitle.replace(/^[^\s]+\s*/, '')})`);
         } else {
-            alert('Evaluation failed: ' + (data.detail || 'Unknown error'));
-            evalUI.startBtn.disabled = false;
-            evalUI.startBtn.innerText = I18N[gameState.lang].eval.startBtn;
+            renderEvaluationChat('Error: ' + (data.detail || 'Evaluation failed'), false);
         }
     } catch (error) {
         console.error('Evaluation error:', error);
-        alert('Network error during evaluation.');
+        renderEvaluationChat(isZh ? '网络错误，请稍后重试。' : 'Network error during evaluation.', false);
+    } finally {
         evalUI.startBtn.disabled = false;
-        evalUI.startBtn.innerText = I18N[gameState.lang].eval.startBtn;
+        evalUI.startBtn.innerText = isZh ? '⚡ 重新点评' : '⚡ Re-Evaluate';
     }
 }
 
 /**
- * Sends a follow-up message in the evaluation chat.
+ * Sends a follow-up message in the evaluation chat (#6).
  */
 async function sendEvaluationMessage() {
     const text = evalUI.input.value.trim();
     if (!text) return;
 
+    const emptyEl = document.getElementById('eval-chat-empty');
+    if (emptyEl) emptyEl.remove();
+
     renderEvaluationChat(text, true);
     evalUI.input.value = '';
-    
+
     evalUI.input.disabled = true;
     evalUI.sendBtn.disabled = true;
 
     try {
+        if (!gameState.hasEvaluated) {
+            await startEvaluation();
+        }
         const response = await fetch('/api/game/evaluation/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2404,9 +2650,10 @@ async function sendEvaluationMessage() {
         });
 
         const data = await response.json();
-        
+        const isZh = gameState.lang === 'zh';
+
         if (response.ok) {
-            renderEvaluationChat(data.reply, false);
+            renderEvaluationChat(data.reply, false, `⚖️ ${isZh ? 'AI 评价员' : 'AI Evaluator'}`);
         } else {
             renderEvaluationChat("Error: " + (data.detail || "Failed to get reply"), false);
         }
@@ -2433,21 +2680,224 @@ function escapeHtml(str) {
  * Renders a message in the evaluation chat box.
  * @param {string} message - The message content.
  * @param {boolean} isUser - Whether the message is from the user or the AI.
+ * @param {string|null} headerLabel - Optional speaker header label.
  */
-function renderEvaluationChat(message, isUser) {
+function renderEvaluationChat(message, isUser, headerLabel = null) {
+    const emptyEl = document.getElementById('eval-chat-empty');
+    if (emptyEl) emptyEl.remove();
+
     const msgDiv = document.createElement('div');
     msgDiv.className = `eval-message ${isUser ? 'user' : 'ai'}`;
-    
+
     if (!isUser) {
         let formatted = escapeHtml(message).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
         formatted = formatted.replace(/\n/g, '<br>');
-        msgDiv.innerHTML = formatted;
+        const headerHtml = headerLabel
+            ? `<div class="debate-msg-header"><span>${escapeHtml(headerLabel)}</span></div>`
+            : '';
+        msgDiv.innerHTML = `${headerHtml}<div>${formatted}</div>`;
     } else {
         msgDiv.innerText = message;
     }
-    
+
     evalUI.chatBox.appendChild(msgDiv);
     evalUI.chatBox.scrollTop = evalUI.chatBox.scrollHeight;
+}
+
+/**
+ * Renders the selectable AI player roster grid for Post-Game Argument (#7).
+ */
+function renderArguePlayerRoster() {
+    const grid = evalUI.argueGrid || document.getElementById('argue-player-grid');
+    if (!grid) return;
+    const isZh = gameState.lang === 'zh';
+    const aiPlayers = (gameState.players || []).filter(p => p.name !== 'Player 1');
+
+    if (aiPlayers.length === 0) {
+        grid.innerHTML = `<div style="color:var(--text-muted); font-size:0.85rem;">${isZh ? '暂无 AI 玩家数据' : 'No AI players found'}</div>`;
+        return;
+    }
+
+    grid.innerHTML = '';
+    aiPlayers.forEach(p => {
+        const isSelected = gameState.selectedArguePlayers.has(p.name);
+        const roleEn = p.role || 'Unknown';
+        const roleObj = ROLES.find(r => r.id === roleEn) || { icon: '👱' };
+        const roleLocalized = I18N[gameState.lang].roles[roleEn] || roleEn;
+        const isWolf = roleEn === 'Werewolf' || roleEn === 'Black Werewolf King';
+        const seatLabel = formatPlayerSeatLabel(p.name, isZh);
+        const avatar = getAvatar(p.name);
+        const persKey = p.personality || 'analytical';
+        const persLabel = (PERSONALITY_LABELS[gameState.lang] && PERSONALITY_LABELS[gameState.lang][persKey]) || persKey;
+
+        const card = document.createElement('div');
+        card.className = `argue-ai-card${isSelected ? ' selected' : ''}`;
+        card.dataset.player = p.name;
+        card.innerHTML = `
+            <div class="argue-ai-avatar">${avatar}</div>
+            <div class="argue-ai-info">
+                <div class="argue-ai-seat">${seatLabel} ${p.is_alive ? '' : '💀'}</div>
+                <span class="argue-ai-role-tag ${isWolf ? 'wolf-camp' : 'good-camp'}">${roleObj.icon} ${escapeHtml(roleLocalized)}</span>
+                <span class="argue-ai-personality">${escapeHtml(persLabel)}</span>
+            </div>
+            <div class="argue-ai-check">✓</div>
+        `;
+        card.onclick = () => {
+            if (gameState.selectedArguePlayers.has(p.name)) {
+                gameState.selectedArguePlayers.delete(p.name);
+            } else {
+                gameState.selectedArguePlayers.add(p.name);
+            }
+            renderArguePlayerRoster();
+        };
+        grid.appendChild(card);
+    });
+}
+
+/**
+ * Sends a message to the selected AI players in the Post-Game Debate Room (#7).
+ */
+async function sendArgueMessage() {
+    const inputEl = evalUI.argueInput || document.getElementById('argue-input');
+    const sendBtn = evalUI.sendArgueBtn || document.getElementById('send-argue-btn');
+    const chatBox = evalUI.argueChatBox || document.getElementById('argue-chat-box');
+    if (!inputEl || !chatBox) return;
+
+    const isZh = gameState.lang === 'zh';
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    if (gameState.selectedArguePlayers.size === 0) {
+        alert(isZh ? '请先在上方点选至少 1 名要对线的 AI 玩家！' : 'Please select at least 1 AI player above to argue with!');
+        return;
+    }
+
+    const emptyEl = document.getElementById('argue-chat-empty');
+    if (emptyEl) emptyEl.remove();
+
+    // Render user message bubble
+    const userDiv = document.createElement('div');
+    userDiv.className = 'eval-message user';
+    userDiv.innerText = text;
+    chatBox.appendChild(userDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    inputEl.value = '';
+    inputEl.disabled = true;
+    if (sendBtn) sendBtn.disabled = true;
+
+    const apiKey = (evalUI.apiKeyInput && evalUI.apiKeyInput.value) || (setupUI.apiKeyInput && setupUI.apiKeyInput.value) || '';
+    const baseUrlEl = document.getElementById('base-url');
+    const modelNameEl = document.getElementById('model-name');
+    const providerEl = document.getElementById('provider-select');
+
+    try {
+        const selectedList = Array.from(gameState.selectedArguePlayers);
+        const response = await fetch('/api/game/argue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                game_id: gameState.gameId,
+                selected_players: selectedList,
+                message: text,
+                api_key: apiKey || null,
+                base_url: (baseUrlEl && baseUrlEl.value) || null,
+                model_name: (modelNameEl && modelNameEl.value) || null,
+                provider: (providerEl && providerEl.value) || null,
+                language: gameState.lang
+            })
+        });
+
+        const data = await response.json();
+        if (response.ok && Array.isArray(data.replies)) {
+            data.replies.forEach(item => {
+                renderArgueReplyBubble(item);
+            });
+        } else {
+            const errDiv = document.createElement('div');
+            errDiv.className = 'eval-message ai';
+            errDiv.innerText = 'Error: ' + (data.detail || 'Failed to get AI replies');
+            chatBox.appendChild(errDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    } catch (err) {
+        console.error('Argue error:', err);
+        const errDiv = document.createElement('div');
+        errDiv.className = 'eval-message ai';
+        errDiv.innerText = isZh ? '网络错误，请稍后重试。' : 'Network error.';
+        chatBox.appendChild(errDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    } finally {
+        inputEl.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
+        inputEl.focus();
+    }
+}
+
+/**
+ * Renders an individual AI player's reply bubble in the Post-Game Debate Room (#7).
+ */
+function renderArgueReplyBubble(item) {
+    const chatBox = evalUI.argueChatBox || document.getElementById('argue-chat-box');
+    if (!chatBox || !item) return;
+
+    const isZh = gameState.lang === 'zh';
+    const playerName = item.player || 'Player';
+    const roleEn = item.role || 'Villager';
+    const roleObj = ROLES.find(r => r.id === roleEn) || { icon: '👱' };
+    const roleLocalized = I18N[gameState.lang].roles[roleEn] || roleEn;
+    const isWolf = roleEn === 'Werewolf' || roleEn === 'Black Werewolf King';
+    const avatar = getAvatar(playerName);
+    const seatLabel = formatPlayerSeatLabel(playerName, isZh);
+    const persKey = item.personality || 'analytical';
+    const persLabel = (PERSONALITY_LABELS[gameState.lang] && PERSONALITY_LABELS[gameState.lang][persKey]) || persKey;
+
+    let formatted = escapeHtml(item.reply || '').replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+    formatted = formatted.replace(/\n/g, '<br>');
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'eval-message ai';
+    msgDiv.innerHTML = `
+        <div class="debate-msg-header">
+            <span>${avatar} ${escapeHtml(seatLabel)}</span>
+            <span class="argue-ai-role-tag ${isWolf ? 'wolf-camp' : 'good-camp'}">${roleObj.icon} ${escapeHtml(roleLocalized)}</span>
+            <span class="argue-ai-personality">· ${escapeHtml(persLabel)}</span>
+        </div>
+        <div>${formatted}</div>
+    `;
+    chatBox.appendChild(msgDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+/**
+ * Renders the full revealed role roster at the top of Tab 3 (Roles & Ops).
+ */
+function renderPostGameRolesOverview() {
+    const container = document.getElementById('postgame-roles-overview');
+    if (!container) return;
+    const isZh = gameState.lang === 'zh';
+    const players = gameState.players || [];
+    if (players.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = players.map(p => {
+        const roleEn = p.role || 'Unknown';
+        const roleObj = ROLES.find(r => r.id === roleEn) || { icon: '👱' };
+        const roleLocalized = I18N[gameState.lang].roles[roleEn] || roleEn;
+        const isWolf = roleEn === 'Werewolf' || roleEn === 'Black Werewolf King';
+        const avatar = p.name === 'Player 1' ? gameState.myAvatar : getAvatar(p.name);
+        const seatLabel = formatPlayerSeatLabel(p.name, isZh);
+        return `
+            <div class="argue-ai-card" style="cursor:default;">
+                <div class="argue-ai-avatar">${avatar}</div>
+                <div class="argue-ai-info">
+                    <div class="argue-ai-seat">${seatLabel} ${p.is_alive ? '✨' : '💀'}</div>
+                    <span class="argue-ai-role-tag ${isWolf ? 'wolf-camp' : 'good-camp'}">${roleObj.icon} ${escapeHtml(roleLocalized)}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 /**

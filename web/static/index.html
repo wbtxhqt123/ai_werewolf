@@ -10,9 +10,9 @@
     <link rel="stylesheet" href="/static/css/base.css?v=10">
     <link rel="stylesheet" href="/static/css/layout.css?v=14">
     <link rel="stylesheet" href="/static/css/components.css?v=14">
-    <link rel="stylesheet" href="/static/css/setup.css?v=10">
+    <link rel="stylesheet" href="/static/css/setup.css?v=11">
     <link rel="stylesheet" href="/static/css/game.css?v=17">
-    <link rel="stylesheet" href="/static/css/modals.css?v=10">
+    <link rel="stylesheet" href="/static/css/modals.css?v=12">
 </head>
 <body>
     <div id="app">
@@ -120,6 +120,7 @@
                     <button id="speed-toggle-btn" class="icon-btn header-pill-btn speed-pill-btn" title="Message Pacing Speed" aria-label="Message Pacing Speed">🐢 <span class="speed-label">1x</span></button>
                     <button id="skip-queue-btn" class="icon-btn header-pill-btn skip-pill-btn hidden" title="Show All Queued Messages" aria-label="Show All Queued Messages">⏭️ <span class="skip-label">跳过</span></button>
                     <button id="audio-toggle-btn" class="icon-btn header-pill-btn" title="Toggle Music" aria-label="Toggle Music">🎵 <span class="audio-label">音乐</span></button>
+                    <button id="postgame-hub-btn" class="icon-btn header-pill-btn postgame-pill-btn hidden" title="Post-Game Review" aria-label="Post-Game Review">🏆 复盘</button>
                     <button id="records-btn" class="icon-btn header-pill-btn" title="Game Records" aria-label="Game Records">📖 记录</button>
                     <button id="game-lang-btn" class="icon-btn header-pill-btn" title="Toggle Language" aria-label="Toggle Language">中文/EN</button>
                     <button id="toggle-debug-btn" class="icon-btn" title="Toggle Debug Logs" aria-label="Toggle Debug Logs">🐞</button>
@@ -183,57 +184,113 @@
 
 
 
-        <!-- Game Over & Evaluation Modal -->
+        <!-- Game Over & Post-Game Hub Modal -->
         <div id="evaluation-modal" class="modal">
             <div class="modal-content game-over-modal-content">
-                <span class="close-modal">&times;</span>
-
-                <div class="game-over-tabs">
-                    <button id="tab-eval-btn" class="tab-btn active">🤖 Game Evaluation</button>
-                    <button id="tab-history-btn" class="tab-btn">📜 Operations History</button>
-                </div>
-                
-                <!-- Tab View: Evaluation -->
-                <div id="eval-tab-view" class="game-over-view active">
-                    <div id="eval-setup">
-                        <p id="eval-intro">Choose a personality for the AI evaluator:</p>
-                        <div class="eval-modes">
-                            <button class="eval-mode-btn" data-mode="mild">
-                                <span class="mode-emoji">😊</span>
-                                <span class="mode-title">Mild</span>
-                            </button>
-                            <button class="eval-mode-btn" data-mode="neutral">
-                                <span class="mode-emoji">😐</span>
-                                <span class="mode-title">Neutral</span>
-                            </button>
-                            <button class="eval-mode-btn" data-mode="mean">
-                                <span class="mode-emoji">😈</span>
-                                <span class="mode-title">Sneer</span>
-                            </button>
-                        </div>
-                        <div id="eval-api-key-section" style="display: none;">
-                            <p class="warning-text">API Key required for evaluation</p>
-                            <input type="password" id="eval-api-key" placeholder="Enter API Key">
-                        </div>
-                        <button id="start-eval-btn" class="primary-btn eval-start-btn" disabled>Start Evaluation</button>
+                <div class="records-header postgame-header">
+                    <div class="records-title-group">
+                        <span class="records-icon" id="postgame-header-icon">🏆</span>
+                        <h2 id="postgame-modal-title">赛后复盘中心</h2>
+                        <span id="postgame-winner-badge" class="postgame-winner-badge">对局结束</span>
                     </div>
-
-                    <div id="eval-chat-section" style="display: none;">
-                        <div class="eval-chat-box" id="eval-chat-box">
-                            <!-- Evaluation chat messages -->
-                        </div>
-                        <div class="eval-input-area">
-                            <input type="text" id="eval-input" placeholder="Argue with the AI...">
-                            <button id="send-eval-btn">Send</button>
-                        </div>
-                        <button id="new-game-btn" class="primary-btn eval-new-game-btn">New Game</button>
+                    <div class="postgame-header-actions">
+                        <button id="new-game-btn" class="postgame-newgame-pill">🔄 再来一局</button>
+                        <button class="close-modal close-modal-round" aria-label="Close">&times;</button>
                     </div>
                 </div>
 
-                <!-- Tab View: Operations History -->
-                <div id="history-tab-view" class="game-over-view" style="display: none;">
-                    <div id="op-history-content" class="op-history-container">
-                        <p class="op-history-loading">Loading operations...</p>
+                <div class="records-filter-bar game-over-tabs">
+                    <button id="tab-eval-btn" class="filter-pill tab-btn active">🤖 AI 毒舌点评</button>
+                    <button id="tab-argue-btn" class="filter-pill tab-btn">🗣️ 揪 AI 复盘互辩</button>
+                    <button id="tab-history-btn" class="filter-pill tab-btn">📜 身份与操作</button>
+                </div>
+
+                <div class="postgame-modal-body">
+                    <!-- Tab View 1: AI Evaluator & Multi-Turn Chat -->
+                    <div id="eval-tab-view" class="game-over-view active">
+                        <div id="eval-setup" class="eval-setup-card">
+                            <div class="eval-setup-top">
+                                <span id="eval-intro" class="eval-intro-label">选择 AI 评价员性格：</span>
+                                <div class="eval-modes">
+                                    <button class="eval-mode-btn selected" data-mode="mild">
+                                        <span class="mode-emoji">😊</span>
+                                        <span class="mode-title">温和鼓励</span>
+                                    </button>
+                                    <button class="eval-mode-btn" data-mode="neutral">
+                                        <span class="mode-emoji">😐</span>
+                                        <span class="mode-title">客观分析</span>
+                                    </button>
+                                    <button class="eval-mode-btn" data-mode="mean">
+                                        <span class="mode-emoji">😈</span>
+                                        <span class="mode-title">毒舌锐评</span>
+                                    </button>
+                                </div>
+                                <button id="start-eval-btn" class="eval-generate-btn">⚡ 生成点评</button>
+                            </div>
+                            <div id="eval-api-key-section" class="eval-apikey-collapsible" style="display: none;">
+                                <input type="password" id="eval-api-key" placeholder="可选：输入 API Key 获取深度大模型点评">
+                            </div>
+                        </div>
+
+                        <div id="eval-chat-section" class="postgame-chat-panel">
+                            <div class="eval-chat-box" id="eval-chat-box">
+                                <div class="postgame-chat-empty" id="eval-chat-empty">
+                                    👆 选择上方 AI 评价员的性格并点击「⚡ 生成点评」，即可开始复盘并随时与评价员对话！
+                                </div>
+                            </div>
+                            <div class="postgame-quick-chips" id="eval-quick-chips">
+                                <button type="button" class="quick-chip" data-prompt-zh="我这一局哪一步操作有问题？" data-prompt-en="Where did I make a mistake in this game?">💡 我哪一步操作有问题？</button>
+                                <button type="button" class="quick-chip" data-prompt-zh="你觉得全场谁是 MVP，谁在犯罪？" data-prompt-en="Who was the MVP and who threw the game?">🏆 谁是全场 MVP？</button>
+                                <button type="button" class="quick-chip" data-prompt-zh="如果重来一次，我第一天应该怎么发言和投票？" data-prompt-en="How should I have played Day 1 differently?">🔄 第一天我该如何操作？</button>
+                            </div>
+                            <div class="eval-input-area">
+                                <input type="text" id="eval-input" placeholder="向 AI 评价员提问或为自己辩解...">
+                                <button id="send-eval-btn">发送</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab View 2: Pick AI Players to Argue (赛后复盘互辩室) -->
+                    <div id="argue-tab-view" class="game-over-view" style="display: none;">
+                        <div class="argue-roster-panel">
+                            <div class="argue-roster-header">
+                                <span id="argue-roster-title" class="argue-roster-title">👇 点选要拉出来对线的 AI 玩家（可多选）：</span>
+                                <div class="argue-quick-select">
+                                    <button type="button" id="argue-select-wolves" class="mini-select-pill">🐺 选狼队</button>
+                                    <button type="button" id="argue-select-gods" class="mini-select-pill">🔮 选神职</button>
+                                    <button type="button" id="argue-select-all" class="mini-select-pill">👥 全选</button>
+                                    <button type="button" id="argue-select-clear" class="mini-select-pill">🧹 清空</button>
+                                </div>
+                            </div>
+                            <div id="argue-player-grid" class="argue-player-grid">
+                                <!-- AI Player Cards Injected Dynamically -->
+                            </div>
+                        </div>
+
+                        <div class="postgame-chat-panel">
+                            <div class="eval-chat-box argue-chat-box" id="argue-chat-box">
+                                <div class="postgame-chat-empty" id="argue-chat-empty">
+                                    🗣️ 勾选上方任意 AI 玩家，在下方发消息质问他们（例如：“为什么第一天投我？”），被选中的 AI 会亮明底牌与你和彼此互辩！
+                                </div>
+                            </div>
+                            <div class="postgame-quick-chips" id="argue-quick-chips">
+                                <button type="button" class="quick-chip" data-prompt-zh="你们白天为什么非要投我出局？怎么盘的逻辑？" data-prompt-en="Why did you vote me out during the day?!">🔥 为什么白天投我出局？</button>
+                                <button type="button" class="quick-chip" data-prompt-zh="狼人第一晚是怎么密谋刀人和悍跳的？老实交代！" data-prompt-en="Werewolves, what was your Night 1 whisper strategy?">🐺 狼人第一晚怎么密谋的？</button>
+                                <button type="button" class="quick-chip" data-prompt-zh="真假预言家和神职出来说说，你们当时心里到底怎么想的？" data-prompt-en="Seer and Gods, what were you thinking during the game?">🔮 神职和悍跳狼出来对线！</button>
+                            </div>
+                            <div class="eval-input-area">
+                                <input type="text" id="argue-input" placeholder="对选中的 AI 玩家开火提问...">
+                                <button id="send-argue-btn">开辩</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab View 3: Roles & Operations History -->
+                    <div id="history-tab-view" class="game-over-view" style="display: none;">
+                        <div id="postgame-roles-overview" class="postgame-roles-overview"></div>
+                        <div id="op-history-content" class="op-history-container">
+                            <p class="op-history-loading">Loading operations...</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -286,6 +343,6 @@
         </div>
     </template>
 
-    <script src="/static/js/app.js?v=22"></script>
+    <script src="/static/js/app.js?v=23"></script>
 </body>
 </html>

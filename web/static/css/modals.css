@@ -134,79 +134,183 @@
     font-size: 1.8rem;
 }
 
-/* Game Over Tabs Header */
+/* Game Over & Post-Game Hub Modal */
 .game-over-modal-content {
-    max-width: 580px;
-    border-radius: var(--border-radius-lg);
+    max-width: 740px;
+    width: 94%;
+    max-height: 88vh;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 24px;
     border: 3px solid var(--panel-border);
     box-shadow: var(--shadow-ink-lg, var(--shadow-pop));
+    background: var(--modal-bg, #fffdf7);
+    display: flex;
+    flex-direction: column;
+}
+
+.postgame-header {
+    padding: 14px 20px;
+    flex-shrink: 0;
+}
+
+.postgame-header .close-modal {
+    position: static;
+    width: 34px;
+    height: 34px;
+    font-size: 1.3rem;
+}
+
+.postgame-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.postgame-winner-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 900;
+    background: #ffffff;
+    color: #2d3436;
+    border: 2px solid #2d3436;
+    box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.postgame-winner-badge.villagers-win {
+    background: #d4edda;
+    color: #155724;
+    border-color: #155724;
+}
+
+.postgame-winner-badge.wolves-win {
+    background: #f8d7da;
+    color: #721c24;
+    border-color: #721c24;
+}
+
+.postgame-newgame-pill {
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 2px solid #2d3436;
+    background: var(--accent-secondary);
+    color: #2d3436;
+    font-family: var(--font-main);
+    font-size: 0.85rem;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 #2d3436;
+    transition: transform 0.15s, background-color 0.15s;
+}
+
+.postgame-newgame-pill:hover {
+    transform: translateY(-1px);
+    background: #3dbbb2;
 }
 
 .game-over-tabs {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    margin-bottom: 20px;
-    padding-bottom: 12px;
-    border-bottom: 2px dashed var(--modal-border-subtle, #e2e8f0);
+    margin-bottom: 0;
+    flex-shrink: 0;
 }
 
 .game-over-tabs .tab-btn {
-    padding: 8px 18px;
-    font-size: 1rem;
+    padding: 7px 16px;
+    font-size: 0.9rem;
     display: inline-flex;
     align-items: center;
     gap: 6px;
 }
 
+.postgame-modal-body {
+    padding: 16px 20px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.game-over-view {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Compact Evaluation Toolbar Card */
+.eval-setup-card {
+    background: var(--modal-surface, #ffffff);
+    border: 2px solid var(--panel-border);
+    border-radius: 16px;
+    padding: 10px 14px;
+    box-shadow: var(--shadow-ink-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.eval-setup-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.eval-intro-label {
+    font-weight: 800;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
 .eval-modes {
     display: flex;
-    justify-content: space-around;
-    gap: 12px;
-    margin: 20px 0;
+    gap: 8px;
+    margin: 0;
+    flex: 1;
 }
 
 .eval-mode-btn {
     flex: 1;
-    display: flex;
-    flex-direction: column;
+    display: inline-flex;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 14px 8px;
-    border: 2.5px solid var(--panel-border);
-    border-radius: var(--border-radius-md);
-    background: var(--modal-surface, #fff);
+    padding: 7px 10px;
+    border: 2px solid var(--panel-border);
+    border-radius: 12px;
+    background: var(--modal-subtle, #f8fafc);
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    box-shadow: var(--shadow-ink-sm);
+    transition: all 0.15s ease;
+    box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.12);
     font-family: var(--font-main);
 }
 
 .eval-mode-btn .mode-emoji {
-    font-size: 1.8rem;
+    font-size: 1.2rem;
     line-height: 1;
-    transition: transform 0.2s;
 }
 
 .eval-mode-btn .mode-title {
-    font-size: 1rem;
+    font-size: 0.86rem;
     font-weight: 800;
     color: var(--text-primary);
 }
 
 .eval-mode-btn:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--shadow-ink-md);
-}
-
-.eval-mode-btn:hover .mode-emoji {
-    transform: scale(1.15);
+    transform: translateY(-2px);
 }
 
 .eval-mode-btn.selected {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-ink-md);
+    transform: translateY(-1px);
+    box-shadow: 2px 2px 0 var(--ink-color);
     border-color: var(--text-dark);
 }
 
@@ -215,7 +319,7 @@
     border-color: #1abc9c;
 }
 .eval-mode-btn[data-mode="mild"].selected .mode-title {
-    color: #16a085;
+    color: #117a65;
 }
 
 .eval-mode-btn[data-mode="neutral"].selected {
@@ -231,62 +335,251 @@
     border-color: #e74c3c;
 }
 .eval-mode-btn[data-mode="mean"].selected .mode-title {
-    color: #c0392b;
+    color: #b03a2e;
 }
 
-.eval-start-btn {
-    width: 100%;
-    padding: 14px 20px;
-    font-size: 1.15rem;
-    font-weight: 900;
-    border: 3px solid var(--panel-border);
-    border-radius: 20px;
-    background: var(--accent-secondary);
-    color: var(--text-dark);
-    cursor: pointer;
-    box-shadow: var(--shadow-pop);
-    transition: all 0.2s;
-    font-family: var(--font-main);
-    margin-top: 15px;
-}
-
-.eval-start-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-ink-lg);
-}
-
-.eval-start-btn:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-}
-
-.eval-new-game-btn {
-    width: 100%;
-    padding: 12px;
-    font-size: 1.05rem;
-    font-weight: 800;
-    border: 3px solid var(--panel-border);
-    border-radius: 18px;
+.eval-generate-btn {
+    padding: 8px 16px;
+    border-radius: 12px;
+    border: 2px solid var(--panel-border);
     background: var(--accent-yellow);
-    color: var(--text-dark);
-    cursor: pointer;
-    box-shadow: var(--shadow-pop);
-    margin-top: 12px;
+    color: #2d3436;
     font-family: var(--font-main);
-    transition: all 0.2s;
+    font-weight: 900;
+    font-size: 0.9rem;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--ink-color);
+    transition: all 0.15s;
+    white-space: nowrap;
 }
 
-.eval-new-game-btn:hover {
+.eval-generate-btn:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: var(--shadow-ink-lg);
+    background: #ffd32a;
 }
 
-.warning-text {
-    color: var(--accent-primary);
-    font-weight: bold;
+.eval-generate-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.eval-apikey-collapsible input {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+}
+
+.postgame-chat-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+}
+
+.postgame-chat-empty {
+    margin: auto;
     text-align: center;
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    line-height: 1.5;
+    padding: 28px 18px;
+    max-width: 460px;
+}
+
+/* Quick Prompt Suggestion Chips */
+.postgame-quick-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.quick-chip {
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1.5px solid var(--panel-border);
+    background: var(--modal-surface, #ffffff);
+    color: var(--text-primary);
+    font-family: var(--font-main);
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.quick-chip:hover {
+    background: var(--accent-yellow);
+    color: #2d3436;
+    transform: translateY(-1px);
+}
+
+/* AI Player Roster Picker for Post-Game Argument (#7) */
+.argue-roster-panel {
+    background: var(--modal-surface, #ffffff);
+    border: 2px solid var(--panel-border);
+    border-radius: 16px;
+    padding: 10px 14px;
+    box-shadow: var(--shadow-ink-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.argue-roster-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.argue-roster-title {
+    font-weight: 800;
+    font-size: 0.88rem;
+    color: var(--text-primary);
+}
+
+.argue-quick-select {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.mini-select-pill {
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1.5px solid var(--panel-border);
+    background: var(--modal-subtle, #f1f5f9);
+    color: var(--text-primary);
+    font-family: var(--font-main);
+    font-size: 0.76rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.mini-select-pill:hover {
+    background: var(--accent-secondary);
+    color: #2d3436;
+}
+
+.argue-player-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+    gap: 8px;
+    max-height: 145px;
+    overflow-y: auto;
+    padding: 2px;
+}
+
+.argue-ai-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 12px;
+    border: 2px solid var(--modal-border-subtle, #cbd5e1);
+    background: var(--modal-subtle, #f8fafc);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    position: relative;
+    user-select: none;
+}
+
+.argue-ai-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--panel-border);
+}
+
+.argue-ai-card.selected {
+    background: #fff9db;
+    border-color: #2d3436;
+    box-shadow: 2px 2px 0 #2d3436;
+}
+
+body.night-mode .argue-ai-card.selected {
+    background: rgba(254, 202, 87, 0.18);
+    border-color: #feca57;
+    box-shadow: 2px 2px 0 #090d16;
+}
+
+.argue-ai-avatar {
+    font-size: 1.45rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.argue-ai-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.argue-ai-seat {
+    font-size: 0.84rem;
+    font-weight: 900;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.argue-ai-role-tag {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 6px;
+    width: fit-content;
+}
+
+.argue-ai-role-tag.wolf-camp {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.argue-ai-role-tag.good-camp {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.argue-ai-personality {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.argue-ai-check {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--panel-border);
+    background: var(--modal-surface, #fff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 900;
+    color: transparent;
+    flex-shrink: 0;
+}
+
+.argue-ai-card.selected .argue-ai-check {
+    background: var(--accent-secondary);
+    color: #2d3436;
+    border-color: #2d3436;
+}
+
+/* Revealed Roles Summary Strip in Tab 3 */
+.postgame-roles-overview {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 8px;
     margin-bottom: 10px;
 }
 
@@ -439,18 +732,22 @@
     border: 2px dashed var(--modal-border-subtle, #dfe6e9);
 }
 
-/* Evaluation Chat */
+/* Evaluation & Post-Game Argument Chat */
 .eval-chat-box {
-    height: 300px;
+    height: 290px;
     overflow-y: auto;
     border: 2px solid var(--panel-border);
-    border-radius: var(--border-radius-md);
-    padding: 15px;
-    margin-bottom: 15px;
+    border-radius: 16px;
+    padding: 14px;
+    margin-bottom: 4px;
     background: var(--modal-subtle, #f9f9f9);
     display: flex;
     flex-direction: column;
     gap: 10px;
+}
+
+.argue-chat-box {
+    height: 240px;
 }
 
 .eval-input-area {
@@ -458,38 +755,59 @@
     gap: 10px;
 }
 
-#eval-input {
+#eval-input,
+#argue-input {
     flex: 1;
-    padding: 12px;
+    padding: 10px 16px;
     border: 2px solid var(--panel-border);
-    border-radius: 20px;
+    border-radius: 999px;
     font-family: var(--font-main);
-    font-size: 1rem;
+    font-size: 0.95rem;
+    background: var(--modal-surface, #ffffff);
+    color: var(--text-primary);
 }
 
-#send-eval-btn {
-    padding: 0 20px;
+#send-eval-btn,
+#send-argue-btn {
+    padding: 0 22px;
     background: var(--accent-secondary);
-    color: var(--text-dark);
+    color: #2d3436;
     border: 2px solid var(--panel-border);
-    border-radius: 20px;
+    border-radius: 999px;
     font-weight: 900;
+    font-family: var(--font-main);
+    font-size: 0.95rem;
     cursor: pointer;
     box-shadow: var(--shadow-ink-sm);
-    transition: transform 0.1s;
+    transition: transform 0.1s, background-color 0.15s;
+    white-space: nowrap;
 }
 
-#send-eval-btn:active {
-    transform: scale(0.95);
+#send-eval-btn:hover:not(:disabled),
+#send-argue-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: #3dbbb2;
 }
 
-/* Markdown-like styling for evaluation text */
+#send-eval-btn:active,
+#send-argue-btn:active {
+    transform: scale(0.96);
+}
+
+#send-eval-btn:disabled,
+#send-argue-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* Rich Post-Game Chat Bubbles */
 .eval-message {
-    padding: 10px 15px;
-    border-radius: 15px;
-    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 16px;
+    max-width: 88%;
     line-height: 1.5;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
+    word-break: break-word;
 }
 
 .eval-message.ai {
@@ -503,9 +821,22 @@
 .eval-message.user {
     align-self: flex-end;
     background: var(--accent-secondary);
-    color: var(--text-dark);
-    border: 2px solid var(--panel-border);
+    color: #2d3436;
+    border: 2px solid #2d3436;
     box-shadow: var(--shadow-ink-sm);
+    font-weight: 700;
+}
+
+.debate-msg-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 5px;
+    padding-bottom: 4px;
+    border-bottom: 1.5px dashed var(--modal-border-subtle, #e2e8f0);
+    font-size: 0.82rem;
+    font-weight: 900;
 }
 
 /* In-game Records Modal: Unified Chronological Timeline (Theme-Aware) */

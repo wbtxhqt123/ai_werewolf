@@ -183,6 +183,80 @@ class TestWebConcurrency(unittest.TestCase):
 
         game_manager.remove_game(game_id)
 
+    def test_api_evaluate_and_multi_turn_chat(self):
+        from starlette.testclient import TestClient
+        from web.server import app, game_manager
+        from game.controllers import RandomController
+
+        web_ctrl = WebController()
+        game = Game(
+            {"Player 1": web_ctrl, "Player 2": RandomController()},
+            player_role="Villager",
+            language="zh",
+        )
+        game.winner = "Villagers"
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = False
+
+        game_id = game_manager.create_game(game, web_ctrl, mock_thread)
+        client = TestClient(app)
+
+        eval_res = client.post("/api/game/evaluate", json={
+            "game_id": game_id,
+            "mode": "mean",
+            "language": "zh"
+        })
+        self.assertEqual(eval_res.status_code, 200)
+        self.assertIn("evaluation", eval_res.json())
+
+        chat_res = client.post("/api/game/evaluation/chat", json={
+            "game_id": game_id,
+            "message": "我第一天投得很准吧？"
+        })
+        self.assertEqual(chat_res.status_code, 200)
+        self.assertIn("reply", chat_res.json())
+        self.assertTrue(len(chat_res.json()["reply"]) > 0)
+
+        game_manager.remove_game(game_id)
+
+    def test_api_post_game_argue_with_selected_ais(self):
+        from starlette.testclient import TestClient
+        from web.server import app, game_manager
+        from game.controllers import RandomController
+
+        web_ctrl = WebController()
+        game = Game(
+            {
+                "Player 1": web_ctrl,
+                "Player 2": RandomController(),
+                "Player 3": RandomController(),
+            },
+            player_role="Villager",
+            language="zh",
+        )
+        game.winner = "Werewolves"
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = False
+
+        game_id = game_manager.create_game(game, web_ctrl, mock_thread)
+        client = TestClient(app)
+
+        argue_res = client.post("/api/game/argue", json={
+            "game_id": game_id,
+            "selected_players": ["Player 2", "Player 3"],
+            "message": "你们两个为什么第一天联手投我？",
+            "language": "zh"
+        })
+        self.assertEqual(argue_res.status_code, 200)
+        replies = argue_res.json().get("replies", [])
+        self.assertEqual(len(replies), 2)
+        self.assertEqual(replies[0]["player"], "Player 2")
+        self.assertEqual(replies[1]["player"], "Player 3")
+        self.assertTrue(len(replies[0]["reply"]) > 0)
+        self.assertTrue(len(replies[1]["reply"]) > 0)
+
+        game_manager.remove_game(game_id)
+
 
 if __name__ == "__main__":
     unittest.main()
