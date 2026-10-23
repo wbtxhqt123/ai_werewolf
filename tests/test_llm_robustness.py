@@ -183,6 +183,61 @@ class TestLLMRobustness(unittest.TestCase):
         self.assertEqual(speech, "I am a villager.")
         self.assertEqual(mock_client.get_completion.call_count, 1)
 
+    def test_night_thinking_privacy_and_werewolf_king_knowledge(self):
+        from game.player import Werewolf, BlackWerewolfKing, Seer
+        from game.states.night_states import WerewolfNightState, SeerNightState
+        from game.log import LogType
+
+        mock_client = MagicMock()
+        mock_client.get_completion.return_value = '{"thought": "Night move", "action": {"speech": "Kill P1", "check": "Player 2"}}'
+        wolf_ctrl = LLMController(llm_client=mock_client, language="zh")
+        seer_ctrl = LLMController(llm_client=mock_client, language="zh")
+
+        game = Game(
+            {
+                "Player 1": RandomController(),
+                "Player 2": wolf_ctrl,
+                "Player 3": RandomController(),
+                "Player 4": seer_ctrl,
+            },
+            language="zh",
+        )
+        p1, p2, p3, p4 = game.players
+        p1.role = Villager()
+        p2.role = Werewolf()
+        p3.role = BlackWerewolfKing()
+        p4.role = Seer()
+
+        # 1. Verify Werewolf AI knows teammates AND who is Black Werewolf King
+        status_wolf = wolf_ctrl._build_status_prompt(p2)
+        self.assertIn("Player 3 (黑狼王, 存活)", status_wolf)
+        self.assertIn("本局黑狼王是：Player 3", status_wolf)
+
+        # 2. Verify PLAYER_THINKING during WerewolfNightState is visible to Werewolves (p2, p3) but NOT Villagers/Seer (p1, p4)
+        game.state = WerewolfNightState(game)
+        game.game_log.clear()
+        p1.logs.clear()
+        p2.logs.clear()
+        p3.logs.clear()
+        p4.logs.clear()
+        wolf_ctrl.get_speech(p2)
+
+        p1_thinking = [e for e in p1.logs if e.log_type == LogType.PLAYER_THINKING]
+        p3_thinking = [e for e in p3.logs if e.log_type == LogType.PLAYER_THINKING]
+        self.assertEqual(len(p1_thinking), 0)
+        self.assertEqual(len(p3_thinking), 1)
+
+        # 3. Verify PLAYER_THINKING during SeerNightState is private to Seer only
+        game.state = SeerNightState(game)
+        p1.logs.clear()
+        p2.logs.clear()
+        p4.logs.clear()
+        seer_ctrl.get_seer_target(p4, [p1, p2, p3])
+
+        self.assertEqual(len([e for e in p1.logs if e.log_type == LogType.PLAYER_THINKING]), 0)
+        self.assertEqual(len([e for e in p2.logs if e.log_type == LogType.PLAYER_THINKING]), 0)
+        self.assertEqual(len([e for e in p4.logs if e.log_type == LogType.PLAYER_THINKING]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

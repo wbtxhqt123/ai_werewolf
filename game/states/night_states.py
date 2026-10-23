@@ -108,21 +108,40 @@ class WerewolfNightState(GameState):
             self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "There are no werewolves.", "zh": "场上没有狼人。"}, visible_to_roles=["Werewolf", "Black Werewolf King"], camps=["Werewolves"]))
             return
 
-        # Identify teammates
+        # Identify teammates and Black Werewolf King
+        king_player = next((p for p in self.game.players if isinstance(p.role, BlackWerewolfKing)), None)
         for werewolf in werewolves:
-            teammates = [p.name for p in werewolves if p != werewolf]
-            if teammates:
-                teammates_str = ", ".join(teammates)
+            teammates_en = [
+                f"{p.name} ({'Black Werewolf King' if isinstance(p.role, BlackWerewolfKing) else 'Werewolf'})"
+                for p in werewolves
+                if p != werewolf
+            ]
+            teammates_zh = [
+                f"{p.name} ({'黑狼王' if isinstance(p.role, BlackWerewolfKing) else '狼人'})"
+                for p in werewolves
+                if p != werewolf
+            ]
+            self_king_en = " (You are the Black Werewolf King)" if werewolf == king_player else ""
+            self_king_zh = "（你是黑狼王）" if werewolf == king_player else ""
+            if teammates_en:
+                teammates_str_en = ", ".join(teammates_en)
+                teammates_str_zh = "、".join(teammates_zh)
                 self.game.log(LogEntry(
                     log_type=LogType.SYSTEM,
-                    message={"en": f"Your teammates are: {teammates_str}", "zh": f"你的队友是: {teammates_str}"},
+                    message={
+                        "en": f"Your teammates are: {teammates_str_en}{self_king_en}",
+                        "zh": f"你的队友是: {teammates_str_zh}{self_king_zh}",
+                    },
                     visible_to_players=[werewolf],
                     camps=["Werewolves"]
                 ))
             else:
                 self.game.log(LogEntry(
                     log_type=LogType.SYSTEM,
-                    message={"en": "You are the only werewolf.", "zh": "你是唯一的狼人。"},
+                    message={
+                        "en": f"You are the only living werewolf.{self_king_en}",
+                        "zh": f"你是场上唯一的存活狼人。{self_king_zh}",
+                    },
                     visible_to_players=[werewolf],
                     camps=["Werewolves"]
                 ))

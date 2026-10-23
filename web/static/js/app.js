@@ -3257,6 +3257,11 @@ function createRoleSpotlightCardIfApplicable(log) {
  */
 function processLog(log) {
     if (log.type === 'PLAYER_THINKING') {
+        const isNight = log.state && ['GuardNightState', 'WerewolfNightState', 'WitchNightState', 'SeerNightState', 'NightBeginState', 'NightEndState'].includes(log.state);
+        const isWolfViewer = gameState.myRole === 'Werewolf' || gameState.myRole === 'Black Werewolf King';
+        if (isNight && log.source !== 'Player 1' && !(log.state === 'WerewolfNightState' && isWolfViewer)) {
+            return;
+        }
         const card = Array.from(document.querySelectorAll('.player-card')).find(c => c.dataset.name === log.source);
         if (card) {
             card.classList.add('thinking');
@@ -3277,6 +3282,11 @@ function processLog(log) {
     }
 
     if (log.type === 'NIGHT_FALLS') {
+        document.querySelectorAll('.player-card.thinking, .player-card.speaking').forEach(c => {
+            c.classList.remove('thinking', 'speaking');
+            const b = c.querySelector('.player-speech-bubble');
+            if (b) b.classList.remove('visible');
+        });
         setPhase('Night', log.message);
         startNewChatPhaseSection('Night', log);
         return;

@@ -8,7 +8,7 @@ from openai import OpenAI
 
 from config import LLM_MODEL, LLM_API_BASE_URL, LLM_API_KEY_ENV
 from game.controllers import Controller, SafeController
-from game.player import Player, Witch, Werewolf, Seer, Guard, Hunter
+from game.player import Player, Witch, Werewolf, Seer, Guard, Hunter, BlackWerewolfKing
 from game.log import LogEntry, LogType
 
 if TYPE_CHECKING:
@@ -631,8 +631,19 @@ class LLMController(Controller):
                 if player.role.has_save and self.game.state.__class__.__name__ == "WitchNightState" and self.game.night_kill_target:
                     role_info += f"\n- 今晚狼人袭击的目标是：{self.game.night_kill_target.name}。"
             elif isinstance(player.role, Werewolf):
-                werewolf_team = [p.name for p in self.game.players if p.is_alive and isinstance(p.role, Werewolf)]
-                role_info = (f"- 你的狼人队友是：{', '.join(werewolf_team)}。\n"
+                all_wolves = [p for p in self.game.players if isinstance(p.role, Werewolf)]
+                king_player = next((p for p in all_wolves if isinstance(p.role, BlackWerewolfKing)), None)
+                pack_desc = [
+                    f"{p.name} ({'黑狼王' if isinstance(p.role, BlackWerewolfKing) else '普通狼人'}, {'存活' if p.is_alive else '已出局'})"
+                    for p in all_wolves
+                ]
+                king_info = (
+                    f"本局黑狼王是：{king_player.name}（{'就是你本人' if king_player == player else '你的狼队友'}，非毒死出局时可开枪带人）。"
+                    if king_player
+                    else "本局没有黑狼王。"
+                )
+                role_info = (f"- 狼人阵营全员名单：{', '.join(pack_desc)}。\n"
+                             f"- {king_info}\n"
                              "- 战术提示：本局为屠边规则（杀光所有神职或杀光所有普通村民即可获胜）。夜间密谋时请与队友商议刀人目标及白天战术（如谁上警竞选警长、谁悍跳预言家、谁在警下倒钩或冲票）；白天公开发言时切勿暴露狼队友。")
             elif isinstance(player.role, Seer):
                 role_info = ("- 你是预言家。你每晚可以查验一名玩家的身份。\n"
@@ -654,8 +665,19 @@ class LLMController(Controller):
                 if player.role.has_save and self.game.state.__class__.__name__ == "WitchNightState" and self.game.night_kill_target:
                      role_info += f"\n- Tonight, the werewolves targeted: {self.game.night_kill_target.name}."
             elif isinstance(player.role, Werewolf):
-                werewolf_team = [p.name for p in self.game.players if p.is_alive and isinstance(p.role, Werewolf)]
-                role_info = (f"- Your fellow werewolves are: {', '.join(werewolf_team)}.\n"
+                all_wolves = [p for p in self.game.players if isinstance(p.role, Werewolf)]
+                king_player = next((p for p in all_wolves if isinstance(p.role, BlackWerewolfKing)), None)
+                pack_desc = [
+                    f"{p.name} ({'Black Werewolf King' if isinstance(p.role, BlackWerewolfKing) else 'Werewolf'}, {'alive' if p.is_alive else 'dead'})"
+                    for p in all_wolves
+                ]
+                king_info = (
+                    f"The Black Werewolf King is {king_player.name} ({'YOU' if king_player == player else 'your teammate'}, can shoot a player upon dying unless poisoned)."
+                    if king_player
+                    else "There is no Black Werewolf King in this game."
+                )
+                role_info = (f"- Werewolf Pack Roster: {', '.join(pack_desc)}.\n"
+                             f"- {king_info}\n"
                              "- Tactical Tip: Under Slaughter-the-Side rules, your pack wins by eliminating either all God roles or all plain Villagers. During night whispers, coordinate tonight's kill and daytime strategy (who runs for Sheriff, who fake-claims Seer, who busses or supports). Never expose teammates in public daytime speeches.")
             elif isinstance(player.role, Seer):
                 role_info = ("- You are the Seer. You can check one player's identity each night.\n"
@@ -689,6 +711,25 @@ class LLMController(Controller):
             visible_log=visible_log + long_term_memory
         )
 
+    def _get_thinking_visibility(self, player: Player) -> dict[str, Any]:
+        """Determines who can see PLAYER_THINKING / PLAYER_DONE_THINKING logs so night actions never leak."""
+        state_cls_name = (
+            self.game.state.__class__.__name__
+            if (getattr(self, "game", None) and getattr(self.game, "state", None))
+            else ""
+        )
+        if state_cls_name == "WerewolfNightState":
+            return {
+                "visible_to_roles": ["Werewolf", "Black Werewolf King"],
+                "camps": ["Werewolves"],
+            }
+        if state_cls_name in ("GuardNightState", "WitchNightState", "SeerNightState", "NightBeginState", "NightEndState"):
+            return {
+                "visible_to_players": [player],
+                "camps": [],
+            }
+        return {"camps": ["All"]}
+
     def _get_decision(self, player: Player, action_name: str, format_kwargs: dict) -> dict:
         """Orchestrates the process of getting a decision from the LLM.
 
@@ -704,12 +745,13 @@ class LLMController(Controller):
         Returns:
             A dictionary representing the action to be taken, parsed from the LLM response.
         """
+        thinking_vis = self._get_thinking_visibility(player)
         if self.game:
             self.game.log(LogEntry(
                 log_type=LogType.PLAYER_THINKING,
                 message={"en": f"{player.name} is thinking...", "zh": f"{player.name} 正在思考..."},
                 source=player,
-                camps=["All"]
+                **thinking_vis,
             ))
 
         try:
@@ -753,7 +795,7 @@ class LLMController(Controller):
                     log_type=LogType.PLAYER_DONE_THINKING,
                     message={"en": f"{player.name} finished thinking.", "zh": f"{player.name} 思考完毕。"},
                     source=player,
-                    camps=["All"]
+                    **thinking_vis,
                 ))
 
     def _get_fallback_decision(self, player: Player, action_name: str, format_kwargs: dict) -> dict:
