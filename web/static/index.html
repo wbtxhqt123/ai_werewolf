@@ -9,8 +9,8 @@
     <link href="https://fonts.loli.net/css2?family=Cinzel:wght@600;700;800;900&family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/base.css?v=10">
     <link rel="stylesheet" href="/static/css/layout.css?v=14">
-    <link rel="stylesheet" href="/static/css/components.css?v=14">
-    <link rel="stylesheet" href="/static/css/setup.css?v=11">
+    <link rel="stylesheet" href="/static/css/components.css?v=15">
+    <link rel="stylesheet" href="/static/css/setup.css?v=12">
     <link rel="stylesheet" href="/static/css/game.css?v=17">
     <link rel="stylesheet" href="/static/css/modals.css?v=12">
 </head>
@@ -105,6 +105,31 @@
                     <label id="setting-modelname-label">Model Name (Optional)</label>
                     <input type="text" id="model-name" placeholder="e.g. gpt-4o">
                 </div>
+
+                <!-- Voice Transcription Model Setup & Progress Bar in Advanced Settings -->
+                <div class="voice-model-setup-card" id="voice-model-setup-card">
+                    <div class="voice-model-header">
+                        <span class="voice-model-title" id="voice-model-title">🎙️ 语音输入模型（开局前需先下载激活）</span>
+                        <span class="voice-model-badge not-ready" id="voice-model-badge">未下载</span>
+                    </div>
+                    <div class="voice-model-controls">
+                        <select id="voice-backend-select" class="voice-backend-select" aria-label="Select Voice Model">
+                            <option value="sensevoice">SenseVoiceSmall (中英混说极速 ~230MB)</option>
+                            <option value="faster-whisper">Whisper Large-v3-Turbo (~800MB)</option>
+                        </select>
+                        <button type="button" id="prepare-voice-model-btn" class="voice-prepare-btn">⬇️ 下载并启用语音</button>
+                    </div>
+                    <div class="voice-progress-wrapper hidden" id="voice-progress-wrapper">
+                        <div class="voice-progress-bar">
+                            <div class="voice-progress-fill" id="voice-progress-fill" style="width: 0%;"></div>
+                        </div>
+                        <div class="voice-progress-text" id="voice-progress-text">0%</div>
+                    </div>
+                    <div class="voice-model-hint" id="voice-model-hint">
+                        💡 如需在局内使用 🎤 麦克风语音转文字，请先在开局前点击下载/激活模型。
+                    </div>
+                </div>
+
                 <button id="save-settings-btn" class="primary-btn">Save & Close</button>
             </div>
         </div>
@@ -174,7 +199,7 @@
                     </div>
                     <div class="input-wrapper">
                         <input type="text" id="game-input" placeholder="Type a message..." disabled>
-                        <button id="voice-input-btn" class="icon-btn" title="Voice Input" aria-label="Voice Input">🎤</button>
+                        <button type="button" id="voice-input-btn" class="icon-btn voice-mic-btn" title="Voice Input" aria-label="Voice Input">🎤</button>
                         <button id="send-action-btn" disabled>Send</button>
                     </div>
                     <div id="choice-buttons" class="choice-buttons"></div>
@@ -245,6 +270,7 @@
                             </div>
                             <div class="eval-input-area">
                                 <input type="text" id="eval-input" placeholder="向 AI 评价员提问或为自己辩解...">
+                                <button type="button" id="eval-voice-btn" class="icon-btn voice-mic-btn" title="Voice Input" aria-label="Voice Input">🎤</button>
                                 <button id="send-eval-btn">发送</button>
                             </div>
                         </div>
@@ -280,6 +306,7 @@
                             </div>
                             <div class="eval-input-area">
                                 <input type="text" id="argue-input" placeholder="对选中的 AI 玩家开火提问...">
+                                <button type="button" id="argue-voice-btn" class="icon-btn voice-mic-btn" title="Voice Input" aria-label="Voice Input">🎤</button>
                                 <button id="send-argue-btn">开辩</button>
                             </div>
                         </div>
@@ -343,6 +370,6 @@
         </div>
     </template>
 
-    <script src="/static/js/app.js?v=24"></script>
+    <script src="/static/js/app.js?v=26"></script>
 </body>
 </html>

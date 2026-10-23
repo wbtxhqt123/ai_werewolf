@@ -3,7 +3,7 @@ import time
 import uvicorn
 import random
 import uuid
-from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Query, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 import asyncio
@@ -42,8 +42,8 @@ class GameSession:
         self.game_instance = game_instance
         self.web_controller = web_controller
         self.game_thread = game_thread
-        self.game_evaluator: GameEvaluator | None = None
-        self.debate_room: PostGameDebateRoom | None = None
+        self.game_evaluator: Optional[GameEvaluator] = None
+        self.debate_room: Optional[PostGameDebateRoom] = None
         self.llm_config = llm_config or {}
         self.created_at = time.time()
         self.last_accessed_at = time.time()
@@ -79,7 +79,7 @@ class GameManager:
             self.active_games[game_id] = session
         return game_id
 
-    def get_game(self, game_id: str) -> GameSession | None:
+    def get_game(self, game_id: str) -> Optional[GameSession]:
         """Retrieves a game session by its ID and refreshes its last access time."""
         with self.lock:
             session = self.active_games.get(game_id)
@@ -670,88 +670,98 @@ async def argue_with_ai_players(request: ArgueRequest):
     )
     return {"replies": replies}
 
-@app.post("/api/transcribe")
-async def transcribe_audio(file: UploadFile = File(...), language: Optional[str] = None):
-    """Transcribes a complete audio file uploaded by the user.
+class PrepareModelRequest(BaseModel):
+    """Defines the structure for pre-game voice model download and initialization."""
+    backend: Optional[str] = None
+    whisper_model: Optional[str] = None
 
-    This endpoint saves the uploaded audio file to a temporary location, uses the
-    `Transcriber` to convert the speech to text, and then deletes the temporary file.
-    """
+
+@app.get("/api/transcribe/status")
+async def transcribe_status():
+    """Returns the configured speech-to-text backend, cache status, and real-time download progress."""
+    from config import ASR_CONFIG
+    from web.transcriber import _transcriber, get_download_status, is_model_cached
+
+    progress = get_download_status()
+    cached = is_model_cached(
+        backend=progress.get("backend") or ASR_CONFIG.get("backend", "sensevoice"),
+        whisper_model=ASR_CONFIG.get("whisper_model", "large-v3-turbo"),
+    )
+    if _transcriber is not None:
+        info = _transcriber.get_info()
+        return {
+            **progress,
+            "ready": True,
+            "status": "ready",
+            "percent": 100.0,
+            "cached": True,
+            **info,
+        }
+    return {
+        **progress,
+        "ready": False,
+        "cached": cached,
+        "whisper_model": ASR_CONFIG.get("whisper_model", "large-v3-turbo"),
+        "device": ASR_CONFIG.get("device", "auto"),
+    }
+
+
+@app.post("/api/transcribe/prepare")
+async def prepare_transcribe_model(request: Optional[PrepareModelRequest] = None):
+    """Starts downloading and loading the ASR model in the background before the game begins."""
+    from web.transcriber import start_model_preparation
+
+    backend = request.backend if request else None
+    whisper_model = request.whisper_model if request else None
+    status = start_model_preparation(backend=backend, whisper_model=whisper_model)
+    return status
+
+
+@app.post("/api/transcribe")
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+    backend: Optional[str] = Form(None),
+    whisper_model: Optional[str] = Form(None),
+    lang_query: Optional[str] = Query(None, alias="language"),
+):
+    """Transcribes an uploaded audio file (16kHz WAV, WebM, MP4, etc.) using the pre-loaded ASR model."""
     temp_filename = None
+    effective_language = language or lang_query
     try:
         from web.transcriber import get_transcriber
-        transcriber = get_transcriber()
+        transcriber = await asyncio.to_thread(
+            get_transcriber,
+            backend=backend,
+            whisper_model=whisper_model,
+            require_ready=True,
+        )
     except (RuntimeError, ImportError) as e:
         raise HTTPException(status_code=503, detail=str(e))
 
     try:
-        raw_ext = os.path.splitext(file.filename or "")[1]
-        safe_ext = raw_ext if raw_ext and raw_ext.isalnum() or (raw_ext.startswith(".") and raw_ext[1:].isalnum()) else ".webm"
+        raw_ext = os.path.splitext(file.filename or "")[1].lower()
+        safe_ext = (
+            raw_ext
+            if raw_ext and (raw_ext.isalnum() or (raw_ext.startswith(".") and raw_ext[1:].isalnum()))
+            else ".wav"
+        )
         with tempfile.NamedTemporaryFile(delete=False, suffix=safe_ext) as tmp:
             temp_filename = tmp.name
             shutil.copyfileobj(file.file, tmp)
-        
-        text = await asyncio.to_thread(transcriber.transcribe, temp_filename, language=language)
-        
+
+        text = await asyncio.to_thread(transcriber.transcribe, temp_filename, language=effective_language)
+
         os.remove(temp_filename)
         temp_filename = None
-        
-        return {"text": text}
+
+        info = transcriber.get_info() if hasattr(transcriber, "get_info") else {}
+        return {"text": text, **info}
     except Exception as e:
         if temp_filename and os.path.exists(temp_filename):
             os.remove(temp_filename)
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.websocket("/ws/transcribe")
-async def websocket_transcribe(websocket: WebSocket):
-    """Handles real-time audio transcription over a WebSocket connection.
-
-    This endpoint receives audio chunks from the client, appends them to a temporary
-    file, and transcribes the audio upon receiving a 'process' or 'stop' command.
-    This allows for a more interactive speech-to-text experience.
-    """
-    await websocket.accept()
-    try:
-        from web.transcriber import get_transcriber
-        transcriber = get_transcriber()
-    except (RuntimeError, ImportError) as e:
-        await websocket.close(code=1011, reason=str(e))
-        return
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
-        temp_filename = tmp.name
-    language = None
-    
-    try:
-        while True:
-            message = await websocket.receive()
-            
-            if "bytes" in message:
-                data = message["bytes"]
-                with open(temp_filename, "ab") as f:
-                    f.write(data)
-                
-            elif "text" in message:
-                text = message["text"]
-                if text.startswith("language:"):
-                    language = text.split(":")[1]
-                elif text == "process":
-                    if os.path.exists(temp_filename) and os.path.getsize(temp_filename) > 0:
-                        result = await asyncio.to_thread(transcriber.transcribe, temp_filename, language=language)
-                        await websocket.send_json({"text": result, "is_final": False})
-                elif text == "stop":
-                    if os.path.exists(temp_filename) and os.path.getsize(temp_filename) > 0:
-                        result = await asyncio.to_thread(transcriber.transcribe, temp_filename, language=language)
-                        await websocket.send_json({"text": result, "is_final": True})
-                    break
-                    
-    except WebSocketDisconnect:
-        print("Client disconnected")
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-    finally:
-        if os.path.exists(temp_filename):
-            os.remove(temp_filename)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

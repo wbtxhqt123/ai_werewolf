@@ -254,3 +254,140 @@
     border-style: solid;
     border-color: var(--text-dark) transparent transparent transparent;
 }
+
+/* Pre-Game Voice Transcription Model Setup & Progress Bar */
+.voice-model-setup-card {
+    background: #fffdf7;
+    border: 2.5px solid var(--text-dark);
+    border-radius: 16px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    box-shadow: 3px 3px 0px var(--text-dark);
+}
+
+.voice-model-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.voice-model-title {
+    font-size: 0.92rem;
+    font-weight: 800;
+    color: var(--text-dark);
+}
+
+.voice-model-badge {
+    font-size: 0.75rem;
+    font-weight: 900;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 2px solid var(--text-dark);
+    white-space: nowrap;
+}
+
+.voice-model-badge.not-ready {
+    background: #ffeaa7;
+    color: #2d3436;
+}
+
+.voice-model-badge.downloading {
+    background: #74b9ff;
+    color: #2d3436;
+}
+
+.voice-model-badge.ready {
+    background: #55efc4;
+    color: #2d3436;
+}
+
+.voice-model-badge.error {
+    background: #ff7675;
+    color: #ffffff;
+}
+
+.voice-model-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.voice-backend-select {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 10px;
+    border-radius: 10px;
+    border: 2px solid var(--text-dark);
+    background: #fff;
+    font-weight: 700;
+    font-size: 0.82rem;
+    color: var(--text-dark);
+}
+
+.voice-prepare-btn {
+    padding: 7px 12px;
+    border-radius: 10px;
+    border: 2px solid var(--text-dark);
+    background: var(--accent-yellow);
+    color: var(--text-dark);
+    font-weight: 800;
+    font-size: 0.82rem;
+    cursor: pointer;
+    box-shadow: 2px 2px 0px var(--text-dark);
+    white-space: nowrap;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.voice-prepare-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 3px 3px 0px var(--text-dark);
+}
+
+.voice-prepare-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.voice-progress-wrapper {
+    margin: 8px 0 6px;
+}
+
+.voice-progress-wrapper.hidden {
+    display: none;
+}
+
+.voice-progress-bar {
+    width: 100%;
+    height: 14px;
+    background: #dfe6e9;
+    border: 2px solid var(--text-dark);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+}
+
+.voice-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00b894, #55efc4);
+    transition: width 0.25s ease;
+}
+
+.voice-progress-text {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--text-dark);
+    margin-top: 4px;
+    text-align: right;
+}
+
+.voice-model-hint {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #636e72;
+    line-height: 1.35;
+}
+

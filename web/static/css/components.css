@@ -389,9 +389,11 @@ body.night-mode .icon-btn.header-pill-btn:hover {
 }
 
 /* Voice Input Button */
-#voice-input-btn {
+#voice-input-btn,
+.voice-mic-btn {
     width: 40px;
     height: 40px;
+    flex-shrink: 0;
     border-radius: 50%;
     border: 2px solid var(--text-dark);
     background: #fff;
@@ -404,17 +406,20 @@ body.night-mode .icon-btn.header-pill-btn:hover {
     box-shadow: 2px 2px 0px var(--text-dark);
 }
 
-#voice-input-btn:hover {
+#voice-input-btn:hover,
+.voice-mic-btn:hover {
     transform: translateY(-2px);
     box-shadow: 4px 4px 0px var(--text-dark);
 }
 
-#voice-input-btn:active {
+#voice-input-btn:active,
+.voice-mic-btn:active {
     transform: translateY(2px);
     box-shadow: none;
 }
 
-#voice-input-btn:disabled {
+#voice-input-btn:disabled,
+.voice-mic-btn:disabled {
     opacity: 0.35;
     cursor: not-allowed;
     transform: none;
@@ -422,7 +427,8 @@ body.night-mode .icon-btn.header-pill-btn:hover {
     pointer-events: none;
 }
 
-#voice-input-btn.recording {
+#voice-input-btn.recording,
+.voice-mic-btn.recording {
     background: var(--accent-primary);
     color: white;
     animation: pulse-recording 1.5s infinite;

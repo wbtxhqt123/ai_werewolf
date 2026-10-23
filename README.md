@@ -1,95 +1,143 @@
-# Werewolf Game: AI Simulation Platform
+# 🐺 AI 狼人杀 (Werewolf AI Game)
 
-This project is a comprehensive, AI-powered simulation of the social deduction game "Werewolf" (also known as Mafia). It serves as a robust platform for developing and testing AI agent behaviors, game theory strategies, and complex, multi-agent interactions in a dynamic environment.
+<p align="center">
+  <b>简体中文</b> | <a href="./README_EN.md">English</a>
+</p>
 
-The simulation is built with a clean architecture, separating the core game logic from the AI controllers and the user interface, allowing for modular development and testing.
+一款支持 **人类玩家 + 多性格大模型 AI 玩家** 同台博弈的网页版「狼人杀」游戏。
+不需要凑齐一桌朋友，打开浏览器即可随时开局！支持 **中英文双语界面**、**本地中英文混合语音识别输入（Mac & PC 通用）**，以及超好玩的 **赛后 AI 毒舌复盘 & 拉 AI 出来对线互辩**。
 
-## Key Features
+---
 
-*   **Modular Game Engine**: A state-machine-driven engine that manages all game phases, rules, and player interactions.
-*   **Diverse Character Roles**: Supports a wide range of classic and custom roles, each with unique abilities:
-    *   **Good Faction**: Villager, Seer, Witch, Guard, Hunter.
-    *   **Evil Faction**: Werewolf, Black Werewolf King.
-*   **Advanced Game Flow**:
-    *   **Night Phase**: Secret actions are performed (Werewolf kills, Seer inspects, etc.).
-    *   **Day Phase**: Public discussion, nominations, and voting for execution.
-    *   **Sheriff Election**: A special phase for electing a game moderator with extra voting power.
-    *   **Complex Scenarios**: Handles tie-breakers, special death conditions (Hunter's last shot), and conflicting actions.
-*   **AI-Powered Players**:
-    *   Integrates with Large Language Models (LLMs) to create intelligent, human-like player agents.
-    *   Each AI agent has a distinct "personality" and "memory," influencing its decisions.
-    *   Supports dynamic prompt engineering for different languages (English and Chinese).
-*   **Web-Based User Interface**:
-    *   A real-time web UI allows human players to join games, interact, and observe AI agents.
-    *   Features a dynamic game state display, role-based information filtering, and interactive controls.
-*   **Comprehensive Logging**: Generates detailed, bilingual (EN/ZH) game logs for analysis and debugging.
+## ✨ 为什么好玩？（核心亮点）
 
-## Project Architecture
+1. **🎭 真人感拉满的 AI 玩家**
+   * 每个 AI 都有独立的隐藏性格（**谨慎型、激进型、逻辑帝、情绪流、老好人、跟风党、阴谋家、多疑症、闷葫芦**）。
+   * AI 会悍跳预言家、发金水/查杀、倒钩、冲票，甚至在夜晚狼人频道里密谋战术。
+2. **🎙️ 本地离线语音转文字（支持中英混说 + 高级设置内进度条下载激活）**
+   * 点击 **「⚙️ 高级设置 (Advanced Settings)」**，在语音输入模型卡片中选择语音模型（默认 **SenseVoiceSmall ~230MB** 或 **Whisper Large-v3-Turbo ~800MB**），点击 **「⬇️ 下载并启用语音」**，即可查看实时 **下载与加载进度条**。
+   * 模型在开局前下载并激活就绪后，进入对局点击发言框旁的 **🎤 麦克风按钮** 即可直接说话发言（支持普通话、英语及中英夹杂，Mac 与个人电脑 CPU 均可秒级识别）。
+3. **🏆 赛后复盘中心 & 揪 AI 互辩**
+   * **🤖 AI 评价员**：游戏结束后，可选择「😊 温和鼓励」「😐 客观分析」或「😈 毒舌锐评」模式，让 AI 裁判复盘你整局的表现，还能和裁判多轮聊天。
+   * **🗣️ 揪 AI 复盘对线**：不服气白天被投出局？在赛后复盘室勾选任意 AI 玩家（比如一键「🐺 选狼队」或「🔮 选神职」），直接质问他们当时为什么这么操作，AI 会亮明底牌和你当场互辩！
+4. **📖 全景记录与昼夜沉浸交互**
+   * 动态日月交替昼夜动画、背景音乐（BGM）、发言气泡、座位号高亮追踪（点击聊天中的 `@3号玩家` 即可筛选该玩家全场发言）。
 
-The project is divided into several key modules:
+---
 
--   **`game/`**: The core game engine.
-    -   `game.py`: Manages the main game loop, player roster, and state transitions.
-    -   `states.py`: Implements the state machine for all game phases (e.g., `NightState`, `DayState`, `VoteState`).
-    -   `player.py`: Defines player objects, roles, and their attributes.
-    -   `controllers.py`: Abstract base classes for player controllers (Human, AI, etc.).
-    -   `history.py`: Manages the game's event log with visibility rules.
+## 🃏 板子与人数配置
 
--   **`llm_player/`**: The AI agent implementation.
-    -   `controller.py`: The `LLMController` class, which uses an LLM to make decisions based on game state and its persona.
-    -   `prompts/`: Contains the prompt templates used to guide the LLM's reasoning for different actions and languages.
+支持 **6人局**、**9人局**、**12人局**，你可以自由选择扮演任意身份（或随机分配）：
 
--   **`web/`**: The web interface.
-    -   `server.py`: A FastAPI backend that serves the UI and handles communication between the frontend and the game engine.
-    -   `static/`: Contains the HTML, CSS, and JavaScript for the client-side application.
+| 局数 | 🐺 狼人阵营 | 🧑‍🌾 好人阵营（神职 + 村民） |
+| :---: | :--- | :--- |
+| **6 人局**（快节奏） | 普通狼人 × 2 | 预言家 × 1、女巫 × 1、村民 × 2 |
+| **9 人局**（标准局） | 黑狼王 × 1、普通狼人 × 2 | 预言家 × 1、女巫 × 1、猎人 × 1、村民 × 3 |
+| **12 人局**（进阶局） | 黑狼王 × 1、普通狼人 × 3 | 预言家 × 1、女巫 × 1、猎人 × 1、守卫 × 1、村民 × 4 |
 
--   **`simulation/`**: Tools for running automated, non-interactive simulations for testing and data collection.
+---
 
-## Getting Started
+## 🚀 三步快速开始（Mac / Windows / Linux）
 
-### Prerequisites
-
-*   Python 3.9+
-*   An OpenAI API Key (or other compatible LLM API key).
-
-### Installation
-
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd <repository-directory>
-    ```
-
-2.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3.  **Set up your API key:**
-    Create a `.env` file in the root directory and add your API key:
-    ```
-    OPENAI_API_KEY="your-api-key-here"
-    ```
-
-### Running the Simulation
-
-**1. Run a command-line simulation:**
-
-This will run a game with only AI players.
+### 第一步：准备 Python 环境与基础依赖
+确保你的电脑安装了 **Python 3.9 或更高版本**，然后在项目根目录下运行：
 
 ```bash
-python main.py
+pip install -r requirements.txt
 ```
 
-**2. Run the web interface:**
+### 第二步：（可选但强烈推荐）开启🎤语音识别功能
+如果你想在游戏里直接用麦克风说话转文字，安装语音扩展依赖：
 
-This allows a human player to join a game with AI opponents.
+```bash
+pip install -r requirements-audio.txt
+```
+> 💡 **说明**：
+> * 无需安装笨重的 PyTorch 或系统级 `ffmpeg`，浏览器端会自动将录音转换为标准 16kHz 音频。
+> * **开局前准备**：打开网页后点击 **「⚙️ 高级设置 (Advanced Settings)」**，在「🎙️ 语音输入模型」卡片中点击 **「⬇️ 下载并启用语音」**，等待进度条到达 `100% (✅ 已就绪)` 后再开始游戏，即可在局内使用麦克风语音输入。
+
+### 第三步：启动网页版游戏！
 
 ```bash
 python main_web.py
 ```
-Then, open your browser and navigate to `http://127.0.0.1:8000`.
 
-## License
+看到终端提示服务启动后，打开浏览器访问：
+👉 **[http://127.0.0.1:8000](http://127.0.0.1:8000)**
 
-This project is licensed under the [MIT License](LICENSE).
+---
+
+## ⚙️ 如何配置 AI 大模型（LLM）？
+
+你有两种方式配置 AI 玩家的“大脑”：
+
+### 方式 A：直接在网页里填（最简单，推荐！）
+1. 打开网页 `http://127.0.0.1:8000`。
+2. 点击页面上的 **「⚙️ 高级设置 (Advanced Settings)」**。
+3. 选择服务商（支持 **OpenAI、豆包 Doubao、通义千问 Qwen、DeepSeek、Gemini** 或任意兼容 OpenAI 接口的 **Custom** 地址），填入你的 `API Key` 即可保存开玩！
+   *(注：如果不填 API Key，游戏也能正常启动，AI 会使用内置随机策略代打，适合测试流程。)*
+
+### 方式 B：通过 `.env` 配置文件设置
+你也可以复制根目录下的 `.env.example` 为 `.env` 文件：
+
+```bash
+cp .env.example .env
+```
+
+在 `.env` 中填入你的密钥或语音模型偏好：
+
+```env
+# 大模型 API Key（可选，也可直接在网页设置里填）
+OPENAI_API_KEY=sk-xxxx
+
+# 语音识别（ASR）配置（可选）
+# 默认使用 "sensevoice"（阿里 SenseVoiceSmall int8，极速中英混识）
+# 也可改为 "faster-whisper" 使用 OpenAI Whisper 模型
+ASR_BACKEND=sensevoice
+ASR_WHISPER_MODEL=large-v3-turbo
+ASR_DEVICE=auto
+```
+
+---
+
+## 🎙️ 语音输入模型对比与切换
+
+本项目移除了旧版低精度的 `whisper-tiny`，升级为双引擎架构（位于 `web/transcriber.py`）：
+
+| 语音引擎 (`ASR_BACKEND`) | 默认模型 | 体积 | 特点与适用场景 |
+| :--- | :--- | :---: | :--- |
+| **`sensevoice`** *(默认)* | `SenseVoiceSmall` (`int8` ONNX) | ~230 MB | **首选推荐**：Mac (M系列/Intel) 与普通 PC 均可 **0.1秒内极速出字**，对中文、英文、中英夹杂及狼人杀黑话识别极准，且静音不乱出幻觉词。 |
+| **`faster-whisper`** *(备选)* | `large-v3-turbo` / `small` | ~250–800 MB | 内置狼人杀专属中英文词库提示词（Prompt）与 Silero VAD 静音过滤；适合配备独立显卡（CUDA）或偏爱 Whisper 模型的玩家。 |
+
+---
+
+## 📂 项目目录一览
+
+```text
+├── main_web.py              # 🌐 网页版游戏启动入口（推荐）
+├── main.py                  # 🖥️ 命令行纯 AI 自动对战入口
+├── config.py                # ⚙️ 游戏板子规则、LLM 与语音识别 (ASR) 配置
+├── game/                    # 🎲 核心状态机引擎（夜晚、白天、警长竞选、技能结算、日志）
+├── llm_player/              # 🧠 AI 玩家智能体（人设性格、双语 Prompt、赛后毒舌点评与互辩室）
+├── web/                     # 🎨 FastAPI 后端服务、语音转写引擎 (transcriber.py) 与前端网页
+├── tests/                   # ✅ 自动化单元测试与并发/语音接口测试
+├── requirements.txt         # 📦 基础运行依赖
+└── requirements-audio.txt   # 🎤 语音识别扩展依赖（SenseVoice / Faster-Whisper）
+```
+
+---
+
+## 🧪 常见问题 (FAQ)
+
+* **Q: 点击 🎤 麦克风按钮提示无法访问麦克风？**
+  * **A:** 请通过 `http://127.0.0.1:8000` 或 `http://localhost:8000` 访问网页，并在浏览器弹出的权限框中允许使用麦克风（浏览器安全策略要求非 HTTPS 页面必须在 `localhost`/`127.0.0.1` 下才能调用麦克风）。
+* **Q: 为什么局内 🎤 麦克风按钮是灰色的（不可点）？**
+  * **A:** 为了防止在对局发言倒计时期间临时下载模型导致卡顿，**玩家必须在开局前打开「⚙️ 高级设置」并点击「⬇️ 下载并启用语音」**（已下载过的点击「⚡ 激活语音模型」），待进度条显示 `100% ✅ 已就绪` 后，局内的麦克风按钮就会自动解锁。
+* **Q: 如何运行项目的测试套件？**
+  * **A:** 在项目根目录执行 `pytest` 或 `python -m unittest discover -s tests -p "test_*.py"`。
+
+---
+
+## 📄 开源协议
+
+本项目基于 [MIT License](LICENSE) 开源。祝你把把拿到预言家，逻辑盘哭 AI！

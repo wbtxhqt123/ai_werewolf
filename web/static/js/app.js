@@ -355,6 +355,15 @@ const setupUI = {
     apiKeyInput: document.getElementById('api-key'),
     title: document.querySelector('.setup-container h1'),
     labels: document.querySelectorAll('.setup-container .form-group label'),
+    voiceModelCard: document.getElementById('voice-model-setup-card'),
+    voiceModelTitle: document.getElementById('voice-model-title'),
+    voiceModelBadge: document.getElementById('voice-model-badge'),
+    voiceBackendSelect: document.getElementById('voice-backend-select'),
+    prepareVoiceBtn: document.getElementById('prepare-voice-model-btn'),
+    voiceProgressWrapper: document.getElementById('voice-progress-wrapper'),
+    voiceProgressFill: document.getElementById('voice-progress-fill'),
+    voiceProgressText: document.getElementById('voice-progress-text'),
+    voiceModelHint: document.getElementById('voice-model-hint')
 };
 
 /** @const {object} gameUI - References to DOM elements on the game screen. */
@@ -404,11 +413,13 @@ const evalUI = {
     startBtn: document.getElementById('start-eval-btn'),
     chatBox: document.getElementById('eval-chat-box'),
     input: document.getElementById('eval-input'),
+    voiceBtn: document.getElementById('eval-voice-btn'),
     sendBtn: document.getElementById('send-eval-btn'),
     newGameBtn: document.getElementById('new-game-btn'),
     argueGrid: document.getElementById('argue-player-grid'),
     argueChatBox: document.getElementById('argue-chat-box'),
     argueInput: document.getElementById('argue-input'),
+    argueVoiceBtn: document.getElementById('argue-voice-btn'),
     sendArgueBtn: document.getElementById('send-argue-btn')
 };
 
@@ -719,74 +730,419 @@ function init() {
 }
 
 /**
- * Sets up the voice input functionality.
- * Checks for browser support and handles microphone access and recording.
+ * Encodes a Float32Array of mono audio samples into a 16-bit PCM WAV Blob at the target sample rate.
+ * @param {Float32Array} samples - Mono audio samples in [-1, 1].
+ * @param {number} sampleRate - Sample rate in Hz (e.g. 16000).
+ * @returns {Blob} - Standard 16-bit mono WAV Blob (`audio/wav`).
  */
-function setupVoiceInput() {
-    if (!gameUI.voiceInputBtn) return;
+function encodeMonoWavBlob(samples, sampleRate) {
+    const numSamples = samples.length;
+    const buffer = new ArrayBuffer(44 + numSamples * 2);
+    const view = new DataView(buffer);
+
+    const writeStr = (offset, str) => {
+        for (let i = 0; i < str.length; i++) {
+            view.setUint8(offset + i, str.charCodeAt(i));
+        }
+    };
+
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + numSamples * 2, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);      // Subchunk1Size (16 for PCM)
+    view.setUint16(20, 1, true);       // AudioFormat (1 = PCM)
+    view.setUint16(22, 1, true);       // NumChannels (1 = mono)
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true); // ByteRate
+    view.setUint16(32, 2, true);       // BlockAlign
+    view.setUint16(34, 16, true);      // BitsPerSample
+    writeStr(36, 'data');
+    view.setUint32(40, numSamples * 2, true);
+
+    let offset = 44;
+    for (let i = 0; i < numSamples; i++, offset += 2) {
+        const clamped = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7FFF, true);
+    }
+
+    return new Blob([buffer], { type: 'audio/wav' });
+}
+
+/**
+ * Converts a recorded browser Blob (WebM/Opus, MP4/AAC, Ogg, etc.) into a 16kHz mono PCM WAV Blob
+ * using the browser's native Web Audio API (`AudioContext` + `OfflineAudioContext`).
+ * Falls back to the raw Blob if Web Audio decoding fails.
+ * @param {Blob} rawBlob
+ * @returns {Promise<{blob: Blob, filename: string}>}
+ */
+async function convertBlobTo16kMonoWav(rawBlob) {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!AudioCtx || !OfflineCtx) {
+        const ext = (rawBlob.type || '').includes('mp4') ? 'mp4' : 'webm';
+        return { blob: rawBlob, filename: `recording.${ext}` };
+    }
+
+    let audioCtx = null;
+    try {
+        audioCtx = new AudioCtx();
+        const arrayBuf = await rawBlob.arrayBuffer();
+        const decoded = await audioCtx.decodeAudioData(arrayBuf);
+        const targetRate = 16000;
+        const targetLength = Math.max(1, Math.ceil(decoded.duration * targetRate));
+        const offlineCtx = new OfflineCtx(1, targetLength, targetRate);
+        const source = offlineCtx.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offlineCtx.destination);
+        source.start(0);
+        const rendered = await offlineCtx.startRendering();
+        const channelData = rendered.getChannelData(0);
+        const wavBlob = encodeMonoWavBlob(channelData, targetRate);
+        return { blob: wavBlob, filename: 'recording.wav' };
+    } catch (err) {
+        console.warn("WebAudio WAV conversion fallback to raw container:", err);
+        const ext = (rawBlob.type || '').includes('mp4') ? 'mp4' : 'webm';
+        return { blob: rawBlob, filename: `recording.${ext}` };
+    } finally {
+        if (audioCtx && typeof audioCtx.close === 'function') {
+            audioCtx.close().catch(() => {});
+        }
+    }
+}
+
+/**
+ * Selects the best supported MediaRecorder MIME type for cross-browser compatibility (Safari, Chrome, Firefox, Edge).
+ * @returns {string}
+ */
+function getSupportedRecorderMimeType() {
+    if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+        return '';
+    }
+    const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg;codecs=opus'
+    ];
+    for (const mime of candidates) {
+        if (MediaRecorder.isTypeSupported(mime)) {
+            return mime;
+        }
+    }
+    return '';
+}
+
+/**
+ * Binds click-to-record and click-to-stop voice transcription onto a button + text input pair.
+ * @param {HTMLButtonElement|null} buttonEl - Microphone toggle button.
+ * @param {HTMLInputElement|null} inputEl - Target text input element.
+ * @param {function(): boolean} canStartFn - Guard predicate checking if recording is currently allowed.
+ */
+function bindVoiceRecorderButton(buttonEl, inputEl, canStartFn) {
+    if (!buttonEl || !inputEl) return;
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.warn("MediaDevices API not supported in this browser.");
-        gameUI.voiceInputBtn.style.display = 'none';
+        buttonEl.style.display = 'none';
         return;
     }
 
     let mediaRecorder = null;
     let audioChunks = [];
     let isRecording = false;
+    let activeStream = null;
 
-    gameUI.voiceInputBtn.addEventListener('click', async () => {
-        if (!isRecording && (!gameState.pendingAction || gameState.pendingAction.type !== 'speech')) {
+    const stopActiveRecording = () => {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        buttonEl.classList.remove('recording');
+        isRecording = false;
+    };
+
+    buttonEl._stopVoiceRecording = stopActiveRecording;
+
+    buttonEl.addEventListener('click', async () => {
+        if (!isRecording && canStartFn && !canStartFn()) {
             return;
         }
 
         if (isRecording) {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-                gameUI.voiceInputBtn.classList.remove('recording');
-                isRecording = false;
-            }
-        } else {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
-                audioChunks = [];
+            stopActiveRecording();
+            return;
+        }
 
-                mediaRecorder.ondataavailable = (event) => {
+        try {
+            activeStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+            const mimeType = getSupportedRecorderMimeType();
+            mediaRecorder = mimeType
+                ? new MediaRecorder(activeStream, { mimeType })
+                : new MediaRecorder(activeStream);
+            audioChunks = [];
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
                     audioChunks.push(event.data);
-                };
+                }
+            };
 
-                mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    await sendAudioForTranscription(audioBlob);
-                    stream.getTracks().forEach(track => track.stop());
-                };
+            mediaRecorder.onstop = async () => {
+                const streamToClose = activeStream;
+                activeStream = null;
+                if (streamToClose) {
+                    streamToClose.getTracks().forEach(track => track.stop());
+                }
+                if (audioChunks.length === 0) return;
+                const rawBlob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
+                await sendAudioForTranscription(rawBlob, inputEl);
+            };
 
-                mediaRecorder.start();
-                isRecording = true;
-                gameUI.voiceInputBtn.classList.add('recording');
-            } catch (err) {
-                console.error("Error accessing microphone:", err);
-                alert(gameState.lang === 'zh' ? "无法访问麦克风。" : "Cannot access microphone.");
-            }
+            mediaRecorder.start();
+            isRecording = true;
+            buttonEl.classList.add('recording');
+        } catch (err) {
+            console.error("Error accessing microphone:", err);
+            alert(gameState.lang === 'zh' ? "无法访问麦克风，请检查浏览器麦克风权限。" : "Cannot access microphone. Please check browser permissions.");
+        }
+    });
+}
+
+/** @type {object} voiceModelState - Tracks pre-game ASR model readiness & download progress. */
+const voiceModelState = {
+    ready: false,
+    cached: false,
+    status: 'not_downloaded',
+    percent: 0,
+    backend: 'sensevoice',
+    model: 'SenseVoiceSmall (int8 ONNX)',
+    message: '',
+    pollTimer: null
+};
+
+/**
+ * Updates the Lobby Voice Model card and in-game microphone button state.
+ */
+function renderVoiceModelStatusUI() {
+    const isZh = gameState.lang === 'zh';
+    if (setupUI.voiceModelTitle) {
+        setupUI.voiceModelTitle.innerText = isZh
+            ? '🎙️ 语音输入模型（开局前需先下载激活）'
+            : '🎙️ Voice Model (Download before game starts)';
+    }
+
+    if (setupUI.voiceBackendSelect && setupUI.voiceBackendSelect.options.length >= 2) {
+        setupUI.voiceBackendSelect.options[0].text = isZh
+            ? 'SenseVoiceSmall (中英混说极速 ~230MB)'
+            : 'SenseVoiceSmall (Fast ZH/EN ~230MB)';
+        setupUI.voiceBackendSelect.options[1].text = isZh
+            ? 'Whisper Large-v3-Turbo (~800MB)'
+            : 'Whisper Large-v3-Turbo (~800MB)';
+    }
+
+    const badge = setupUI.voiceModelBadge;
+    const btn = setupUI.prepareVoiceBtn;
+    const progressWrap = setupUI.voiceProgressWrapper;
+    const progressFill = setupUI.voiceProgressFill;
+    const progressText = setupUI.voiceProgressText;
+    const hint = setupUI.voiceModelHint;
+
+    if (badge) {
+        badge.classList.remove('not-ready', 'downloading', 'ready', 'error');
+        if (voiceModelState.ready) {
+            badge.classList.add('ready');
+            badge.innerText = isZh ? '✅ 已就绪' : '✅ Ready';
+        } else if (voiceModelState.status === 'downloading' || voiceModelState.status === 'loading') {
+            badge.classList.add('downloading');
+            badge.innerText = isZh ? '⏳ 下载/加载中' : '⏳ Downloading';
+        } else if (voiceModelState.status === 'error') {
+            badge.classList.add('error');
+            badge.innerText = isZh ? '❌ 失败' : '❌ Error';
+        } else {
+            badge.classList.add('not-ready');
+            badge.innerText = voiceModelState.cached
+                ? (isZh ? '📦 已缓存(待激活)' : '📦 Cached')
+                : (isZh ? '未下载' : 'Not Downloaded');
+        }
+    }
+
+    if (btn) {
+        if (voiceModelState.ready) {
+            btn.disabled = true;
+            btn.innerText = isZh ? '✅ 语音已激活' : '✅ Voice Ready';
+        } else if (voiceModelState.status === 'downloading' || voiceModelState.status === 'loading') {
+            btn.disabled = true;
+            btn.innerText = isZh ? '⏳ 正在准备...' : '⏳ Preparing...';
+        } else if (voiceModelState.cached) {
+            btn.disabled = false;
+            btn.innerText = isZh ? '⚡ 激活语音模型' : '⚡ Activate Model';
+        } else {
+            btn.disabled = false;
+            btn.innerText = isZh ? '⬇️ 下载并启用语音' : '⬇️ Download Model';
+        }
+    }
+
+    if (progressWrap && progressFill && progressText) {
+        const showProgress =
+            voiceModelState.status === 'downloading' ||
+            voiceModelState.status === 'loading' ||
+            voiceModelState.ready;
+        progressWrap.classList.toggle('hidden', !showProgress);
+        const pct = Math.max(0, Math.min(100, Number(voiceModelState.percent) || 0));
+        progressFill.style.width = `${pct}%`;
+        progressText.innerText = voiceModelState.message
+            ? `${pct.toFixed(0)}% · ${voiceModelState.message}`
+            : `${pct.toFixed(0)}%`;
+    }
+
+    if (hint) {
+        if (voiceModelState.ready) {
+            hint.innerText = isZh
+                ? `🎉 语音模型 (${voiceModelState.model}) 已就绪！进入对局后可直接点击 🎤 说话发言。`
+                : `🎉 Voice model (${voiceModelState.model}) is ready! Click 🎤 during the game to speak.`;
+        } else if (voiceModelState.status === 'error') {
+            hint.innerText = voiceModelState.message || (isZh ? '模型加载失败，请确认已执行 pip install -r requirements-audio.txt' : 'Failed to load model. Run pip install -r requirements-audio.txt');
+        } else {
+            hint.innerText = isZh
+                ? '💡 必须在游戏开局前先下载并激活模型，局内才能使用 🎤 麦克风语音转文字。'
+                : '💡 You must download & activate the model before starting the game to use 🎤 voice input.';
+        }
+    }
+
+    // Update microphone tooltips/states inside game & post-game modals
+    const micTitle = voiceModelState.ready
+        ? (isZh ? '点击开始语音输入 (中/英)' : 'Click to speak (ZH/EN)')
+        : (isZh ? '请先在 ⚙️ 高级设置 中下载并激活语音模型' : 'Please download & activate the voice model in ⚙️ Advanced Settings first');
+
+    [gameUI.voiceInputBtn, evalUI.voiceBtn, evalUI.argueVoiceBtn].forEach(micBtn => {
+        if (!micBtn) return;
+        micBtn.title = micTitle;
+        if (!voiceModelState.ready) {
+            micBtn.disabled = true;
         }
     });
 }
 
 /**
- * Sends the recorded audio blob to the backend for transcription.
- * @param {Blob} audioBlob - The recorded audio data.
+ * Fetches current ASR model status from the server and updates the UI.
  */
-async function sendAudioForTranscription(audioBlob) {
-    const originalPlaceholder = gameUI.input.placeholder;
-    gameUI.input.placeholder = gameState.lang === 'zh' ? "正在转录..." : "Transcribing...";
-    gameUI.input.disabled = true;
+async function fetchVoiceModelStatus() {
+    try {
+        const res = await fetch('/api/transcribe/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        voiceModelState.ready = Boolean(data.ready);
+        voiceModelState.cached = Boolean(data.cached);
+        voiceModelState.status = data.status || (data.ready ? 'ready' : 'not_downloaded');
+        voiceModelState.percent = data.ready ? 100 : (Number(data.percent) || 0);
+        voiceModelState.backend = data.backend || 'sensevoice';
+        voiceModelState.model = data.model || data.backend || 'SenseVoiceSmall';
+        voiceModelState.message = data.message || '';
 
-    const formData = new FormData();
-    formData.append("file", audioBlob, "recording.webm");
-    formData.append("language", gameState.lang === 'zh' ? 'zh' : 'en');
+        if (setupUI.voiceBackendSelect && data.backend && voiceModelState.status === 'not_downloaded') {
+            setupUI.voiceBackendSelect.value = data.backend;
+        }
+
+        renderVoiceModelStatusUI();
+
+        if (voiceModelState.status !== 'downloading' && voiceModelState.status !== 'loading') {
+            if (voiceModelState.pollTimer) {
+                clearInterval(voiceModelState.pollTimer);
+                voiceModelState.pollTimer = null;
+            }
+        }
+    } catch (err) {
+        console.warn("Could not query voice model status:", err);
+    }
+}
+
+/**
+ * Triggers pre-game downloading and loading of the selected ASR model with progress bar polling.
+ */
+async function triggerVoiceModelPrepare() {
+    const selectedBackend = setupUI.voiceBackendSelect ? setupUI.voiceBackendSelect.value : 'sensevoice';
+    voiceModelState.status = 'downloading';
+    voiceModelState.percent = 1;
+    voiceModelState.message = gameState.lang === 'zh' ? '正在连接下载服务...' : 'Starting download...';
+    renderVoiceModelStatusUI();
 
     try {
+        await fetch('/api/transcribe/prepare', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ backend: selectedBackend })
+        });
+        if (!voiceModelState.pollTimer) {
+            voiceModelState.pollTimer = setInterval(fetchVoiceModelStatus, 350);
+        }
+        await fetchVoiceModelStatus();
+    } catch (err) {
+        voiceModelState.status = 'error';
+        voiceModelState.message = String(err);
+        renderVoiceModelStatusUI();
+    }
+}
+
+/**
+ * Sets up the voice input functionality for the lobby downloader, in-game speeches, and post-game AI chat/debate rooms.
+ */
+function setupVoiceInput() {
+    if (setupUI.prepareVoiceBtn) {
+        setupUI.prepareVoiceBtn.addEventListener('click', triggerVoiceModelPrepare);
+    }
+    if (setupUI.voiceBackendSelect) {
+        setupUI.voiceBackendSelect.addEventListener('change', () => {
+            if (voiceModelState.ready && setupUI.voiceBackendSelect.value !== voiceModelState.backend) {
+                voiceModelState.ready = false;
+                voiceModelState.status = 'not_downloaded';
+                voiceModelState.percent = 0;
+                voiceModelState.message = '';
+                renderVoiceModelStatusUI();
+            }
+        });
+    }
+    fetchVoiceModelStatus();
+
+    bindVoiceRecorderButton(
+        gameUI.voiceInputBtn,
+        gameUI.input,
+        () => Boolean(voiceModelState.ready && gameState.pendingAction && gameState.pendingAction.type === 'speech')
+    );
+    bindVoiceRecorderButton(
+        evalUI.voiceBtn,
+        evalUI.input,
+        () => Boolean(voiceModelState.ready && !evalUI.input.disabled)
+    );
+    bindVoiceRecorderButton(
+        evalUI.argueVoiceBtn,
+        evalUI.argueInput,
+        () => Boolean(voiceModelState.ready && !evalUI.argueInput.disabled)
+    );
+}
+
+/**
+ * Converts and sends the recorded audio blob to the backend for bilingual (ZH/EN) transcription.
+ * @param {Blob} audioBlob - The recorded audio data.
+ * @param {HTMLInputElement} [targetInput=gameUI.input] - The input element to insert transcribed text into.
+ */
+async function sendAudioForTranscription(audioBlob, targetInput = gameUI.input) {
+    if (!targetInput) return;
+    const isMainGameInput = (targetInput === gameUI.input);
+    const originalPlaceholder = targetInput.placeholder;
+    targetInput.placeholder = gameState.lang === 'zh' ? "🎙️ 正在识别中英文语音..." : "🎙️ Transcribing speech...";
+    targetInput.disabled = true;
+
+    try {
+        const { blob: uploadBlob, filename } = await convertBlobTo16kMonoWav(audioBlob);
+        const formData = new FormData();
+        formData.append("file", uploadBlob, filename);
+        formData.append("language", gameState.lang === 'zh' ? 'zh' : 'en');
+
         const response = await fetch('/api/transcribe', {
             method: 'POST',
             body: formData
@@ -794,23 +1150,35 @@ async function sendAudioForTranscription(audioBlob) {
 
         if (response.ok) {
             const data = await response.json();
-            if (data.text) {
-                const currentText = gameUI.input.value;
-                gameUI.input.value = currentText + (currentText ? " " : "") + data.text;
+            if (data.text && data.text.trim()) {
+                const currentText = targetInput.value;
+                const separator = currentText && !currentText.endsWith(' ') ? " " : "";
+                targetInput.value = currentText + separator + data.text.trim();
             }
         } else {
-            console.error("Transcription failed:", await response.text());
-            alert(gameState.lang === 'zh' ? "转录失败。" : "Transcription failed.");
+            let errDetail = await response.text();
+            try {
+                const parsed = JSON.parse(errDetail);
+                if (parsed && parsed.detail) errDetail = parsed.detail;
+            } catch (_) {}
+            console.error("Transcription failed:", errDetail);
+            alert(gameState.lang === 'zh' ? `语音识别失败: ${errDetail}` : `Transcription failed: ${errDetail}`);
         }
     } catch (error) {
         console.error("Error sending audio:", error);
-        alert(gameState.lang === 'zh' ? "网络错误。" : "Network error.");
+        alert(gameState.lang === 'zh' ? "网络错误，无法完成语音识别。" : "Network error during transcription.");
     } finally {
-        const isSpeechAction = gameState.pendingAction && gameState.pendingAction.type === 'speech';
-        gameUI.input.disabled = !isSpeechAction;
-        gameUI.input.placeholder = originalPlaceholder;
-        if (isSpeechAction) {
-            gameUI.input.focus();
+        if (isMainGameInput) {
+            const isSpeechAction = Boolean(gameState.pendingAction && gameState.pendingAction.type === 'speech');
+            targetInput.disabled = !isSpeechAction;
+            targetInput.placeholder = originalPlaceholder;
+            if (isSpeechAction) {
+                targetInput.focus();
+            }
+        } else {
+            targetInput.disabled = false;
+            targetInput.placeholder = originalPlaceholder;
+            targetInput.focus();
         }
     }
 }
@@ -966,6 +1334,7 @@ function setupSettingsListeners() {
 
     const openModal = () => {
         syncTimerUIFromState();
+        fetchVoiceModelStatus();
         settingsUI.modal.classList.add('active');
         trapFocus(settingsUI.modal);
         if (settingsUI.timerSelect) {
@@ -2056,6 +2425,7 @@ function updateLanguage() {
     
     document.querySelectorAll('.count-tooltip').forEach(el => el.remove());
     initPlayerCountTooltips();
+    renderVoiceModelStatusUI();
 
     // Game Screen
     if (gameUI.input) gameUI.input.placeholder = t.typeMessage;
@@ -3863,7 +4233,12 @@ function handleInputRequest(req) {
         stopTurnTimer();
         gameUI.input.disabled = true;
         gameUI.sendBtn.disabled = true;
-        if (gameUI.voiceInputBtn) gameUI.voiceInputBtn.disabled = true;
+        if (gameUI.voiceInputBtn) {
+            if (typeof gameUI.voiceInputBtn._stopVoiceRecording === 'function') {
+                gameUI.voiceInputBtn._stopVoiceRecording();
+            }
+            gameUI.voiceInputBtn.disabled = true;
+        }
         gameUI.choiceButtons.innerHTML = '';
         gameUI.actionPrompt.innerText = I18N[gameState.lang].waiting;
         updatePlayerSelectableState([]);
@@ -3900,7 +4275,7 @@ function handleInputRequest(req) {
     if (req.type === 'speech') {
         gameUI.input.disabled = false;
         gameUI.sendBtn.disabled = false;
-        if (gameUI.voiceInputBtn) gameUI.voiceInputBtn.disabled = false;
+        if (gameUI.voiceInputBtn) gameUI.voiceInputBtn.disabled = !voiceModelState.ready;
         gameUI.input.focus();
         gameUI.choiceButtons.innerHTML = '';
         updatePlayerSelectableState([]);
