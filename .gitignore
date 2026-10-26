@@ -28,6 +28,10 @@ history/
 simulation/simulation_log/
 game_history.json
 
+# Large media files not suitable for GitHub (see README screenshots)
+pics/*.mov
+pics/*.mp4
+
 # Notebook Checkpoints
 .ipynb_checkpoints/
 

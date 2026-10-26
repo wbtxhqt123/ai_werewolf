@@ -67,6 +67,30 @@ python main_web.py
 
 ---
 
+## 📸 实机截图与演示视频
+
+<p align="center">
+  <img src="./pics/lobby.png" alt="游戏大厅" width="49%"/>
+  <img src="./pics/advance_setting.png" alt="高级设置" width="49%"/>
+  <br/>
+  <em>游戏大厅 · 高级设置（语音模型下载/激活）</em>
+</p>
+
+<p align="center">
+  <img src="./pics/ingame.png" alt="对局画面" width="49%"/>
+  <img src="./pics/day.png" alt="白天发言场景" width="49%"/>
+  <br/>
+  <em>对局画面 · 白天发言场景</em>
+</p>
+
+<p align="center">
+  <img src="./pics/assessment.png" alt="赛后复盘评估" width="70%"/>
+  <br/>
+  <em>赛后 AI 复盘评估</em>
+</p>
+
+---
+
 ## ⚙️ 如何配置 AI 大模型（LLM）？
 
 你有两种方式配置 AI 玩家的“大脑”：
