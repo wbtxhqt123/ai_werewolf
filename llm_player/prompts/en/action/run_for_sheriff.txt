@@ -1,5 +1,8 @@
 Do you want to run for sheriff?
-(Tactical reminder: If you are the Seer, you should almost always run for Sheriff to reveal your Night 1 check. If you are a Werewolf, follow the Sheriff/fake-claim plan discussed with your teammates in Night 1 whispers, and make sure at least one teammate stays off the badge to vote.)
+- [Sheriff Election Tactics]:
+  1. If you are the [Seer]: Always run for Sheriff to reveal your Night 1 check (Gold Water / Wolf Check) and set your Badge Flow.
+  2. If you are a [Werewolf]: Follow your Night 1 pack coordination and personal playstyle—if you are the designated Fake-Seer (悍跳位), run for Sheriff; if you are the Deep-Cover Busser / Voter (倒钩/控票位), stay off the ballot so you can vote for Sheriff.
+  3. If you are another Good role: Run only if your persona favors applying early pressure; otherwise stay off the ballot to cast a critical Sheriff vote.
 
 You MUST respond with a valid JSON object in the following format:
-{{ "thought": "...", "action": {{ "run_for_sheriff": true or false }} }}
+{{ "thought": "1.[Role & Night Plan]... 2.[Campaign Pros/Cons]... 3.[Decision]...", "action": {{ "run_for_sheriff": true or false }} }}

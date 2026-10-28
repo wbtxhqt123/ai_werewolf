@@ -132,13 +132,13 @@ class TestLoggingSystem(unittest.TestCase):
         # Indexing test: querying with start_index = initial_count + 2 should return empty
         self.assertEqual(len(web_ctrl.get_logs(initial_count + 2)), 0)
 
-    def test_dusk_reflection_option_b_success_and_fallback(self):
-        success_ctrl = MockAIController(summary_result="Day 1 was intense.", fail=False)
-        fail_ctrl = MockAIController(fail=True)
+    def test_day_end_preserves_full_logs_without_summarization_wipe(self):
+        ctrl1 = MockAIController()
+        ctrl2 = MockAIController()
 
         controllers = {
-            "Player 1": success_ctrl,
-            "Player 2": fail_ctrl,
+            "Player 1": ctrl1,
+            "Player 2": ctrl2,
         }
         game = Game(controllers)
         p1 = game.get_player_by_name("Player 1")
@@ -155,13 +155,9 @@ class TestLoggingSystem(unittest.TestCase):
         state = DayEndState(game)
         state.handle()
 
-        # p1 summarization succeeded -> memory updated, dummy day log cleared
-        self.assertTrue(success_ctrl.summarized)
-        self.assertEqual(p1.long_term_memory, "Day 1 was intense.")
-        self.assertNotIn(dummy_log, p1.logs)
-
-        # p2 summarization failed -> dummy day log retained for night action fallback
-        self.assertTrue(fail_ctrl.summarized)
+        # Full chronological logs are preserved across days without dusk wipe
+        self.assertFalse(ctrl1.summarized)
+        self.assertIn(dummy_log, p1.logs)
         self.assertIn(dummy_log, p2.logs)
 
     def test_death_and_vote_unification(self):

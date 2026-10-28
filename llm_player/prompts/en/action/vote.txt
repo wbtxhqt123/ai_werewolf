@@ -1,4 +1,5 @@
-Who do you vote to execute? Choose from: {potential_targets}. You can also abstain.
+Who do you vote to execute? Choose from: {potential_targets}. You can also abstain (though abstaining as a villager lets werewolves control the vote).
+- [Voting Tactics]: As a good player, align with the verified Seer/Sheriff call and cross-check the Historical Vote Ledger so wolves cannot split the vote; as a Werewolf, either push a coordinated mislynch (冲票) or bus an exposed wolf teammate (倒钩投票) to earn deep village trust.
 
 You MUST respond with a valid JSON object in the following format:
-{{ "thought": "...", "action": {{ "vote": "PlayerName" or null }} }}
+{{ "thought": "1.[Board & Tempo]... 2.[Vote Matrix & Alignment]... 3.[Decision]...", "action": {{ "vote": "PlayerName" or null }} }}

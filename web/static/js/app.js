@@ -919,8 +919,8 @@ const voiceModelState = {
     cached: false,
     status: 'not_downloaded',
     percent: 0,
-    backend: 'sensevoice',
-    model: 'SenseVoiceSmall (int8 ONNX)',
+    backend: 'paraformer',
+    model: 'Paraformer-Large (int8 ONNX)',
     message: '',
     pollTimer: null
 };
@@ -938,11 +938,11 @@ function renderVoiceModelStatusUI() {
 
     if (setupUI.voiceBackendSelect && setupUI.voiceBackendSelect.options.length >= 2) {
         setupUI.voiceBackendSelect.options[0].text = isZh
-            ? 'SenseVoiceSmall (中英混说极速 ~230MB)'
-            : 'SenseVoiceSmall (Fast ZH/EN ~230MB)';
+            ? 'Paraformer-Large (中文/中英精调 · CoreML/GPU ~220MB)'
+            : 'Paraformer-Large (High-Accuracy ZH/EN · CoreML/GPU ~220MB)';
         setupUI.voiceBackendSelect.options[1].text = isZh
-            ? 'Whisper Large-v3-Turbo (~800MB)'
-            : 'Whisper Large-v3-Turbo (~800MB)';
+            ? 'Whisper Large-v3-Turbo (多语种旗舰 · Metal/GPU ~800MB)'
+            : 'Whisper Large-v3-Turbo (Multilingual · Metal/GPU ~800MB)';
     }
 
     const badge = setupUI.voiceModelBadge;
@@ -1031,20 +1031,21 @@ function renderVoiceModelStatusUI() {
 /**
  * Fetches current ASR model status from the server and updates the UI.
  */
-async function fetchVoiceModelStatus() {
+async function fetchVoiceModelStatus(requestedBackend = null) {
     try {
-        const res = await fetch('/api/transcribe/status');
+        const query = requestedBackend ? `?backend=${encodeURIComponent(requestedBackend)}` : '';
+        const res = await fetch(`/api/transcribe/status${query}`);
         if (!res.ok) return;
         const data = await res.json();
         voiceModelState.ready = Boolean(data.ready);
         voiceModelState.cached = Boolean(data.cached);
         voiceModelState.status = data.status || (data.ready ? 'ready' : 'not_downloaded');
         voiceModelState.percent = data.ready ? 100 : (Number(data.percent) || 0);
-        voiceModelState.backend = data.backend || 'sensevoice';
-        voiceModelState.model = data.model || data.backend || 'SenseVoiceSmall';
+        voiceModelState.backend = data.backend || 'paraformer';
+        voiceModelState.model = data.model || data.backend || 'Paraformer-Large';
         voiceModelState.message = data.message || '';
 
-        if (setupUI.voiceBackendSelect && data.backend && voiceModelState.status === 'not_downloaded') {
+        if (setupUI.voiceBackendSelect && data.backend && !requestedBackend && voiceModelState.status === 'not_downloaded') {
             setupUI.voiceBackendSelect.value = data.backend;
         }
 
@@ -1065,7 +1066,7 @@ async function fetchVoiceModelStatus() {
  * Triggers pre-game downloading and loading of the selected ASR model with progress bar polling.
  */
 async function triggerVoiceModelPrepare() {
-    const selectedBackend = setupUI.voiceBackendSelect ? setupUI.voiceBackendSelect.value : 'sensevoice';
+    const selectedBackend = setupUI.voiceBackendSelect ? setupUI.voiceBackendSelect.value : 'paraformer';
     voiceModelState.status = 'downloading';
     voiceModelState.percent = 1;
     voiceModelState.message = gameState.lang === 'zh' ? '正在连接下载服务...' : 'Starting download...';
@@ -1097,13 +1098,7 @@ function setupVoiceInput() {
     }
     if (setupUI.voiceBackendSelect) {
         setupUI.voiceBackendSelect.addEventListener('change', () => {
-            if (voiceModelState.ready && setupUI.voiceBackendSelect.value !== voiceModelState.backend) {
-                voiceModelState.ready = false;
-                voiceModelState.status = 'not_downloaded';
-                voiceModelState.percent = 0;
-                voiceModelState.message = '';
-                renderVoiceModelStatusUI();
-            }
+            fetchVoiceModelStatus(setupUI.voiceBackendSelect.value);
         });
     }
     fetchVoiceModelStatus();

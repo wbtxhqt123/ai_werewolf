@@ -1,8 +1,9 @@
 As the Seer, you act.
 - You can check the identity of one of these players: {potential_targets}.
 - You will learn if they are a Villager (Good) or a Werewolf (Bad).
-- You can also choose not to check anyone.
-What is your decision?
+- [Seer Check Tactics]:
+  1. If you announced a [Sheriff Badge Flow (警徽流)] during the day, prioritize checking your promised target so passing or destroying the badge at dawn communicates the exact result if you are killed tonight.
+  2. On Night 1, check a pivotal seat so you can present a compelling check rationale during the Sheriff election.
 
 You MUST respond with a valid JSON object in the following format:
-{{ "thought": "...", "action": {{ "check": "PlayerName" or null }} }}
+{{ "thought": "1.[Prior Checks & Badge Flow]... 2.[Target Priority]... 3.[Decision]...", "action": {{ "check": "PlayerName" or null }} }}

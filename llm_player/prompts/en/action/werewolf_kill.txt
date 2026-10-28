@@ -1,5 +1,8 @@
-As a werewolf, who do you want to kill tonight? Choose from: {potential_targets}.
+As a werewolf, choose a player to eliminate tonight. Who do you want to kill tonight? Choose from: {potential_targets}.
 You can also choose not to kill anyone.
+- [Werewolf Night Kill Tactics]:
+  1. Align with your pack's Night discussion and Slaughter-the-Side path (God-wipe vs. Villager-wipe).
+  2. On Night 1, you may kill an outside seat or execute a [Self-Knife Bait (自刀骗药)] on a teammate to bait the Witch's save ("Silver Water"); on later nights, anticipate the Guard's protection target and hunt down the Seer, Witch, Guard, or Hunter.
 
 You MUST respond with a valid JSON object in the following format:
-{{ "thought": "...", "action": {{ "kill": "PlayerName" or null }} }}
+{{ "thought": "1.[Slaughter-the-Side Progress]... 2.[Guard/Witch Read]... 3.[Kill Target]...", "action": {{ "kill": "PlayerName" or null }} }}

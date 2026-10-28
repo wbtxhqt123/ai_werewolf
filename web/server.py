@@ -677,17 +677,18 @@ class PrepareModelRequest(BaseModel):
 
 
 @app.get("/api/transcribe/status")
-async def transcribe_status():
+async def transcribe_status(backend: Optional[str] = Query(None)):
     """Returns the configured speech-to-text backend, cache status, and real-time download progress."""
     from config import ASR_CONFIG
     from web.transcriber import _transcriber, get_download_status, is_model_cached
 
     progress = get_download_status()
+    requested_backend = (backend or progress.get("backend") or ASR_CONFIG.get("backend", "paraformer")).strip().lower()
     cached = is_model_cached(
-        backend=progress.get("backend") or ASR_CONFIG.get("backend", "sensevoice"),
+        backend=requested_backend,
         whisper_model=ASR_CONFIG.get("whisper_model", "large-v3-turbo"),
     )
-    if _transcriber is not None:
+    if _transcriber is not None and (not backend or _transcriber.backend_name == requested_backend):
         info = _transcriber.get_info()
         return {
             **progress,
@@ -699,7 +700,9 @@ async def transcribe_status():
         }
     return {
         **progress,
+        "backend": requested_backend,
         "ready": False,
+        "status": progress.get("status") if progress.get("status") in ("downloading", "loading") else "not_downloaded",
         "cached": cached,
         "whisper_model": ASR_CONFIG.get("whisper_model", "large-v3-turbo"),
         "device": ASR_CONFIG.get("device", "auto"),

@@ -338,32 +338,6 @@ class DayEndState(GameState):
 
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "The day is over, and dusk is approaching.", "zh": "天黑了，黄昏降临。"}, camps=["All"]))
 
-        # Trigger synchronized dusk reflection for all AI players (Option B)
-        self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "Players are reflecting on the day...", "zh": "玩家们正在回顾今天发生的事情..."}, camps=["All"]))
-        
-        candidates = [
-            p for p in self.game.players
-            if hasattr(p.controller, 'summarize_history') and callable(getattr(p.controller, 'summarize_history'))
-        ]
-
-        if candidates:
-            futures = {}
-            with ThreadPoolExecutor(max_workers=len(candidates)) as executor:
-                for player in candidates:
-                    logs_snapshot = list(player.logs)
-                    f = executor.submit(player.controller.summarize_history, player, logs_snapshot)
-                    futures[f] = player
-                
-                done, not_done = wait(futures.keys(), timeout=6.0)
-
-            for f, player in futures.items():
-                if f in done and f.exception() is None:
-                    # Summarization succeeded: clear day logs safely
-                    player.logs.clear()
-                else:
-                    # Summarization timed out or failed: retain logs so context is not lost tonight
-                    print(f"Warning: Summarization did not complete for {player.name}. Retaining logs.")
-
     def transition(self):
         winner = self.game.check_win_condition()
         if winner:

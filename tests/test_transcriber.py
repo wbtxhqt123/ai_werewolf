@@ -11,6 +11,7 @@ from web.server import app
 from web.transcriber import (
     AudioTranscriber,
     FasterWhisperBackend,
+    ParaformerBackend,
     SenseVoiceBackend,
     clean_transcription_text,
     load_audio_16k_mono,
@@ -38,9 +39,22 @@ def _create_temp_wav(sample_rate: int = 16000, channels: int = 1, duration_sec: 
 class TestTranscriber(unittest.TestCase):
 
     def test_clean_transcription_text_strips_sensevoice_tags(self):
-        raw = "<|zh|><|NEUTRAL|><|Speech|><|withitn|> 我觉得 Player 3 是预言家 <|emo_unknown|>"
-        self.assertEqual(clean_transcription_text(raw), "我觉得 Player 3 是预言家")
+        raw = "<|zh|><|NEUTRAL|><|Speech|><|withitn|> 我觉得 Player 3 是预言家，2号是汗跳狼，看警会流 <|emo_unknown|>"
+        self.assertEqual(clean_transcription_text(raw), "我觉得 Player 3 是预言家，2号是悍跳狼，看警徽流")
         self.assertEqual(clean_transcription_text(""), "")
+
+    @patch.object(ParaformerBackend, "__init__", lambda self, **kwargs: None)
+    @patch.object(ParaformerBackend, "transcribe", return_value="我是预言家，警徽流留3号和5号")
+    def test_audio_transcriber_paraformer_default(self, mock_transcribe):
+        transcriber = AudioTranscriber(backend="paraformer")
+        self.assertEqual(transcriber.backend_name, "paraformer")
+        info = transcriber.get_info()
+        self.assertEqual(info["backend"], "paraformer")
+        self.assertIn("Paraformer-Large", info["model"])
+
+        result = transcriber.transcribe("dummy.wav", language="zh")
+        self.assertEqual(result, "我是预言家，警徽流留3号和5号")
+        mock_transcribe.assert_called_once_with("dummy.wav", language="zh")
 
     def test_load_audio_16k_mono_wav_and_resampling(self):
         wav_48k_stereo = _create_temp_wav(sample_rate=48000, channels=2, duration_sec=0.2)

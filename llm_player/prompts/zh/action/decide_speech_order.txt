@@ -1,9 +1,10 @@
 你是警长。你需要决定今天的发言顺序。
 选项：
-1. 顺时针（从你左边开始）
-2. 逆时针（从你右边开始）
+1. 顺时针（`"clockwise"`，从你左边座位号依次往后发言）
+2. 逆时针（`"counter_clockwise"`，从你右边座位号依次往前发言）
+- 【警长控场博弈】：作为警长，你是归票位（最后发言）。通常应让焦点嫌疑人或对跳位先发言表水，让己方信任的好人在后置位总结分析。
 
 你必须以以下格式回复一个有效的 JSON 对象：
-{{ "thought": "...", "action": {{ "speech_order": "clockwise" }} }}
+{{ "thought": "1.【焦点嫌疑人座位分布】... 2.【发言顺序利弊决定】...", "action": {{ "speech_order": "clockwise" }} }}
 或
-{{ "thought": "...", "action": {{ "speech_order": "counter_clockwise" }} }}
+{{ "thought": "1.【焦点嫌疑人座位分布】... 2.【发言顺序利弊决定】...", "action": {{ "speech_order": "counter_clockwise" }} }}

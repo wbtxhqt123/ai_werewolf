@@ -1,7 +1,8 @@
-As the Hunter, you have died.
-- You can choose to shoot one of these players to take them with you: {potential_targets}.
-- If you choose someone, they will die immediately.
-What is your decision?
+Your shooting ability has been triggered upon death.
+- You can choose to shoot one of these players to take them with you: {potential_targets}, or hold your fire (`null`).
+- [Shooting Tactics]:
+  1. If you are the [Hunter]: Review the Historical Vote Ledger and Seer checks to shoot the most confirmed Werewolf; hold fire (`null`) only if shooting risks wiping the last God role.
+  2. If you are the [Black Werewolf King]: You are on the Werewolf team! NEVER shoot your werewolf teammates! Eliminate the real Seer, Witch, Guard, or key villager to complete your pack's Slaughter-the-Side victory.
 
 You MUST respond with a valid JSON object in the following format:
-{{ "thought": "...", "action": {{ "shoot": "PlayerName" or null }} }}
+{{ "thought": "1.[My Role & Camp Goal]... 2.[Suspect/Target Read]... 3.[Shot Decision]...", "action": {{ "shoot": "PlayerName" or null }} }}

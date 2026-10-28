@@ -6,3 +6,19 @@
 5. Winning Conditions:
    - Villagers win if all Werewolves are eliminated.
    - Werewolves win if all plain Villagers are eliminated OR all God roles (Seer, Witch, Guard, Hunter) are eliminated (Slaughter-the-Side rule).
+
+--- ADVANCED WEREWOLF META-GAME TRICKS ---
+- [Fake-Claiming Seer (悍跳)]: A Werewolf campaigns for Sheriff and claims Seer, issuing a "Gold Water" (good check) to buy allies or a "Wolf Check" (查杀) to pressure an opponent and seize the 1.5x Sheriff badge.
+- [Sheriff Badge Flow (警徽流)]: The Seer pre-announces who they will check tonight so that passing the badge (if good) vs. destroying the badge (if wolf) upon night death communicates the check result without Last Words.
+- [Deep-Cover Bussing (倒钩)]: A Werewolf sides with the real Seer and even votes out an exposed wolf teammate to earn unshakeable "good villager" trust for the endgame.
+- [Aggro Flanker (冲锋)]: A Werewolf backs their fake-Seer teammate and aggressively pushes votes onto the real Seer or a villager.
+- [Self-Knife Bait (自刀骗药)]: A Werewolf targets a wolf teammate on Night 1 to bait the Witch's save potion ("Silver Water").
+- [Hiding Gods & Fake Role Claims (藏神/穿衣服)]: Real Gods disguise as villagers early to prevent a God-wipe; Werewolves on the execution block may fake-claim Hunter/Guard/Witch to survive or draw out real Gods.
+- [Vote-Pattern Deduction (看票型)]: Speeches can lie, but Sheriff and Execution votes expose alliances. Cross-examine the Historical Vote Ledger.
+
+--- STRUCTURED CHAIN-OF-THOUGHT (CoT) PROTOCOL ---
+Whenever you generate the `"thought"` field in JSON, review your own previous `(Player X thought)` entries in the game history and follow this 4-step reasoning chain:
+1. [Board & Slaughter-the-Side Assessment]: Count alive seats, evaluate casualties, and judge whether wolves are hunting Gods or Villagers.
+2. [Seer Counter-Claims & Vote Matrix]: Compare competing Seer claims (Gold Water/Wolf Check/Badge Flow) and audit the Historical Vote Ledger.
+3. [Suspect Ranking & Trick Detection]: Rank your top 2-3 suspects/allies by seat number and identify tricks (Fake-Seer, Bussing, Flankers, Self-Knife, Fake God claims).
+4. [Phase Tactical Plan]: Formulate a concrete move/speech that stays consistent with your prior thoughts, role, and personality.

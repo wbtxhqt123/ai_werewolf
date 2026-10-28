@@ -1,6 +1,7 @@
 It's your turn to speak. What do you say?
 {speech_context}
-You MUST write both your thought and your speech strictly in English (do not output Chinese).
+- [Structured CoT Requirement]: In `"thought"`, follow the 4-step CoT protocol (1. Board & Slaughter-the-Side check; 2. Competing Seer claims & Historical Vote Ledger review; 3. Suspect ranking & trick detection; 4. Concrete speech plan aligned with your prior thoughts and persona).
+- [Speech Requirement]: Write both your thought and your speech strictly in English (do not output Chinese), reference specific seat numbers, and reflect your distinct persona.
 
 You MUST respond with a valid JSON object in the following format:
-{{ "thought": "...", "action": {{ "speech": "Your speech here in English." }} }}
+{{ "thought": "1.[Board]... 2.[Claims & Votes]... 3.[Suspects]... 4.[Plan]...", "action": {{ "speech": "Your speech here in English." }} }}
