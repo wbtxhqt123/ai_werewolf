@@ -9,10 +9,10 @@
     <link href="https://fonts.loli.net/css2?family=Cinzel:wght@600;700;800;900&family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/base.css?v=10">
     <link rel="stylesheet" href="/static/css/layout.css?v=14">
-    <link rel="stylesheet" href="/static/css/components.css?v=15">
-    <link rel="stylesheet" href="/static/css/setup.css?v=12">
-    <link rel="stylesheet" href="/static/css/game.css?v=17">
-    <link rel="stylesheet" href="/static/css/modals.css?v=12">
+    <link rel="stylesheet" href="/static/css/components.css?v=16">
+    <link rel="stylesheet" href="/static/css/setup.css?v=13">
+    <link rel="stylesheet" href="/static/css/game.css?v=18">
+    <link rel="stylesheet" href="/static/css/modals.css?v=13">
 </head>
 <body>
     <div id="app">
@@ -45,6 +45,7 @@
         <!-- Login / Setup Screen -->
         <div id="setup-screen" class="screen active">
             <div class="top-fixed-controls">
+                <button id="lobby-history-btn" class="top-fixed-btn" title="Previous Games" aria-label="Previous Games">📜 <span id="lobby-history-label">历史战绩</span></button>
                 <button id="lobby-audio-btn" class="top-fixed-btn" title="Toggle Music" aria-label="Toggle Music">🎵 <span class="audio-label">音乐</span></button>
                 <button id="lobby-lang-btn" class="top-fixed-btn lang-toggle-fixed">中文/EN</button>
             </div>
@@ -72,6 +73,7 @@
                 </div>
                 
                 <button id="open-settings-btn" class="secondary-btn">⚙️ Advanced Settings</button>
+                <button id="open-history-btn" class="secondary-btn">📜 历史战绩</button>
 
                 <button id="start-game-btn" class="primary-btn">Start Game</button>
             </div>
@@ -142,6 +144,7 @@
                     <div class="alive-counter-pill" id="alive-counter-pill">👥 9 / 9</div>
                 </div>
                 <div class="header-right">
+                    <button id="archive-list-btn" class="icon-btn header-pill-btn hidden" title="Switch Historical Game" aria-label="Switch Historical Game">📋 <span id="archive-list-label">切换对局</span></button>
                     <button id="speed-toggle-btn" class="icon-btn header-pill-btn speed-pill-btn" title="Message Pacing Speed" aria-label="Message Pacing Speed">🐢 <span class="speed-label">1x</span></button>
                     <button id="skip-queue-btn" class="icon-btn header-pill-btn skip-pill-btn hidden" title="Show All Queued Messages" aria-label="Show All Queued Messages">⏭️ <span class="skip-label">跳过</span></button>
                     <button id="audio-toggle-btn" class="icon-btn header-pill-btn" title="Toggle Music" aria-label="Toggle Music">🎵 <span class="audio-label">音乐</span></button>
@@ -203,6 +206,23 @@
                         <button id="send-action-btn" disabled>Send</button>
                     </div>
                     <div id="choice-buttons" class="choice-buttons"></div>
+                </div>
+                <div class="archive-reader-toolbar hidden" id="archive-reader-toolbar">
+                    <div class="archive-toolbar-row">
+                        <div class="archive-control-group">
+                            <span class="archive-group-label" id="archive-perspective-label">视角:</span>
+                            <button type="button" class="archive-pill-btn active" data-perspective="god" id="persp-god-btn">👁️ 全知视角</button>
+                            <button type="button" class="archive-pill-btn" data-perspective="me" id="persp-me-btn">👤 第一视角</button>
+                            <button type="button" class="archive-pill-btn" data-perspective="speech" id="persp-speech-btn">🗣️ 仅看发言</button>
+                        </div>
+                        <div class="archive-control-group">
+                            <button type="button" class="archive-pill-btn thought-toggle-btn active" id="toggle-thoughts-btn" title="Toggle AI Thoughts">🧠 AI心路</button>
+                            <button type="button" class="archive-pill-btn" id="expand-all-phases-btn" title="Expand / Collapse All Phases">📂 全部收起</button>
+                        </div>
+                    </div>
+                    <div class="archive-phase-jump-row" id="archive-phase-jump-bar">
+                        <!-- Dynamically populated phase jump pills -->
+                    </div>
                 </div>
             </footer>
         </div>
@@ -352,6 +372,35 @@
                 </div>
             </div>
         </div>
+
+        <!-- Match History Picker Modal -->
+        <div id="history-picker-modal" class="modal">
+            <div class="modal-content records-content history-picker-content">
+                <div class="records-header">
+                    <div class="records-title-group">
+                        <span class="records-icon">📜</span>
+                        <h2 id="history-picker-title">往期对局战绩</h2>
+                    </div>
+                    <button class="close-modal-round" id="close-history-picker-btn" aria-label="Close">&times;</button>
+                </div>
+
+                <!-- Stats Summary Banner -->
+                <div id="history-stats-banner" class="history-stats-banner"></div>
+
+                <!-- Filter Pills -->
+                <div class="records-filter-bar" id="history-picker-filters">
+                    <button class="filter-pill active" data-hfilter="all" id="hfilter-all-btn">🌟 全部对局</button>
+                    <button class="filter-pill" data-hfilter="won" id="hfilter-won-btn">🏆 获胜局</button>
+                    <button class="filter-pill" data-hfilter="Villagers" id="hfilter-good-btn">👱 好人胜</button>
+                    <button class="filter-pill" data-hfilter="Werewolves" id="hfilter-wolf-btn">🐺 狼人胜</button>
+                </div>
+
+                <!-- Match List Body -->
+                <div class="records-timeline-container history-list-container" id="history-list-content">
+                    <p class="op-history-loading">正在加载往期战绩...</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Templates -->
@@ -370,6 +419,6 @@
         </div>
     </template>
 
-    <script src="/static/js/app.js?v=26"></script>
+    <script src="/static/js/app.js?v=28"></script>
 </body>
 </html>

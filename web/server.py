@@ -177,8 +177,9 @@ class GameStateResponse(BaseModel):
     winner: Optional[str] = None
 
 def run_game_thread(game_instance: Game):
-    """The target function for the game thread. Simply starts the game loop."""
+    """The target function for the game thread. Starts the game loop and persists history on completion."""
     game_instance.start()
+    save_game_history_for_instance(game_instance)
 
 @app.get("/favicon.ico")
 async def favicon():
@@ -382,42 +383,163 @@ async def get_game_state(game_id: str, last_log_index: int = 0):
         winner=winner_val
     )
 
-def save_game_history_if_ended(session: GameSession):
-    """Saves the game's outcome and logs to the historical record.
+_history_save_lock = threading.Lock()
 
-    This function is called when a game has concluded. It extracts the necessary
-    information from the `Game` object and uses the `GameHistory` manager to persist it.
-    """
+def save_game_history_for_instance(game_instance: Optional[Game]):
+    """Saves a completed Game instance's outcome, players, logs, votes, and deaths to GameHistory."""
     global game_history
-    game_instance = session.game_instance
-    if game_instance and game_instance.winner and not getattr(game_instance, "history_saved", False):
+    if not game_instance or not game_instance.winner:
+        return
+    with _history_save_lock:
+        if getattr(game_instance, "history_saved", False):
+            return
         players_info = []
         for p in game_instance.players:
             players_info.append({
                 "name": p.name,
                 "role": p.role.name if p.role else "Unknown",
-                "is_alive": p.is_alive
+                "is_alive": p.is_alive,
+                "is_sheriff": bool(p.is_sheriff),
+                "personality": getattr(p.controller, "personality", None),
             })
-        
+
         logs_data = []
         for entry in game_instance.game_log:
             logs_data.append({
+                "id": entry.id,
                 "type": entry.log_type.name,
                 "message": entry.message,
                 "source": entry.source.name if entry.source else None,
                 "target": entry.target.name if entry.target else None,
                 "data": entry.data,
                 "camps": entry.camps,
+                "visible_to_roles": list(entry.visible_to_roles) if entry.visible_to_roles else [],
+                "visible_to_players": [vp.name for vp in entry.visible_to_players] if entry.visible_to_players else [],
+                "day": entry.day,
                 "round": entry.day,
-                "state": entry.state
+                "state": entry.state,
             })
 
         game_history.add_game(
             winner=game_instance.winner,
             players=players_info,
-            logs=logs_data
+            logs=logs_data,
+            votes=list(game_instance.vote_history),
+            deaths=list(game_instance.death),
+            rounds=game_instance.day,
         )
-        game_instance.history_saved = True
+        setattr(game_instance, "history_saved", True)
+
+def save_game_history_if_ended(session: GameSession):
+    """Saves the game's outcome and logs to the historical record if the game has concluded."""
+    if session and session.game_instance:
+        save_game_history_for_instance(session.game_instance)
+
+def _resolve_historical_game_id(game_id: str) -> Optional[int]:
+    """Extracts a numeric historical game ID from 'history_<id>' or plain numeric '<id>'."""
+    if not game_id:
+        return None
+    if game_id.startswith("history_"):
+        raw = game_id[len("history_"):]
+        if raw.isdigit():
+            return int(raw)
+    elif game_id.isdigit():
+        return int(game_id)
+    return None
+
+def _get_or_rehydrate_session(game_id: str) -> Optional[GameSession]:
+    """Retrieves an active GameSession or rehydrates a finished historical game on demand."""
+    session = game_manager.get_game(game_id)
+    if session:
+        return session
+
+    hist_id = _resolve_historical_game_id(game_id)
+    if hist_id is None:
+        return None
+
+    detail = game_history.get_game_details(hist_id)
+    if not detail:
+        return None
+
+    from game.player import Player, Villager, Werewolf, Witch, Seer, Guard, Hunter, BlackWerewolfKing
+    from game.log import LogType
+    from game.states.special_states import GameOverState
+
+    role_classes = {
+        "Villager": Villager,
+        "Werewolf": Werewolf,
+        "Witch": Witch,
+        "Seer": Seer,
+        "Guard": Guard,
+        "Hunter": Hunter,
+        "Black Werewolf King": BlackWerewolfKing,
+    }
+
+    web_ctrl = WebController()
+    controllers_map = {}
+    for p_info in detail.get("players", []):
+        p_name = p_info.get("name", "Player 1")
+        if p_name == "Player 1":
+            controllers_map[p_name] = web_ctrl
+        else:
+            rc = RandomController()
+            if p_info.get("personality"):
+                setattr(rc, "personality", p_info["personality"])
+            controllers_map[p_name] = rc
+
+    if not controllers_map:
+        return None
+
+    rehydrated_game = Game(controllers_map)
+    rehydrated_game.game_log.clear()
+    rehydrated_game.winner = detail.get("winner")
+    rehydrated_game.day = detail.get("rounds", 1)
+    rehydrated_game.vote_history = list(detail.get("votes", []))
+    rehydrated_game.death = list(detail.get("deaths", []))
+    setattr(rehydrated_game, "history_saved", True)
+
+    player_by_name: Dict[str, Player] = {}
+    for p_obj, p_info in zip(rehydrated_game.players, detail.get("players", [])):
+        r_name = p_info.get("role", "Villager")
+        r_cls = role_classes.get(r_name, Villager)
+        p_obj.role = r_cls()
+        p_obj.is_alive = bool(p_info.get("is_alive", False))
+        p_obj.is_sheriff = bool(p_info.get("is_sheriff", False))
+        if p_obj.is_sheriff:
+            setattr(rehydrated_game, "sheriff", p_obj)
+        player_by_name[p_obj.name] = p_obj
+
+    for idx, l_dict in enumerate(detail.get("logs", [])):
+        l_type_str = l_dict.get("type") or l_dict.get("log_type") or "SYSTEM"
+        l_type = getattr(LogType, l_type_str, LogType.SYSTEM)
+        src_name = l_dict.get("source")
+        tgt_name = l_dict.get("target")
+        vis_players = [
+            player_by_name[vn]
+            for vn in (l_dict.get("visible_to_players") or [])
+            if vn in player_by_name
+        ]
+        entry = LogEntry(
+            id=l_dict.get("id", idx),
+            log_type=l_type,
+            message=l_dict.get("message", ""),
+            source=player_by_name.get(src_name) if src_name else None,
+            target=player_by_name.get(tgt_name) if tgt_name else None,
+            data=l_dict.get("data") or {},
+            visible_to_roles=l_dict.get("visible_to_roles") or [],
+            camps=l_dict.get("camps") or [],
+            visible_to_players=vis_players,
+            day=l_dict.get("day") or l_dict.get("round") or 1,
+            state=l_dict.get("state") or "",
+        )
+        rehydrated_game.game_log.append(entry)
+
+    rehydrated_game.state = GameOverState(rehydrated_game, winner=str(rehydrated_game.winner or "Villagers"))
+    dummy_thread = threading.Thread(target=lambda: None)
+    session = GameSession(game_id, rehydrated_game, web_ctrl, dummy_thread)
+    with game_manager.lock:
+        game_manager.active_games[game_id] = session
+    return session
 
 @app.get("/api/game/{game_id}/full_logs")
 async def get_full_logs(game_id: str):
@@ -427,7 +549,7 @@ async def get_full_logs(game_id: str):
     review the entire history of the game from each player's perspective. It iterates
     through all game logs and filters them based on each player's visibility rules.
     """
-    session = game_manager.get_game(game_id)
+    session = _get_or_rehydrate_session(game_id)
     
     if not session:
         return {"logs": []}
@@ -491,7 +613,7 @@ async def get_game_records(game_id: str):
     This data is used to populate the "Game Records" tab in the UI, providing a
     structured overview of key events.
     """
-    session = game_manager.get_game(game_id)
+    session = _get_or_rehydrate_session(game_id)
     
     if not session:
         return {"votes": [], "deaths": []}
@@ -519,7 +641,7 @@ async def get_player_operations(game_id: str, player_name: str):
     """
     Retrieves the operations history for a specific player in a game.
     """
-    session = game_manager.get_game(game_id)
+    session = _get_or_rehydrate_session(game_id)
     
     if not session:
         raise HTTPException(status_code=404, detail="Game not found")
@@ -529,7 +651,18 @@ async def get_player_operations(game_id: str, player_name: str):
     if not is_game_over and player_name != "Player 1":
         raise HTTPException(status_code=403, detail="Cannot view other players' operations while the game is active")
 
+    hist_id = _resolve_historical_game_id(game_id)
+    if hist_id is not None and not game_manager.get_game(game_id):
+        detail = game_history.get_game_details(hist_id)
+        if detail:
+            return game_history.reconstruct_player_operations(detail, player_name)
+
     history = game_instance.get_player_operations_history(player_name)
+    # Fallback for legacy historical records where source was omitted on Witch/Seer/Guard logs
+    if hist_id is not None and history.get("role") in ("Witch", "Seer", "Guard"):
+        detail = game_history.get_game_details(hist_id)
+        if detail:
+            return game_history.reconstruct_player_operations(detail, player_name)
     return history
 
 @app.post("/api/game/action")
@@ -575,7 +708,7 @@ async def evaluate_game(request: EvaluationRequest):
     feedback to the player based on their role, the game's outcome, and the chosen
     evaluation mode (e.g., 'mild', 'mean').
     """
-    session = game_manager.get_game(request.game_id)
+    session = _get_or_rehydrate_session(request.game_id)
     
     if not session:
         raise HTTPException(status_code=404, detail="Game not found")
@@ -628,7 +761,7 @@ async def evaluate_game(request: EvaluationRequest):
 @app.post("/api/game/evaluation/chat")
 async def evaluation_chat(request: ChatRequest):
     """Handles follow-up chat messages within an evaluation session."""
-    session = game_manager.get_game(request.game_id)
+    session = _get_or_rehydrate_session(request.game_id)
     
     if not session or not session.game_evaluator:
         raise HTTPException(status_code=400, detail="No active evaluation session")
@@ -639,7 +772,7 @@ async def evaluation_chat(request: ChatRequest):
 @app.post("/api/game/argue")
 async def argue_with_ai_players(request: ArgueRequest):
     """Allows the human player to pick one or more AI players after the game ends to argue/debrief."""
-    session = game_manager.get_game(request.game_id)
+    session = _get_or_rehydrate_session(request.game_id)
     if not session or not session.game_instance:
         raise HTTPException(status_code=404, detail="Game not found")
 
