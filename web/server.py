@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from typing import Any, List, Optional, Dict
 import shutil
 import os
+import json
 import tempfile
 
 from game.game import Game
@@ -127,6 +128,7 @@ class StartGameRequest(BaseModel):
     num_players: int
     user_role: str
     user_avatar: Optional[str] = "👤"
+    user_seat: Optional[Any] = None
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     model_name: Optional[str] = None
@@ -134,6 +136,18 @@ class StartGameRequest(BaseModel):
     player_configs: Optional[dict] = None
     language: str = "zh"
     turn_timeout: Optional[float] = None
+
+class SpectateRequest(BaseModel):
+    """Defines the structure for enabling dead-player spectator (God View) mode."""
+    game_id: str
+
+class LLMTestRequest(BaseModel):
+    """Defines the structure for testing an LLM provider connection before starting a game."""
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    model_name: Optional[str] = None
+    provider: Optional[str] = None
+    language: str = "zh"
 
 class UpdateSettingsRequest(BaseModel):
     """Defines the structure for updating runtime game settings."""
@@ -175,6 +189,23 @@ class GameStateResponse(BaseModel):
     players: List[dict] = []
     game_id: Optional[str] = None
     winner: Optional[str] = None
+    human_player: str = "Player 1"
+    spectator_mode: bool = False
+
+
+def _get_human_player(game_instance: Optional[Game]):
+    """Finds the human-controlled player in the game (defaults to Player 1 if none is marked is_human)."""
+    if not game_instance or not getattr(game_instance, "players", None):
+        return None
+    for p in game_instance.players:
+        if getattr(p.controller, "is_human", False):
+            return p
+    return game_instance.get_player_by_name("Player 1") or game_instance.players[0]
+
+
+def _get_human_player_name(game_instance: Optional[Game]) -> str:
+    hp = _get_human_player(game_instance)
+    return hp.name if hp else "Player 1"
 
 def run_game_thread(game_instance: Game):
     """The target function for the game thread. Starts the game loop and persists history on completion."""
@@ -250,10 +281,25 @@ async def start_game(request: StartGameRequest):
     """
     timeout = float(request.turn_timeout) if request.turn_timeout and request.turn_timeout > 0 else None
     web_controller = WebController(timeout=timeout)
-    
-    players_with_controllers = {
-        "Player 1": web_controller,
-    }
+
+    # Resolve human player's seat number (1..num_players). Defaults to 1 if omitted for backwards compatibility.
+    total_seats = max(2, int(request.num_players))
+    chosen_seat = 1
+    if request.user_seat is not None:
+        if isinstance(request.user_seat, str) and request.user_seat.strip().lower() == "random":
+            chosen_seat = random.randint(1, total_seats)
+        else:
+            try:
+                seat_int = int(request.user_seat)
+                if seat_int == 0:
+                    chosen_seat = random.randint(1, total_seats)
+                elif 1 <= seat_int <= total_seats:
+                    chosen_seat = seat_int
+            except (ValueError, TypeError):
+                chosen_seat = 1
+
+    human_player_name = f"Player {chosen_seat}"
+    players_with_controllers: Dict[str, Any] = {}
     
     default_llm_client = None
     if request.api_key:
@@ -276,9 +322,13 @@ async def start_game(request: StartGameRequest):
         "silent",
     ]
     random.shuffle(personalities)
-    for i in range(request.num_players - 1):
-        player_name = f"Player {i+2}"
-        
+    ai_idx = 0
+    for seat_num in range(1, total_seats + 1):
+        player_name = f"Player {seat_num}"
+        if seat_num == chosen_seat:
+            players_with_controllers[player_name] = web_controller
+            continue
+
         player_config = None
         if request.player_configs and player_name in request.player_configs:
             player_config = request.player_configs[player_name]
@@ -287,14 +337,14 @@ async def start_game(request: StartGameRequest):
             player_config["api_key"] = request.api_key
 
         if player_config and player_config.get("api_key"):
-            personality = personalities[i % len(personalities)]
+            personality = personalities[ai_idx % len(personalities)]
             players_with_controllers[player_name] = LLMController(
                 personality=personality,
                 llm_config=player_config,
                 language=request.language
             )
         elif default_llm_client:
-            personality = personalities[i % len(personalities)]
+            personality = personalities[ai_idx % len(personalities)]
             players_with_controllers[player_name] = LLMController(
                 personality=personality,
                 llm_client=default_llm_client,
@@ -302,6 +352,7 @@ async def start_game(request: StartGameRequest):
             )
         else:
             players_with_controllers[player_name] = RandomController(language=request.language)
+        ai_idx += 1
 
     role_to_assign = request.user_role
     if role_to_assign == "Random":
@@ -330,7 +381,7 @@ async def start_game(request: StartGameRequest):
     }
     game_id = game_manager.create_game(game_instance, web_controller, game_thread, llm_config=session_llm_config)
 
-    return {"message": "Game started", "game_id": game_id}
+    return {"message": "Game started", "game_id": game_id, "human_player": human_player_name}
 
 @app.get("/api/game/{game_id}/state")
 async def get_game_state(game_id: str, last_log_index: int = 0):
@@ -355,11 +406,13 @@ async def get_game_state(game_id: str, last_log_index: int = 0):
 
     players_data = []
     winner_val = None
+    human_name = _get_human_player_name(game_instance)
+    is_spectator = bool(getattr(web_controller, "spectator_mode", False))
     if game_instance:
         winner_val = game_instance.winner
-        reveal_all_roles = (not is_active) or bool(game_instance.winner)
+        reveal_all_roles = (not is_active) or bool(game_instance.winner) or is_spectator
         for p in game_instance.players:
-            visible_role = (p.role.name if p.role else "Unknown") if (reveal_all_roles or p.name == "Player 1") else "Unknown"
+            visible_role = (p.role.name if p.role else "Unknown") if (reveal_all_roles or p.name == human_name) else "Unknown"
             personality_val = getattr(p.controller, "personality", None) if reveal_all_roles else None
             players_data.append({
                 "name": p.name,
@@ -380,7 +433,9 @@ async def get_game_state(game_id: str, last_log_index: int = 0):
         game_active=is_active,
         players=players_data,
         game_id=game_id,
-        winner=winner_val
+        winner=winner_val,
+        human_player=human_name,
+        spectator_mode=is_spectator,
     )
 
 _history_save_lock = threading.Lock()
@@ -400,6 +455,7 @@ def save_game_history_for_instance(game_instance: Optional[Game]):
                 "role": p.role.name if p.role else "Unknown",
                 "is_alive": p.is_alive,
                 "is_sheriff": bool(p.is_sheriff),
+                "is_human": bool(getattr(p.controller, "is_human", False)),
                 "personality": getattr(p.controller, "personality", None),
             })
 
@@ -476,10 +532,13 @@ def _get_or_rehydrate_session(game_id: str) -> Optional[GameSession]:
     }
 
     web_ctrl = WebController()
-    controllers_map = {}
-    for p_info in detail.get("players", []):
+    controllers_map: Dict[str, Any] = {}
+    rehydrated_players_list = detail.get("players", [])
+    has_explicit_human = any(p_info.get("is_human") for p_info in rehydrated_players_list)
+    for p_info in rehydrated_players_list:
         p_name = p_info.get("name", "Player 1")
-        if p_name == "Player 1":
+        is_human_seat = bool(p_info.get("is_human")) if has_explicit_human else (p_name == "Player 1")
+        if is_human_seat:
             controllers_map[p_name] = web_ctrl
         else:
             rc = RandomController()
@@ -555,10 +614,12 @@ async def get_full_logs(game_id: str):
         return {"logs": []}
         
     game_instance = session.game_instance
-    is_game_over = session.is_finished() or bool(game_instance.winner)
+    is_spectator = bool(session.web_controller and getattr(session.web_controller, "spectator_mode", False))
+    is_game_over = session.is_finished() or bool(game_instance.winner) or is_spectator
+    human_name = _get_human_player_name(game_instance)
     
     player_logs = {}
-    target_players = game_instance.players if is_game_over else [p for p in game_instance.players if p.name == "Player 1"]
+    target_players = game_instance.players if is_game_over else [p for p in game_instance.players if p.name == human_name]
     
     for p in target_players:
         player_logs[p.name] = {
@@ -619,7 +680,8 @@ async def get_game_records(game_id: str):
         return {"votes": [], "deaths": []}
         
     game_instance = session.game_instance
-    is_game_over = session.is_finished() or bool(game_instance.winner)
+    is_spectator = bool(session.web_controller and getattr(session.web_controller, "spectator_mode", False))
+    is_game_over = session.is_finished() or bool(game_instance.winner) or is_spectator
     deaths = game_instance.death
     if not is_game_over:
         sanitized_deaths = []
@@ -647,8 +709,10 @@ async def get_player_operations(game_id: str, player_name: str):
         raise HTTPException(status_code=404, detail="Game not found")
         
     game_instance = session.game_instance
-    is_game_over = session.is_finished() or bool(game_instance.winner)
-    if not is_game_over and player_name != "Player 1":
+    is_spectator = bool(session.web_controller and getattr(session.web_controller, "spectator_mode", False))
+    is_game_over = session.is_finished() or bool(game_instance.winner) or is_spectator
+    human_name = _get_human_player_name(game_instance)
+    if not is_game_over and player_name != human_name:
         raise HTTPException(status_code=403, detail="Cannot view other players' operations while the game is active")
 
     hist_id = _resolve_historical_game_id(game_id)
@@ -680,6 +744,106 @@ async def post_action(request: ActionRequest):
     web_controller = session.web_controller
     web_controller.set_input(request.action)
     return {"status": "ok"}
+
+@app.post("/api/game/spectate")
+async def enable_spectate_mode(request: SpectateRequest):
+    """Enables God-View spectator mode once the human player has been eliminated and has no pending actions."""
+    session = game_manager.get_game(request.game_id)
+    if not session or not session.game_instance:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    human_player = _get_human_player(session.game_instance)
+    if human_player and human_player.is_alive and not session.is_finished():
+        raise HTTPException(status_code=403, detail="Cannot enable spectator mode while human player is still alive")
+
+    if session.web_controller.pending_request is not None:
+        raise HTTPException(status_code=409, detail="Please complete your final death/last-words action before spectating")
+
+    if not session.web_controller.spectator_mode:
+        session.web_controller.enable_spectator_mode()
+        from game.log import LogType
+        session.game_instance.log(
+            LogEntry(
+                log_type=LogType.SYSTEM,
+                message={
+                    "en": "👁️ Spectator God View enabled: all player roles, night actions, and AI thoughts are now visible.",
+                    "zh": "👁️ 已开启亡灵上帝视角：全场真实身份、夜间行动与 AI 内心思考已全部揭晓。",
+                },
+                visible_to_players=[human_player] if human_player else [],
+            )
+        )
+
+    return {"status": "ok", "spectator_mode": True}
+
+
+@app.post("/api/llm/test")
+async def test_llm_connection(request: LLMTestRequest):
+    """Tests whether the provided (or environment-configured) LLM API key and endpoint are reachable."""
+    is_zh = request.language == "zh"
+    effective_key = (request.api_key or "").strip() or os.getenv("OPENAI_API_KEY") or os.getenv("GROQ_API_KEY")
+    if not effective_key:
+        return {
+            "ok": False,
+            "mode": "random",
+            "model": None,
+            "provider": request.provider or "openai",
+            "message": (
+                "未配置 API Key，对局将使用内置随机机器人代打。"
+                if is_zh
+                else "No API Key configured. AI players will use the built-in random bot."
+            ),
+        }
+    try:
+        client = LLMClient(
+            api_key=effective_key,
+            base_url=request.base_url,
+            model=request.model_name,
+            provider=request.provider,
+        )
+    except Exception as e:
+        return {
+            "ok": False,
+            "mode": "error",
+            "model": request.model_name,
+            "provider": request.provider or "openai",
+            "message": f"初始化失败：{e}" if is_zh else f"Init failed: {e}",
+        }
+
+    raw = await asyncio.to_thread(
+        client.get_completion,
+        'Reply strictly with JSON: {"ok": true}',
+        True,
+    )
+    if raw and '"Error calling LLM:' in raw:
+        try:
+            err_obj = json.loads(raw) if "json" in globals() else {}
+            err_detail = err_obj.get("thought", raw)
+        except Exception:
+            err_detail = raw
+        return {
+            "ok": False,
+            "mode": "error",
+            "model": client.model,
+            "provider": request.provider or "openai",
+            "message": (
+                f"连接失败 ({client.model})：{err_detail}"
+                if is_zh
+                else f"Connection failed ({client.model}): {err_detail}"
+            ),
+        }
+
+    return {
+        "ok": True,
+        "mode": "llm",
+        "model": client.model,
+        "provider": request.provider or "openai",
+        "message": (
+            f"✅ 连接成功！当前模型：{client.model}"
+            if is_zh
+            else f"✅ Connected successfully! Active model: {client.model}"
+        ),
+    }
+
 
 @app.post("/api/game/settings")
 async def update_settings(request: UpdateSettingsRequest):
@@ -715,11 +879,7 @@ async def evaluate_game(request: EvaluationRequest):
 
     game_instance = session.game_instance
 
-    human_player = None
-    for p in game_instance.players:
-        if p.name == "Player 1":
-            human_player = p
-            break
+    human_player = _get_human_player(game_instance)
     
     if not human_player:
         raise HTTPException(status_code=400, detail="Human player not found")

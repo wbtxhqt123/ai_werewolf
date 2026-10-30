@@ -172,6 +172,17 @@ class Controller(ABC):
         """
         pass
 
+    def get_sheriff_withdraw_decision(self, player: Player) -> bool:
+        """Called when a Sheriff candidate can decide whether to withdraw (退水) after campaign speeches.
+
+        Args:
+            player: The candidate player making the decision.
+
+        Returns:
+            True to withdraw from the Sheriff election, False to stay in the race.
+        """
+        return False
+
 class HumanController(Controller):
     """A controller that allows a human to play via the command line.
 
@@ -242,6 +253,10 @@ class HumanController(Controller):
         from .utils import get_player_choice
         print(f"\n{player.name}, you have died and must decide what to do with the Sheriff badge.")
         return get_player_choice("Choose a player to pass the badge to (or abstain to destroy it):", potential_targets, allow_abstain=True)
+
+    def get_sheriff_withdraw_decision(self, player: Player) -> bool:
+        from .utils import get_yes_no_choice
+        return get_yes_no_choice(f"{player.name}, do you want to withdraw from the Sheriff election (退水)?")
 
 class RandomController(Controller):
     """A controller for an AI player that makes purely random decisions.

@@ -149,6 +149,8 @@ class MockLLMClient:
             action = {"vote": None} # Abstain by default
         elif "run for sheriff?" in prompt.lower():
             action = {"run_for_sheriff": random.choice([True, False])}
+        elif "withdraw_sheriff" in prompt.lower() or "退水" in prompt.lower():
+            action = {"withdraw_sheriff": False}
         elif "vote for to be sheriff?" in prompt.lower():
             action = {"vote_for_sheriff": None} # Abstain
         elif "choose a player to eliminate" in prompt.lower():
@@ -283,6 +285,11 @@ ACTION_SCHEMAS: dict[str, dict[str, Any]] = {
         "keys": ("run_for_sheriff",),
         "type": "bool",
         "example": '{"thought": "...", "action": {"run_for_sheriff": true}}',
+    },
+    "withdraw_sheriff": {
+        "keys": ("withdraw_sheriff",),
+        "type": "bool",
+        "example": '{"thought": "...", "action": {"withdraw_sheriff": false}}',
     },
     "seer_action": {
         "keys": ("check",),
@@ -433,6 +440,9 @@ def validate_and_normalize_response(parsed: dict, action_name: str | None = None
         if not isinstance(raw_val, str) or not raw_val.strip():
             raise ValueError(f"Field 'action.{key}' must be a non-empty string. Expected format: {example}")
         action[key] = raw_val.strip()
+        if "withdraw" in action:
+            w_val = _coerce_bool(action.get("withdraw"))
+            action["withdraw"] = bool(w_val) if w_val is not None else False
     elif schema_type == "bool":
         coerced = _coerce_bool(raw_val)
         if coerced is None:
@@ -966,6 +976,8 @@ class LLMController(Controller):
             return {"vote_for_sheriff": None}
         elif action_name == "run_for_sheriff":
             return {"run_for_sheriff": False}
+        elif action_name == "withdraw_sheriff":
+            return {"withdraw_sheriff": False}
         elif action_name == "seer_action":
             return {"check": None}
         elif action_name == "guard_protect":
@@ -1018,16 +1030,16 @@ class LLMController(Controller):
             if is_zh:
                 return (
                     "【当前场景：警长竞选演说】你正在竞选警长（拥有 1.5 票投票权并决定发言顺序）。"
-                    "请向全场发表你的竞选演说：如果你是真预言家，请直接报出昨晚的查验结果（金水/查杀）、查验心路历程并留好【警徽流】（今晚及明晚查谁）；"
+                    "请向全场发表你的竞选演说：如果你是真预言家，请直接报出昨晚的查验结果（金水/查杀）、查验心路历程并留好【警徽流】（今晚及明晚查谁），绝不退水；"
                     "如果你是悍跳狼人，请逼真地伪装预言家报出编造的查验结果（金水拉拢好人或查杀施压）与警徽流，争夺警徽；"
-                    "如果你是其他好人或选择打掩护的狼人，请说明上警诈身份/表水理由与你对前置位起跳预言家的站边判断（控制在 2-4 句话）。"
+                    "如果你是上警表水/诈身份的好人，或者决定让路给真预言家/狼队友的候选人，请说明上警理由与站边判断，并可在发言末尾宣布“我退水”（或在 JSON 的 action 中附上 `\"withdraw\": true`）（控制在 2-4 句话）。"
                 )
             else:
                 return (
                     "[Context: Sheriff Election Campaign Speech] You are campaigning for Sheriff (1.5x vote weight and speech order control). "
-                    "If you are the real Seer, reveal your Night 1 check result (Gold Water / Wolf Check), your reasoning, and your [Badge Flow (警徽流)] plan; "
+                    "If you are the real Seer, reveal your Night 1 check result (Gold Water / Wolf Check), your reasoning, and your [Badge Flow (警徽流)] plan, and never withdraw; "
                     "if you are a Werewolf fake-claiming Seer, deliver a convincing fabricated check result and badge plan to win the badge; "
-                    "otherwise, explain why you ran and how you evaluate the competing Seer claims (keep it to 2-4 sentences)."
+                    "if you are a good player who only ran to share reads or wish to step down for the real Seer, explain your stance and state 'I withdraw' (or include `\"withdraw\": true` inside `action`) (keep it to 2-4 sentences)."
                 )
 
         if state_cls_name == "TieSpeechState":
@@ -1071,7 +1083,18 @@ class LLMController(Controller):
     def get_speech(self, player: Player) -> str:
         speech_context = self._build_speech_context(player)
         action = self._get_decision(player, "speech", {"speech_context": speech_context})
-        return action.get("speech", "...")
+        speech_text = action.get("speech", "...")
+        state_cls_name = self.game.state.__class__.__name__ if (getattr(self, "game", None) and getattr(self.game, "state", None)) else ""
+        if state_cls_name == "SheriffSpeechState" and not isinstance(player.role, Seer):
+            explicit_withdraw = bool(action.get("withdraw", False))
+            if not explicit_withdraw and isinstance(speech_text, str):
+                has_negation = bool(re.search(r"(不退水|不会退水|绝不退水|don'?t\s+withdraw|not\s+withdraw|never\s+withdraw)", speech_text, re.IGNORECASE))
+                has_withdraw_phrase = bool(re.search(r"(我选择退水|我宣布退水|我退水|在此退水|表完水退水|退水了|i\s+withdraw(?:\s+from\s+the\s+sheriff)?)", speech_text, re.IGNORECASE))
+                if has_withdraw_phrase and not has_negation:
+                    explicit_withdraw = True
+            if explicit_withdraw:
+                setattr(player, "withdrew_in_speech", True)
+        return speech_text
 
     def get_vote(self, player: Player, potential_targets: list[Player]) -> Player | None:
         targets_str = ", ".join([p.name for p in potential_targets])
@@ -1153,6 +1176,26 @@ class LLMController(Controller):
         if target_name == "destroy_badge":
             return None
         return self._find_player_by_name(target_name, potential_targets)
+
+    def get_sheriff_withdraw_decision(self, player: Player) -> bool:
+        # Real Seer never withdraws from Sheriff election (0 token cost)
+        if isinstance(player.role, Seer):
+            return False
+        # If this player already hard-claimed Seer during SheriffSpeechState, keep them in the race (0 token cost)
+        if getattr(self, "game", None):
+            my_sheriff_speeches = [
+                e.get_text("zh") + " " + e.get_text("en")
+                for e in self.game.game_log
+                if e.log_type == LogType.SPEECH and e.source == player and e.state == "SheriffSpeechState"
+            ]
+            combined = " ".join(my_sheriff_speeches)
+            if re.search(r"(我是预言家|我跳预言家|真预言家|昨晚查验了|i\s+am\s+the\s+(?:real\s+)?seer|i\s+checked\s+player)", combined, re.IGNORECASE):
+                return False
+
+        candidates = getattr(self.game, "election_players", []) if getattr(self, "game", None) else []
+        candidates_str = ", ".join([p.name for p in candidates])
+        action = self._get_decision(player, "withdraw_sheriff", {"candidates": candidates_str})
+        return bool(action.get("withdraw_sheriff", False))
 
     def summarize_history(self, player: Player, logs_to_summarize: list[LogEntry]):
         """Uses the LLM to summarize the events of the day for a player.

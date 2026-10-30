@@ -43,9 +43,13 @@ graph TD
     NightResolution --> Day[Day Phase: Dawn Announcement]
     
     Day --> SheriffCheck{First Day?}
-    SheriffCheck -->|Yes| SheriffElection[Sheriff Election & Speeches]
-    SheriffCheck -->|No| SpeechOrder[Determine Speech Order]
-    SheriffElection --> SpeechOrder
+    SheriffCheck -->|Yes| SheriffElection[Sheriff Signup & Speeches]
+    SheriffElection --> SheriffWithdraw[Sheriff Withdrawal Window / 退水]
+    SheriffWithdraw -->|>= 2 Candidates| SheriffVote[Sheriff Vote]
+    SheriffWithdraw -->|0 or 1 Candidate| DayAnnouncement[Dawn Casualty Announcement]
+    SheriffVote --> DayAnnouncement
+    SheriffCheck -->|No| DayAnnouncement
+    DayAnnouncement --> SpeechOrder[Determine Speech Order]
     
     SpeechOrder --> Speeches[Player Speeches & Discussion]
     Speeches --> Voting[Exile Vote]
@@ -68,8 +72,12 @@ graph TD
 
 - **Dusk Memory Synchronization:**
   `DayEndState` synchronizes parallel day summarization across all LLM players using a bounded thread pool barrier (`concurrent.futures.wait`). Day logs are preserved until summarization completes so agents never experience night amnesia on subsequent rounds.
-- **Thought Privacy in Live Play:**
-  `LogType.THOUGHT` entries are strictly segregated. During live play, human web players only receive animation signals (`PLAYER_THINKING` / `PLAYER_DONE_THINKING`), while full internal chain-of-thought is archived for post-game debriefing.
+- **Thought Privacy in Live Play & Dead-Player Spectator Mode:**
+  `LogType.THOUGHT` entries are strictly segregated while the human player is alive. During live play, living human web players only receive animation signals (`PLAYER_THINKING` / `PLAYER_DONE_THINKING`). Once a human player is eliminated and finishes any death triggers/last words, they may opt into **Spectator God View** (`POST /api/game/spectate`), which unlocks all roles, night actions, and live AI chain-of-thought logs.
+- **Sheriff Candidate Withdrawal (`退水`):**
+  Candidates in `SheriffSpeechState` may withdraw either during their campaign speech (`withdrew_in_speech` / `"withdraw": true`) or in the dedicated post-speech `SheriffWithdrawState`. If withdrawals leave only 1 candidate, that candidate is automatically elected Sheriff without a ballot; initial podium candidates (`initial_election_players`) remain excluded from casting Sheriff votes even after withdrawing.
+- **Human Werewolf Night Kill Priority:**
+  In `WerewolfNightState`, AI werewolf teammates whisper their tactical suggestions first, and if a human werewolf is alive in the pack, the final kill target selection is always delegated to the human werewolf rather than chosen at random.
 - **Web Controller Non-Blocking Timeouts:**
   `WebController` uses bounded timeouts with automatic fallback actions (e.g., auto-abstain on expired vote turns) preventing the server from hanging when browser clients disconnect.
 - **Subclass Polymorphism:**

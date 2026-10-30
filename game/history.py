@@ -31,7 +31,10 @@ class GameHistory:
 
     @staticmethod
     def _compute_human_meta(winner: str, players: List[Dict[str, Any]]) -> tuple[str, bool]:
-        human = next((p for p in players if p.get("name") == "Player 1"), None)
+        human = (
+            next((p for p in players if p.get("is_human")), None)
+            or next((p for p in players if p.get("name") == "Player 1"), None)
+        )
         if not human and players:
             human = players[0]
         human_role = (human.get("role") if human else None) or "Unknown"

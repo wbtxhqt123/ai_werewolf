@@ -71,6 +71,17 @@
                         <!-- Roles injected by JS -->
                     </div>
                 </div>
+                <div class="form-group seat-select-group">
+                    <label id="seat-select-label" for="user-seat-select">选择座位 (Seat)</label>
+                    <select id="user-seat-select" class="seat-select-dropdown">
+                        <option value="1">1号位 (默认)</option>
+                        <option value="random">🎲 随机座号 (Random Seat)</option>
+                    </select>
+                </div>
+
+                <div id="lobby-ai-mode-badge" class="lobby-ai-mode-badge" aria-live="polite">
+                    🎲 AI 模式：内置随机机器人（可在高级设置中配置大模型 API Key）
+                </div>
                 
                 <button id="open-settings-btn" class="secondary-btn">⚙️ Advanced Settings</button>
                 <button id="open-history-btn" class="secondary-btn">📜 历史战绩</button>
@@ -106,6 +117,10 @@
                 <div class="form-group">
                     <label id="setting-modelname-label">Model Name (Optional)</label>
                     <input type="text" id="model-name" placeholder="e.g. gpt-4o">
+                </div>
+                <div class="llm-test-row">
+                    <button type="button" id="test-llm-btn" class="secondary-btn llm-test-btn">🔌 测试大模型连接</button>
+                    <div id="llm-test-status" class="llm-test-status hidden" aria-live="polite"></div>
                 </div>
 
                 <!-- Voice Transcription Model Setup & Progress Bar in Advanced Settings -->
@@ -199,6 +214,13 @@
                     <div class="action-header">
                         <div id="action-prompt" aria-live="polite">Waiting...</div>
                         <div id="turn-timer" class="turn-timer hidden" aria-label="Turn Timer">⏳ 02:00</div>
+                    </div>
+                    <div id="spectator-banner" class="spectator-banner hidden" aria-live="polite">
+                        <span id="spectator-banner-text">👻 你已出局，可开启上帝视角查看全员底牌与AI心路</span>
+                        <div class="spectator-banner-actions">
+                            <button type="button" id="enable-spectator-btn" class="spectator-pill-btn">👁️ 开启上帝视角</button>
+                            <button type="button" id="spectator-fastforward-btn" class="spectator-pill-btn">⚡ 极速观战</button>
+                        </div>
                     </div>
                     <div class="input-wrapper">
                         <input type="text" id="game-input" placeholder="Type a message..." disabled>
@@ -412,6 +434,7 @@
             <div class="player-tie-label">TIE</div>
             <div class="player-dead-label">DEAD</div>
             <div class="player-seer-badge"></div>
+            <button type="button" class="player-note-tag" title="点击标记身份猜测 (Click to tag suspect/role)">🏷️</button>
             <div class="player-avatar"></div>
             <div class="player-name"></div>
             <div class="player-status-icons"></div>

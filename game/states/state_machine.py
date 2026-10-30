@@ -23,6 +23,7 @@ from .night_states import (
 from .sheriff_states import (
     SheriffElectionState,
     SheriffSpeechState,
+    SheriffWithdrawState,
     SheriffVoteState,
     SheriffSpeechOrderState,
     SheriffDeathState,
@@ -54,6 +55,7 @@ class StateMachine:
         "execution": ExecutionState,
         "day_end": DayEndState,
         "sheriff_speech": SheriffSpeechState,
+        "sheriff_withdraw": SheriffWithdrawState,
         "sheriff_vote": SheriffVoteState,
         "tie_speech": TieSpeechState,
         "tie_vote": TieVoteState,

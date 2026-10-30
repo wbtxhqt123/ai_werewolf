@@ -44,6 +44,10 @@ let gameState = {
     lastLogIndex: 0,
     myRole: 'Random',
     myAvatar: '👤',
+    myPlayerName: 'Player 1',
+    userSeatChoice: '1',
+    spectatorMode: false,
+    playerNotes: {},
     phase: 'Day 1',
     pendingAction: null,
     lang: 'zh',
@@ -65,6 +69,43 @@ let gameState = {
 
 /** @type {number|null} - The interval ID for the game state polling timer. */
 let pollingInterval = null;
+
+/**
+ * Returns the human player's seat name (e.g. 'Player 1' or 'Player 5').
+ * @returns {string}
+ */
+function getMyPlayerName() {
+    return gameState.myPlayerName || 'Player 1';
+}
+
+const PLAYER_NOTE_STATES = [
+    { key: '', icon: '🏷️', zh: '标记', en: 'Tag', cls: 'note-none' },
+    { key: 'wolf', icon: '🐺', zh: '🐺 狼嫌', en: '🐺 Wolf?', cls: 'note-wolf' },
+    { key: 'seer', icon: '🔮', zh: '🔮 预言?', en: '🔮 Seer?', cls: 'note-seer' },
+    { key: 'good', icon: '💧', zh: '💧 金水/好', en: '💧 Good', cls: 'note-good' },
+    { key: 'god', icon: '🛡️', zh: '🛡️ 神职?', en: '🛡️ God?', cls: 'note-god' }
+];
+
+function cyclePlayerNoteTag(playerName) {
+    if (!playerName) return;
+    if (!gameState.playerNotes) gameState.playerNotes = {};
+    const currentKey = gameState.playerNotes[playerName] || '';
+    const idx = PLAYER_NOTE_STATES.findIndex(s => s.key === currentKey);
+    const nextState = PLAYER_NOTE_STATES[(idx + 1) % PLAYER_NOTE_STATES.length];
+    if (nextState.key) {
+        gameState.playerNotes[playerName] = nextState.key;
+    } else {
+        delete gameState.playerNotes[playerName];
+    }
+    try {
+        if (gameState.gameId) {
+            sessionStorage.setItem(`werewolf_notes_${gameState.gameId}`, JSON.stringify(gameState.playerNotes));
+        }
+    } catch (e) {}
+    if (gameState.players && gameState.players.length > 0) {
+        updatePlayers(gameState.players);
+    }
+}
 
 // --- CONSTANTS & CONFIGURATION ---
 
@@ -1575,8 +1616,103 @@ function setupSettingsListeners() {
     if (settingsUI.saveBtn) {
         settingsUI.saveBtn.addEventListener('click', async () => {
             saveStoredSettings();
+            updateLobbyAIModeBadge();
             settingsUI.modal.classList.remove('active');
         });
+    }
+
+    const testLlmBtn = document.getElementById('test-llm-btn');
+    if (testLlmBtn) {
+        testLlmBtn.addEventListener('click', () => testLLMConnection());
+    }
+
+    if (setupUI.apiKeyInput) {
+        setupUI.apiKeyInput.addEventListener('input', () => updateLobbyAIModeBadge());
+    }
+    const modelNameInput = document.getElementById('model-name');
+    if (modelNameInput) {
+        modelNameInput.addEventListener('input', () => updateLobbyAIModeBadge());
+    }
+    if (providerSelect) {
+        providerSelect.addEventListener('change', () => updateLobbyAIModeBadge());
+    }
+    updateLobbyAIModeBadge();
+}
+
+function updateLobbyAIModeBadge() {
+    const badge = document.getElementById('lobby-ai-mode-badge');
+    const testBtn = document.getElementById('test-llm-btn');
+    const isZh = gameState.lang === 'zh';
+    if (testBtn && !testBtn.disabled) {
+        testBtn.innerText = isZh ? '🔌 测试大模型连接' : '🔌 Test LLM Connection';
+    }
+    if (!badge) return;
+
+    const apiKey = (setupUI.apiKeyInput && setupUI.apiKeyInput.value || '').trim();
+    const provider = (document.getElementById('provider-select') && document.getElementById('provider-select').value) || 'openai';
+    const modelName = (document.getElementById('model-name') && document.getElementById('model-name').value || '').trim();
+    const defaultModels = {
+        openai: 'gpt-4o',
+        doubao: 'doubao-seed-1-6-flash',
+        gemini: 'gemini-1.5-flash',
+        qwen: 'qwen-plus',
+        deepseek: 'deepseek-chat',
+        custom: 'custom'
+    };
+    const effectiveModel = modelName || defaultModels[provider] || 'gpt-4o';
+
+    badge.classList.remove('ai-mode-llm', 'ai-mode-random');
+    if (apiKey) {
+        badge.classList.add('ai-mode-llm');
+        badge.innerText = isZh
+            ? `🧠 AI 模式：大模型驱动 (${provider.toUpperCase()} · ${effectiveModel})`
+            : `🧠 AI Mode: LLM Powered (${provider.toUpperCase()} · ${effectiveModel})`;
+    } else {
+        badge.classList.add('ai-mode-random');
+        badge.innerText = isZh
+            ? '🎲 AI 模式：内置随机机器人（可在 ⚙️ 高级设置 中填入 API Key 开启大模型）'
+            : '🎲 AI Mode: Built-in Random Bot (Add API Key in ⚙️ Advanced Settings for LLM)';
+    }
+}
+
+async function testLLMConnection() {
+    const testBtn = document.getElementById('test-llm-btn');
+    const statusEl = document.getElementById('llm-test-status');
+    const isZh = gameState.lang === 'zh';
+    if (!statusEl) return;
+
+    const apiKey = (setupUI.apiKeyInput && setupUI.apiKeyInput.value || '').trim();
+    const baseUrl = (document.getElementById('base-url') && document.getElementById('base-url').value || '').trim();
+    const modelName = (document.getElementById('model-name') && document.getElementById('model-name').value || '').trim();
+    const provider = (document.getElementById('provider-select') && document.getElementById('provider-select').value) || 'openai';
+
+    statusEl.classList.remove('hidden', 'ok', 'err');
+    statusEl.innerText = isZh ? '⏳ 正在测试连接...' : '⏳ Testing connection...';
+    if (testBtn) testBtn.disabled = true;
+
+    try {
+        const res = await fetch('/api/llm/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                api_key: apiKey || null,
+                base_url: baseUrl || null,
+                model_name: modelName || null,
+                provider: provider,
+                language: gameState.lang
+            })
+        });
+        const data = await res.json();
+        statusEl.classList.add(data.ok ? 'ok' : 'err');
+        statusEl.innerText = data.message || (data.ok ? 'OK' : 'Failed');
+    } catch (e) {
+        statusEl.classList.add('err');
+        statusEl.innerText = isZh ? '❌ 网络错误，无法连接服务器' : '❌ Network error';
+    } finally {
+        if (testBtn) {
+            testBtn.disabled = false;
+            testBtn.innerText = isZh ? '🔌 测试大模型连接' : '🔌 Test LLM Connection';
+        }
     }
 }
 
@@ -1684,7 +1820,7 @@ function setupEvaluationListeners() {
         selectWolvesBtn.onclick = () => {
             gameState.selectedArguePlayers.clear();
             (gameState.players || []).forEach(p => {
-                if (p.name !== 'Player 1' && (p.role === 'Werewolf' || p.role === 'Black Werewolf King')) {
+                if (p.name !== getMyPlayerName() && (p.role === 'Werewolf' || p.role === 'Black Werewolf King')) {
                     gameState.selectedArguePlayers.add(p.name);
                 }
             });
@@ -1695,7 +1831,7 @@ function setupEvaluationListeners() {
         selectGodsBtn.onclick = () => {
             gameState.selectedArguePlayers.clear();
             (gameState.players || []).forEach(p => {
-                if (p.name !== 'Player 1' && ['Seer', 'Witch', 'Guard', 'Hunter'].includes(p.role)) {
+                if (p.name !== getMyPlayerName() && ['Seer', 'Witch', 'Guard', 'Hunter'].includes(p.role)) {
                     gameState.selectedArguePlayers.add(p.name);
                 }
             });
@@ -1706,7 +1842,7 @@ function setupEvaluationListeners() {
         selectAllBtn.onclick = () => {
             gameState.selectedArguePlayers.clear();
             (gameState.players || []).forEach(p => {
-                if (p.name !== 'Player 1') {
+                if (p.name !== getMyPlayerName()) {
                     gameState.selectedArguePlayers.add(p.name);
                 }
             });
@@ -2335,9 +2471,11 @@ function syncPostQueueState() {
     }
 
     handleInputRequest(gameState.latestServerInputRequired);
+    updateSpectatorBannerUI();
 
     if (!gameState.latestServerGameActive && !gameState.latestServerInputRequired && gameState.active) {
         gameState.active = false;
+        updateSpectatorBannerUI();
         stopTurnTimer();
         clearInterval(pollingInterval);
         addSystemMessage(I18N[gameState.lang].gameOver);
@@ -2491,7 +2629,14 @@ function renderLogs() {
         if (isUserDecidingBlindAction() && isHiddenDecisionLog(log)) {
             return;
         }
-        if (isRedundantChatNoiseLog(log)) {
+    if (log.type === 'SHERIFF_WITHDRAW' && log.source) {
+        const card = Array.from(document.querySelectorAll('.player-card')).find(c => c.dataset.name === log.source);
+        if (card) {
+            card.classList.remove('candidate');
+        }
+    }
+
+    if (isRedundantChatNoiseLog(log)) {
             return;
         }
         processLog(log);
@@ -2650,6 +2795,8 @@ function updateLanguage() {
                 const noActionText = isZh ? "不行动 / 弃票" : "No Action / Abstain";
                 const hasAbstain = options.includes(noActionText) || options.includes("Abstain") || options.includes("弃票");
                 renderChoiceButtons(options, !hasAbstain);
+            } else if (gameState.pendingAction.type === 'speech' && Array.isArray(gameState.pendingAction.options) && gameState.pendingAction.options.includes('Withdraw')) {
+                renderSpeechWithdrawButton();
             }
         } else {
             gameUI.actionPrompt.innerText = t.waiting;
@@ -2842,6 +2989,39 @@ function renderRoleSelection(playerCount) {
             <div class="role-name">${t.roles[role.id]}</div>
         </div>
     `).join('');
+
+    renderSeatSelection(playerCount || 9);
+    updateLobbyAIModeBadge();
+}
+
+function renderSeatSelection(playerCount) {
+    const seatSelect = document.getElementById('user-seat-select');
+    const seatLabel = document.getElementById('seat-select-label');
+    const isZh = gameState.lang === 'zh';
+    if (seatLabel) {
+        seatLabel.innerText = isZh ? '选择座位 (Seat)' : 'Select Seat';
+    }
+    if (!seatSelect) return;
+
+    const prevVal = gameState.userSeatChoice || seatSelect.value || '1';
+    const count = Number(playerCount) || 9;
+    const opts = [
+        `<option value="1">${isZh ? '1号位 (默认)' : 'Seat 1 (Default)'}</option>`,
+        `<option value="random">${isZh ? '🎲 随机座号 (Random Seat)' : '🎲 Random Seat'}</option>`
+    ];
+    for (let i = 2; i <= count; i++) {
+        opts.push(`<option value="${i}">${isZh ? `${i}号位` : `Seat ${i}`}</option>`);
+    }
+    seatSelect.innerHTML = opts.join('');
+    if (prevVal === 'random' || (Number(prevVal) >= 1 && Number(prevVal) <= count)) {
+        seatSelect.value = String(prevVal);
+    } else {
+        seatSelect.value = '1';
+        gameState.userSeatChoice = '1';
+    }
+    seatSelect.onchange = () => {
+        gameState.userSeatChoice = seatSelect.value;
+    };
 }
 
 
@@ -2944,6 +3124,81 @@ function setupEventListeners() {
 
     setupRecordsModalListeners();
     setupHistoryPickerAndReaderListeners();
+    setupSpectatorListeners();
+}
+
+function setupSpectatorListeners() {
+    const enableBtn = document.getElementById('enable-spectator-btn');
+    const ffBtn = document.getElementById('spectator-fastforward-btn');
+    if (enableBtn) {
+        enableBtn.addEventListener('click', async () => {
+            if (!gameState.gameId || gameState.spectatorMode) return;
+            enableBtn.disabled = true;
+            try {
+                const res = await fetch('/api/game/spectate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_id: gameState.gameId })
+                });
+                if (res.ok) {
+                    gameState.spectatorMode = true;
+                    updateSpectatorBannerUI();
+                    await pollGameState();
+                } else {
+                    enableBtn.disabled = false;
+                }
+            } catch (e) {
+                enableBtn.disabled = false;
+            }
+        });
+    }
+    if (ffBtn) {
+        ffBtn.addEventListener('click', () => {
+            gameState.pacingMultiplier = 0;
+            updatePacingControlsUI();
+            if (typeof skipMessageQueue === 'function') {
+                skipMessageQueue();
+            }
+            updateSpectatorBannerUI();
+        });
+    }
+}
+
+function updateSpectatorBannerUI() {
+    const banner = document.getElementById('spectator-banner');
+    const textEl = document.getElementById('spectator-banner-text');
+    const enableBtn = document.getElementById('enable-spectator-btn');
+    const ffBtn = document.getElementById('spectator-fastforward-btn');
+    if (!banner) return;
+
+    const shouldShow = Boolean(
+        gameState.active &&
+        !gameState.isArchiveMode &&
+        !gameState.isAlive &&
+        !gameState.latestServerInputRequired &&
+        !gameState.pendingAction
+    );
+    banner.classList.toggle('hidden', !shouldShow);
+    if (!shouldShow) return;
+
+    const isZh = gameState.lang === 'zh';
+    if (textEl) {
+        textEl.innerText = gameState.spectatorMode
+            ? (isZh ? '👁️ 亡灵上帝视角已开启：全员底牌、夜间行动与 AI 思考均已实时显示' : '👁️ God View Active: All roles, night actions & AI thoughts revealed')
+            : (isZh ? '👻 你已出局，可开启上帝视角查看全员底牌与 AI 心路' : '👻 You are eliminated. Enable God View to reveal all roles & AI thoughts');
+    }
+    if (enableBtn) {
+        enableBtn.disabled = Boolean(gameState.spectatorMode);
+        enableBtn.innerText = gameState.spectatorMode
+            ? (isZh ? '✅ 上帝视角已开启' : '✅ God View On')
+            : (isZh ? '👁️ 开启上帝视角' : '👁️ God View');
+    }
+    if (ffBtn) {
+        const isMaxSpeed = gameState.pacingMultiplier === 0;
+        ffBtn.innerText = isMaxSpeed
+            ? (isZh ? '⚡ 已是极速模式' : '⚡ Max Speed Active')
+            : (isZh ? '⚡ 极速观战' : '⚡ Fast-Forward');
+    }
 }
 
 
@@ -2960,6 +3215,8 @@ async function startGame() {
     const role = gameState.myRole || (selectedRoleEl ? selectedRoleEl.dataset.role : 'Random');
     const avatar = selectedAvatarEl ? selectedAvatarEl.dataset.avatar : '👤';
     const count = selectedCountEl ? parseInt(selectedCountEl.dataset.value) : 9;
+    const seatSelectEl = document.getElementById('user-seat-select');
+    const userSeatVal = seatSelectEl ? seatSelectEl.value : (gameState.userSeatChoice || '1');
     const apiKey = setupUI.apiKeyInput.value;
     const baseUrl = document.getElementById('base-url').value;
     const modelName = document.getElementById('model-name').value;
@@ -2974,6 +3231,7 @@ async function startGame() {
                 num_players: count,
                 user_role: role,
                 user_avatar: avatar,
+                user_seat: userSeatVal === 'random' ? 'random' : (parseInt(userSeatVal, 10) || 1),
                 api_key: apiKey,
                 base_url: baseUrl,
                 model_name: modelName,
@@ -2996,6 +3254,9 @@ async function startGame() {
             if (gameUI.speedToggleBtn) gameUI.speedToggleBtn.classList.remove('hidden');
 
             gameState.gameId = data.game_id;
+            gameState.myPlayerName = data.human_player || 'Player 1';
+            gameState.spectatorMode = false;
+            gameState.playerNotes = {};
             gameState.myRole = role;
             gameState.myAvatar = avatar;
             gameState.isAlive = true;
@@ -3082,6 +3343,12 @@ async function pollGameState() {
 
         gameState.latestServerInputRequired = data.input_required || null;
         gameState.latestServerGameActive = Boolean(data.game_active);
+        if (data.human_player) {
+            gameState.myPlayerName = data.human_player;
+        }
+        if (typeof data.spectator_mode === 'boolean') {
+            gameState.spectatorMode = data.spectator_mode;
+        }
         if (data.winner) {
             gameState.winner = data.winner;
         }
@@ -3131,7 +3398,7 @@ async function pollGameState() {
             }
             updatePlayers(data.players, queuedDeaths);
             
-            const myPlayer = data.players.find(p => p.name === 'Player 1');
+            const myPlayer = data.players.find(p => p.name === getMyPlayerName());
             if (myPlayer) {
                 gameState.isAlive = myPlayer.is_alive;
                 if (gameUI.myStatus) {
@@ -3234,7 +3501,7 @@ function showEvaluationModal(isReopen = false) {
 
         // Pre-select up to 2 AI players (e.g., 1 wolf + 1 god/villager) for the Debate tab
         if (gameState.selectedArguePlayers.size === 0 && gameState.players && gameState.players.length > 1) {
-            const aiPlayers = gameState.players.filter(p => p.name !== 'Player 1');
+            const aiPlayers = gameState.players.filter(p => p.name !== getMyPlayerName());
             const oneWolf = aiPlayers.find(p => p.role === 'Werewolf' || p.role === 'Black Werewolf King');
             const oneGood = aiPlayers.find(p => p.role !== 'Werewolf' && p.role !== 'Black Werewolf King');
             if (oneWolf) gameState.selectedArguePlayers.add(oneWolf.name);
@@ -3412,7 +3679,7 @@ function renderArguePlayerRoster() {
     const grid = evalUI.argueGrid || document.getElementById('argue-player-grid');
     if (!grid) return;
     const isZh = gameState.lang === 'zh';
-    const aiPlayers = (gameState.players || []).filter(p => p.name !== 'Player 1');
+    const aiPlayers = (gameState.players || []).filter(p => p.name !== getMyPlayerName());
 
     if (aiPlayers.length === 0) {
         grid.innerHTML = `<div style="color:var(--text-muted); font-size:0.85rem;">${isZh ? '暂无 AI 玩家数据' : 'No AI players found'}</div>`;
@@ -3587,7 +3854,7 @@ function renderPostGameRolesOverview() {
         const roleObj = ROLES.find(r => r.id === roleEn) || { icon: '👱' };
         const roleLocalized = I18N[gameState.lang].roles[roleEn] || roleEn;
         const isWolf = roleEn === 'Werewolf' || roleEn === 'Black Werewolf King';
-        const avatar = p.name === 'Player 1' ? gameState.myAvatar : getAvatar(p.name);
+        const avatar = p.name === getMyPlayerName() ? gameState.myAvatar : getAvatar(p.name);
         const seatLabel = formatPlayerSeatLabel(p.name, isZh);
         return `
             <div class="argue-ai-card" style="cursor:default;">
@@ -3610,7 +3877,7 @@ function renderPostGameRolesOverview() {
 function formatPlayerSeatLabel(playerName, isZh) {
     if (!playerName || typeof playerName !== 'string') return '';
     const num = playerName.replace('Player ', '');
-    const isMe = playerName === 'Player 1';
+    const isMe = playerName === getMyPlayerName();
     if (isZh) {
         return `${num}号${isMe ? '(我)' : ''}`;
     }
@@ -3927,8 +4194,8 @@ function createRoleSpotlightCardIfApplicable(log) {
         const shooterLabel = formatPlayerSeatLabel(sourceName, isZh);
         const targetLabel = formatPlayerSeatLabel(targetName, isZh);
         const isWolfViewer = gameState.myRole === 'Werewolf' || gameState.myRole === 'Black Werewolf King';
-        const isSelfShooter = sourceName === 'Player 1';
-        const knowsShooterRole = ((isWolfViewer || isSelfShooter) || (gameState.isArchiveMode && gameState.archivePerspective !== 'me')) && type !== 'PLAYER_SHOOT';
+        const isSelfShooter = sourceName === getMyPlayerName();
+        const knowsShooterRole = ((isWolfViewer || isSelfShooter || Boolean(gameState.spectatorMode)) || (gameState.isArchiveMode && gameState.archivePerspective !== 'me')) && type !== 'PLAYER_SHOOT';
         const isHunter = type === 'HUNTER_SHOOT';
         const spotlightIcon = !knowsShooterRole ? '🔫' : (isHunter ? '🔫' : '👹');
         const spotlightTitle = !knowsShooterRole
@@ -3969,7 +4236,7 @@ function processLog(log) {
     if (log.type === 'PLAYER_THINKING') {
         const isNight = log.state && ['GuardNightState', 'WerewolfNightState', 'WitchNightState', 'SeerNightState', 'NightBeginState', 'NightEndState'].includes(log.state);
         const isWolfViewer = gameState.myRole === 'Werewolf' || gameState.myRole === 'Black Werewolf King';
-        if (isNight && log.source !== 'Player 1' && !(log.state === 'WerewolfNightState' && isWolfViewer)) {
+        if (isNight && !gameState.spectatorMode && log.source !== getMyPlayerName() && !(log.state === 'WerewolfNightState' && isWolfViewer)) {
             return;
         }
         const card = Array.from(document.querySelectorAll('.player-card')).find(c => c.dataset.name === log.source);
@@ -4071,7 +4338,7 @@ function processLog(log) {
         senderDiv.className = 'chat-sender';
         
         const playerNum = log.source.replace('Player ', '');
-        const isMe = log.source === 'Player 1';
+        const isMe = log.source === getMyPlayerName();
         let modeTag = '';
         if (log.type === 'WHISPER') {
             modeTag = gameState.lang === 'zh' ? ' 🐺[狼频]' : ' 🐺[Pack]';
@@ -4137,7 +4404,7 @@ function getLogClass(log) {
     const msgStr = typeof log.message === 'object' ? (log.message.zh || log.message.en || '') : String(log.message || '');
     if (msgStr.includes('---') || msgStr.includes('State')) return 'debug';
     if (['SYSTEM', 'GAME_START', 'NIGHT_FALLS', 'DAY_BREAKS'].includes(log.type)) return 'system';
-    if (log.source === 'Player 1') return 'user';
+    if (log.source === getMyPlayerName()) return 'user';
     return 'ai';
 }
 
@@ -4201,8 +4468,9 @@ function updatePlayers(playersData, justDied = new Set()) {
             }
         }
 
+        const mySeatName = getMyPlayerName();
         const avatarEl = card.querySelector('.player-avatar');
-        const expectedAvatar = p.name === 'Player 1' ? gameState.myAvatar : getAvatar(p.name);
+        const expectedAvatar = p.name === mySeatName ? gameState.myAvatar : getAvatar(p.name);
         if (avatarEl && avatarEl.innerText !== expectedAvatar) {
             avatarEl.innerText = expectedAvatar;
         }
@@ -4221,12 +4489,13 @@ function updatePlayers(playersData, justDied = new Set()) {
         }
 
         const isSheriffAlive = Boolean(p.is_sheriff && p.is_alive);
-        const hideOtherCandidates = isUserDecidingBlindAction() && p.name !== 'Player 1';
+        const hideOtherCandidates = isUserDecidingBlindAction() && p.name !== mySeatName;
         const isCandidateActive = Boolean(p.is_sheriff_candidate && !hideOtherCandidates);
+        const seatNumStr = p.name.replace('Player ', '');
 
-        if (p.name === 'Player 1') {
+        if (p.name === mySeatName) {
             card.classList.add('me');
-            card.querySelector('.player-name').innerText = "1";
+            card.querySelector('.player-name').innerText = seatNumStr;
             const meLabel = card.querySelector('.player-me-label');
             if (meLabel) {
                 meLabel.style.display = 'block';
@@ -4245,8 +4514,10 @@ function updatePlayers(playersData, justDied = new Set()) {
             card.classList.toggle('sheriff-candidate', isCandidateActive);
             card.classList.toggle('tie', Boolean(p.is_tie));
         } else {
-            const num = p.name.replace('Player ', '');
-            card.querySelector('.player-name').innerText = num;
+            card.classList.remove('me');
+            const meLabel = card.querySelector('.player-me-label');
+            if (meLabel) meLabel.style.display = 'none';
+            card.querySelector('.player-name').innerText = seatNumStr;
 
             const tieLabel = card.querySelector('.player-tie-label');
             if (p.is_tie) {
@@ -4307,7 +4578,7 @@ function updatePlayers(playersData, justDied = new Set()) {
             const isZh = gameState.lang === 'zh';
             const showRevealedRole = (
                 p.role && p.role !== 'Unknown' &&
-                ((gameState.isArchiveMode && gameState.archivePerspective !== 'me') || (!gameState.active && gameState.winner && !gameState.isArchiveMode))
+                ((gameState.isArchiveMode && gameState.archivePerspective !== 'me') || (!gameState.active && gameState.winner && !gameState.isArchiveMode) || Boolean(gameState.spectatorMode))
             );
             const seerCheckResult = gameState.seerChecks && gameState.seerChecks[p.name];
 
@@ -4330,6 +4601,26 @@ function updatePlayers(playersData, justDied = new Set()) {
             } else {
                 seerBadge.style.display = 'none';
                 seerBadge.innerText = '';
+            }
+        }
+
+        // Quick Notepad Identity Tag on AI player cards
+        const noteBtn = card.querySelector('.player-note-tag');
+        if (noteBtn) {
+            if (p.name === mySeatName || gameState.isArchiveMode) {
+                noteBtn.style.display = 'none';
+            } else {
+                noteBtn.style.display = 'inline-flex';
+                const noteKey = (gameState.playerNotes && gameState.playerNotes[p.name]) || '';
+                const noteObj = PLAYER_NOTE_STATES.find(s => s.key === noteKey) || PLAYER_NOTE_STATES[0];
+                const isZh = gameState.lang === 'zh';
+                noteBtn.className = `player-note-tag ${noteObj.cls}`;
+                noteBtn.innerText = noteObj.key ? (isZh ? noteObj.zh : noteObj.en) : noteObj.icon;
+                noteBtn.title = isZh ? '点击切换身份猜测标记 (未标 / 狼嫌 / 预言? / 金水 / 神职?)' : 'Click to cycle identity guess tag (None / Wolf? / Seer? / Good / God?)';
+                noteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    cyclePlayerNoteTag(p.name);
+                };
             }
         }
     });
@@ -4556,6 +4847,9 @@ function handleInputRequest(req) {
         if (gameUI.voiceInputBtn) gameUI.voiceInputBtn.disabled = !voiceModelState.ready;
         gameUI.input.focus();
         gameUI.choiceButtons.innerHTML = '';
+        if (Array.isArray(req.options) && req.options.includes('Withdraw')) {
+            renderSpeechWithdrawButton();
+        }
         updatePlayerSelectableState([]);
         startTurnTimer(() => {
             const text = gameUI.input.value.trim();
@@ -4586,6 +4880,23 @@ function handleInputRequest(req) {
     }
 }
 
+function renderSpeechWithdrawButton() {
+    if (!gameUI.choiceButtons) return;
+    gameUI.choiceButtons.innerHTML = '';
+    const isZh = gameState.lang === 'zh';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'choice-btn no-action withdraw-speech-btn';
+    btn.innerText = isZh ? '🏳️ 发言并退水' : '🏳️ Speak & Withdraw';
+    btn.title = isZh ? '发表当前输入框中的发言并退出警长竞选（若输入框为空则直接宣布退水）' : 'Submit your speech (or default message) and withdraw from the Sheriff election';
+    btn.onclick = () => {
+        const text = gameUI.input ? gameUI.input.value.trim() : '';
+        sendAction({ speech: text, withdraw: true });
+        if (gameUI.input) gameUI.input.value = '';
+    };
+    gameUI.choiceButtons.appendChild(btn);
+}
+
 /**
  * Renders the choice buttons for a vote or selection action.
  * @param {Array<string>} options - The list of choices.
@@ -4599,6 +4910,8 @@ function renderChoiceButtons(options, addNoAction) {
     const choiceTranslations = {
         "Yes": isZh ? "是" : "Yes",
         "No": isZh ? "否" : "No",
+        "Keep Running": isZh ? "👑 继续竞选" : "👑 Keep Running",
+        "Withdraw": isZh ? "🏳️ 退水" : "🏳️ Withdraw",
         "Clockwise": isZh ? "顺时针" : "Clockwise",
         "Counter-clockwise": isZh ? "逆时针" : "Counter-clockwise",
         "Abstain": isZh ? "不行动 / 弃票" : "No Action / Abstain"
@@ -4623,7 +4936,7 @@ function renderChoiceButtons(options, addNoAction) {
     });
     
     // Only add the extra "No Action / Abstain" button when options are player targets (not Yes/No or Clockwise/Counter-clockwise)
-    const isBinaryChoice = options.includes('Yes') || options.includes('Clockwise');
+    const isBinaryChoice = options.includes('Yes') || options.includes('Clockwise') || options.includes('Keep Running');
     if (addNoAction && !isBinaryChoice) {
         const btn = document.createElement('button');
         btn.className = 'choice-btn no-action';
@@ -4981,7 +5294,7 @@ function setPhase(phase, rawMessage = null) {
  * @returns {string} An emoji avatar.
  */
 function getAvatar(name) {
-    if (name === 'Player 1') {
+    if (name === getMyPlayerName()) {
         return gameState.myAvatar;
     }
     const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -5085,7 +5398,7 @@ async function loadUnifiedTimeline() {
 
     try {
         const [opRes, recRes] = await Promise.all([
-            fetch(`/api/game/${gameState.gameId}/player/Player 1/operations`),
+            fetch(`/api/game/${gameState.gameId}/player/${encodeURIComponent(getMyPlayerName())}/operations`),
             fetch(`/api/game/${gameState.gameId}/records`)
         ]);
 
@@ -5422,7 +5735,7 @@ async function loadOperationsHistory(containerId = 'op-history-content') {
     }
 
     try {
-        const response = await fetch(`/api/game/${gameState.gameId}/player/Player 1/operations`);
+        const response = await fetch(`/api/game/${gameState.gameId}/player/${encodeURIComponent(getMyPlayerName())}/operations`);
         const data = await response.json();
 
         if (response.ok) {
@@ -5836,7 +6149,9 @@ async function loadHistoricalGameToBoard(histId) {
         gameState.gameId = `history_${histId}`;
         gameState.winner = detail.winner || null;
         gameState.players = detail.players || [];
-        const p1 = gameState.players.find(p => p.name === 'Player 1') || gameState.players[0] || {};
+        const p1 = gameState.players.find(p => p.is_human) || gameState.players.find(p => p.name === 'Player 1') || gameState.players[0] || {};
+        gameState.myPlayerName = p1.name || 'Player 1';
+        gameState.spectatorMode = false;
         gameState.myRole = detail.human_role || p1.role || 'Villager';
         gameState.isAlive = Boolean(p1.is_alive);
         gameState.archiveRawLogs = detail.logs || [];
@@ -5943,7 +6258,7 @@ function filterArchiveLogs(rawLogs) {
 
         if (type === 'THOUGHT') {
             if (!showThoughts) return false;
-            if (persp === 'me' && log.source !== 'Player 1') return false;
+            if (persp === 'me' && log.source !== getMyPlayerName()) return false;
             return true;
         }
 
@@ -5987,7 +6302,7 @@ function filterArchiveLogs(rawLogs) {
                 return true;
             }
             const visPlayers = Array.isArray(log.visible_to_players) ? log.visible_to_players : [];
-            if (visPlayers.includes('Player 1')) {
+            if (visPlayers.includes(getMyPlayerName())) {
                 return true;
             }
             if (combined.includes('你被分配的角色是') || combined.includes('You have been assigned the role')) {

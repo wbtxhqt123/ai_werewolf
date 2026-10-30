@@ -1819,6 +1819,120 @@ body.night-mode .chat-bubble.thought-bubble {
     border-color: #a78bfa !important;
 }
 
+/* Dead-player Spectator Banner */
+.spectator-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 7px 12px;
+    margin-bottom: 6px;
+    border-radius: 12px;
+    border: 2px solid #7c3aed;
+    background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
+    color: #4c1d95;
+    font-size: 0.84rem;
+    font-weight: 700;
+    box-shadow: 2px 2px 0px rgba(124, 58, 237, 0.35);
+}
+
+.spectator-banner.hidden {
+    display: none !important;
+}
+
+body.night-mode .spectator-banner {
+    background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 100%);
+    color: #e9d5ff;
+    border-color: #a78bfa;
+}
+
+.spectator-banner-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.spectator-pill-btn {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 2px solid #4c1d95;
+    background: #fde047;
+    color: #1e1b4b;
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 1.5px 1.5px 0px #4c1d95;
+    transition: transform 0.12s ease;
+}
+
+.spectator-pill-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.spectator-pill-btn:disabled {
+    opacity: 0.75;
+    cursor: default;
+    background: #bbf7d0;
+    color: #14532d;
+}
+
+/* Quick Notepad Identity Tag on Player Cards */
+.player-note-tag {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    z-index: 6;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1.5px solid #2d3436;
+    background: rgba(255, 255, 255, 0.88);
+    color: #2d3436;
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1.3;
+    cursor: pointer;
+    box-shadow: 1px 1px 0px rgba(0,0,0,0.25);
+    transition: transform 0.12s ease, background-color 0.12s ease;
+}
+
+.player-note-tag:hover {
+    transform: scale(1.08);
+}
+
+.player-note-tag.note-none {
+    opacity: 0.65;
+    padding: 1px 4px;
+}
+
+.player-note-tag.note-none:hover {
+    opacity: 1;
+}
+
+.player-note-tag.note-wolf {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #dc2626;
+}
+
+.player-note-tag.note-seer {
+    background: #f3e8ff;
+    color: #5b21b6;
+    border-color: #7c3aed;
+}
+
+.player-note-tag.note-good {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #16a34a;
+}
+
+.player-note-tag.note-god {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #2563eb;
+}
+
 /* Responsive adjustments */
 @media (max-width: 600px) {
     .game-controls {

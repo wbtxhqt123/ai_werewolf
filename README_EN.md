@@ -11,17 +11,19 @@ Play anytime in your browser with **English & Chinese bilingual UI**, **offline 
 
 ## ✨ Key Highlights
 
-1. **🎭 Distinct AI Personalities**
+1. **🎭 Distinct AI Personalities & Authentic Werewolf Mechanics**
    * Every AI player is assigned a hidden persona (**Cautious, Aggressive, Analytical, Emotional, Diplomat, Follower, Manipulative, Paranoid, Silent**).
-   * AI players bluff as the Seer, coordinate night kills in werewolf chat, analyze voting patterns, and adapt to the table.
+   * AI players bluff as the Seer, **withdraw from the Sheriff race (`退水` / Candidate Withdrawal)** when appropriate, coordinate night kills in werewolf chat (with human wolves retaining final kill-target priority), analyze voting patterns, and adapt to the table.
 2. **🎙️ Fast Local Bilingual Voice Input (Chinese + English)**
    * Click the **🎤 Microphone button** next to the speech input or post-game chat to speak naturally in English, Chinese, or mixed speech.
-   * Powered by **Alibaba SenseVoiceSmall (`int8` ONNX via `sherpa-onnx`, ~230 MB)** by default for sub-100ms CPU inference on Mac and PC, with **Faster-Whisper (`large-v3-turbo` / `small`)** also built in.
+   * Powered by **Alibaba FunASR Paraformer-Large (`int8` ONNX via `sherpa-onnx`, ~220 MB)** by default for sub-100ms inference with Werewolf jargon correction, with **Faster-Whisper (`large-v3-turbo` via MLX Metal / CTranslate2)** and **SenseVoiceSmall** also built in.
 3. **🏆 Post-Game Review & AI Debate Room**
    * **🤖 AI Evaluator**: Choose between **😊 Mild**, **😐 Neutral**, or **😈 Mean (Roast)** modes after a match to get a personalized breakdown of your plays and chat with the judge.
    * **🗣️ Argue with AI Players**: Select any AI players after the game ends to question their secret night moves or daytime votes—they will reveal their true roles and debate you!
-4. **📖 Full Timeline & Immersive Day/Night UI**
-   * Smooth celestial sun/moon transitions, background music, live speech bubbles, and clickable seat badges (`@Player 3`) to filter any player's speeches.
+4. **📖 Full Timeline, Quick Suspect Tags & Dead-Player Spectator Mode**
+   * **🏷️ Quick Suspect / Role Notepad**: Click the `🏷️` tag on any AI player's card to cycle through identity guesses (`🐺 Wolf?`, `🔮 Seer?`, `💧 Good`, `🛡️ God?`).
+   * **👻 Spectator God View & Fast-Forward**: If you are eliminated early, click **👁️ God View** to reveal all player roles, night actions, and live AI inner thoughts, or click **⚡ Fast-Forward** to watch the rest of the match at max speed.
+   * **🎲 Seat Selection / Random Seat**: Choose Seat 1..N or a Random Seat before starting, and test your LLM API connection directly in **⚙️ Advanced Settings**.
 
 ---
 
@@ -84,7 +86,7 @@ cp .env.example .env
 OPENAI_API_KEY=sk-xxxx
 
 # Optional Speech-to-Text (ASR) Settings
-ASR_BACKEND=sensevoice           # "sensevoice" (default, ~230MB int8 ONNX) or "faster-whisper"
+ASR_BACKEND=paraformer           # "paraformer" (default, ~220MB int8 ONNX), "faster-whisper", or "sensevoice"
 ASR_WHISPER_MODEL=large-v3-turbo # Used when ASR_BACKEND=faster-whisper
 ASR_DEVICE=auto                  # "auto", "cpu", "cuda", or "coreml"
 ```

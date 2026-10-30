@@ -32,12 +32,15 @@ The web tier exposes REST and WebSocket APIs using **FastAPI** and **Uvicorn**, 
 - **`GameManager`:** In-memory registry for active games. Tracks session activity timestamps and evicts expired or abandoned games via TTL policies.
 
 ### 2.2 Primary API Endpoints
-- `POST /api/game/start`: Creates and initializes a new game with human role preferences and player count.
-- `GET /api/game/{game_id}/state`: Polls the current phase, player status, living count, and pending input prompt.
-- `POST /api/game/{game_id}/action`: Submits human actions (votes, speeches, night skill targets).
-- `GET /api/game/{game_id}/operations-history`: Returns chronological role-specific operation history and public vote logs for post-game analysis.
+- `POST /api/game/start`: Creates and initializes a new game with human role preferences, seat selection (`user_seat`: `1..N` or `"random"`), and player count.
+- `GET /api/game/{game_id}/state`: Polls the current phase, player status, living count, human seat identifier (`human_player`), spectator status (`spectator_mode`), and pending input prompt.
+- `POST /api/game/action`: Submits human actions (votes, speeches, Sheriff withdrawal, night skill targets).
+- `POST /api/game/spectate`: Enables God-View spectator mode for an eliminated human player once they have no pending actions.
+- `POST /api/llm/test`: Validates the configured LLM provider, model, and API key before starting a game.
+- `GET /api/game/{game_id}/player/{player_name}/operations`: Returns chronological role-specific operation history and public shot logs.
 - `POST /api/game/evaluate`: Triggers post-game LLM critique using the chosen tone persona.
 - `POST /api/game/evaluation/chat`: Allows the player to argue and debate their game decisions with the evaluator.
+- `POST /api/game/argue`: Post-game multi-AI debate room where selected AI players defend their in-game actions in character.
 
 ---
 
