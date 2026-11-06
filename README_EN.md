@@ -67,6 +67,17 @@ Open your browser and visit:
 
 ---
 
+## 📅 Development Timeline (Changelog)
+
+* **2026-11** — Sheriff withdrawal, spectator god view, human-werewolf kill priority, free/random seat picking, suspect tag pad, in-game match history reader, structured Chain-of-Thought with werewolf meta-gaming, and a new **Paraformer-Large** ASR engine (GPU/CoreML accelerated).
+* **2026-10-26** — README update with in-game screenshots.
+* **2026-10-23** — Dual offline ASR engines (**SenseVoiceSmall & Faster-Whisper**) with download/activation progress in Advanced Settings; persisted settings; post-game review hub (multi-turn evaluator chat + multi-AI debate room); Black Werewolf King revealed to the pack.
+* **2026-10-16 ~ 21** — Full EN/CN localization of UI, logs and AI prompts; gunshot/night-death privacy and spotlight chat cards; vote-weighted win conditions, chained shot/last-words order fixes, RuleOracle simulator.
+* **2026-09-07** — Secret voting, blind sheriff election, sheriff visual glow.
+* **2026-09-04 ~ 06** — Day/night BGM and celestial transition animations, cartoon pop modals, configurable speech countdown, unified operation/vote timeline log, repo structure & docs cleanup.
+
+---
+
 ## ⚙️ Configuring AI Models & Speech Recognition
 
 ### Option A: In the Web UI (Easiest)
