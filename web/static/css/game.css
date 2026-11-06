@@ -1695,6 +1695,243 @@ body.night-mode .turn-timer.urgent {
     justify-content: center;
 }
 
+/* --- Archive Reader Toolbar & AI Thought Bubble --- */
+.action-area.hidden,
+.archive-reader-toolbar.hidden,
+.icon-btn.hidden {
+    display: none !important;
+}
+
+.archive-reader-toolbar {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.archive-toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.archive-control-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.archive-group-label {
+    font-size: 0.85rem;
+    font-weight: 900;
+    color: var(--text-primary);
+    margin-right: 2px;
+}
+
+.archive-pill-btn {
+    padding: 6px 13px;
+    border-radius: 999px;
+    border: 2px solid #2d3436;
+    background: var(--modal-surface, #ffffff);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 2px 2px 0px #2d3436;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.15s ease;
+    white-space: nowrap;
+}
+
+.archive-pill-btn:hover {
+    transform: translateY(-1.5px);
+    box-shadow: 3px 3px 0px #2d3436;
+}
+
+.archive-pill-btn:active {
+    transform: translateY(1px);
+    box-shadow: 1px 1px 0px #2d3436;
+}
+
+.archive-pill-btn.active {
+    background: #ffd32a;
+    color: #2d3436;
+}
+
+.archive-pill-btn.thought-toggle-btn.active {
+    background: #a29bfe;
+    color: #ffffff;
+}
+
+.archive-phase-jump-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 2px 2px 4px;
+    scrollbar-width: thin;
+}
+
+.phase-jump-chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 2px solid #2d3436;
+    font-family: var(--font-body);
+    font-size: 0.76rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 1.5px 1.5px 0px #2d3436;
+    white-space: nowrap;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.phase-jump-chip.night {
+    background: #334155;
+    color: #f8fafc;
+}
+
+.phase-jump-chip.day {
+    background: #fff3bf;
+    color: #2d3436;
+}
+
+.phase-jump-chip:hover {
+    transform: translateY(-1.5px);
+    box-shadow: 2.5px 2.5px 0px #2d3436;
+}
+
+.chat-bubble.thought-bubble {
+    background: #f3e8ff !important;
+    color: #4c1d95 !important;
+    border: 2px dashed #7c3aed !important;
+    font-size: 0.86rem;
+    font-style: italic;
+    box-shadow: 2px 2px 0px rgba(124, 58, 237, 0.25);
+}
+
+body.night-mode .chat-bubble.thought-bubble {
+    background: #2e1065 !important;
+    color: #ddd6fe !important;
+    border-color: #a78bfa !important;
+}
+
+/* Dead-player Spectator Banner */
+.spectator-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 7px 12px;
+    margin-bottom: 6px;
+    border-radius: 12px;
+    border: 2px solid #7c3aed;
+    background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
+    color: #4c1d95;
+    font-size: 0.84rem;
+    font-weight: 700;
+    box-shadow: 2px 2px 0px rgba(124, 58, 237, 0.35);
+}
+
+.spectator-banner.hidden {
+    display: none !important;
+}
+
+body.night-mode .spectator-banner {
+    background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 100%);
+    color: #e9d5ff;
+    border-color: #a78bfa;
+}
+
+.spectator-banner-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.spectator-pill-btn {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 2px solid #4c1d95;
+    background: #fde047;
+    color: #1e1b4b;
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 1.5px 1.5px 0px #4c1d95;
+    transition: transform 0.12s ease;
+}
+
+.spectator-pill-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.spectator-pill-btn:disabled {
+    opacity: 0.75;
+    cursor: default;
+    background: #bbf7d0;
+    color: #14532d;
+}
+
+/* Quick Notepad Identity Tag on Player Cards */
+.player-note-tag {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    z-index: 6;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1.5px solid #2d3436;
+    background: rgba(255, 255, 255, 0.88);
+    color: #2d3436;
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1.3;
+    cursor: pointer;
+    box-shadow: 1px 1px 0px rgba(0,0,0,0.25);
+    transition: transform 0.12s ease, background-color 0.12s ease;
+}
+
+.player-note-tag:hover {
+    transform: scale(1.08);
+}
+
+.player-note-tag.note-none {
+    opacity: 0.65;
+    padding: 1px 4px;
+}
+
+.player-note-tag.note-none:hover {
+    opacity: 1;
+}
+
+.player-note-tag.note-wolf {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #dc2626;
+}
+
+.player-note-tag.note-seer {
+    background: #f3e8ff;
+    color: #5b21b6;
+    border-color: #7c3aed;
+}
+
+.player-note-tag.note-good {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #16a34a;
+}
+
+.player-note-tag.note-god {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #2563eb;
+}
 
 /* Responsive adjustments */
 @media (max-width: 600px) {

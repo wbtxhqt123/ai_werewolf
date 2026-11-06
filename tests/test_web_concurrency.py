@@ -257,6 +257,257 @@ class TestWebConcurrency(unittest.TestCase):
 
         game_manager.remove_game(game_id)
 
+    def test_human_werewolf_has_priority_for_night_kill_target(self):
+        from game.controllers import SafeController
+        from game.states.night_states import WerewolfNightState
+        from game.player import Werewolf, Villager
+
+        human_ctrl = WebController()
+        ai_ctrl_1 = SafeController()
+        ai_ctrl_2 = SafeController()
+
+        game = Game(
+            {
+                "Player 1": ai_ctrl_1,
+                "Player 2": human_ctrl,
+                "Player 3": ai_ctrl_2,
+                "Player 4": SafeController(),
+            },
+            language="zh",
+        )
+        p1, p2, p3, p4 = game.players
+        p1.role = Werewolf()
+        p2.role = Werewolf()
+        p3.role = Werewolf()
+        p4.role = Villager()
+
+        whisper_order = []
+        ai_ctrl_1.get_speech = lambda p: (whisper_order.append(p.name) or "建议刀4号")
+        ai_ctrl_2.get_speech = lambda p: (whisper_order.append(p.name) or "同意刀4号")
+        human_ctrl.get_speech = lambda p: (whisper_order.append(p.name) or "好，刀4号")
+        human_ctrl.get_werewolf_target = MagicMock(return_value=p4)
+        ai_ctrl_1.get_werewolf_target = MagicMock(return_value=p1)
+        ai_ctrl_2.get_werewolf_target = MagicMock(return_value=p1)
+
+        state = WerewolfNightState(game)
+        state.handle()
+
+        # AI wolves whisper before human wolf, and human wolf always chooses the final kill target
+        self.assertEqual(whisper_order[-1], "Player 2")
+        human_ctrl.get_werewolf_target.assert_called_once()
+        ai_ctrl_1.get_werewolf_target.assert_not_called()
+        ai_ctrl_2.get_werewolf_target.assert_not_called()
+        self.assertEqual(game.night_kill_target, p4)
+
+    def test_sheriff_candidate_withdrawal_and_auto_election(self):
+        from game.controllers import SafeController
+        from game.states.sheriff_states import SheriffSpeechState, SheriffWithdrawState, SheriffVoteState
+        from game.log import LogType
+
+        game = Game(
+            {
+                "Player 1": SafeController(),
+                "Player 2": SafeController(),
+                "Player 3": SafeController(),
+                "Player 4": SafeController(),
+            },
+            language="zh",
+        )
+        p1, p2, p3, p4 = game.players
+        for p in (p1, p2, p3):
+            p.is_sheriff_candidate = True
+        game.election_players = [p1, p2, p3]
+        game.initial_election_players = [p1, p2, p3]
+
+        # P1 withdraws during speech; P2 and P3 stay during speech
+        def p1_speech(player):
+            setattr(player, "withdrew_in_speech", True)
+            return "我是好人，上警表水，我退水。"
+
+        p1.controller.get_speech = p1_speech
+        p2.controller.get_speech = lambda p: "我是真预言家！"
+        p3.controller.get_speech = lambda p: "我也是上警看局势的。"
+
+        speech_state = SheriffSpeechState(game)
+        speech_state.handle()
+
+        self.assertFalse(p1.is_sheriff_candidate)
+        self.assertEqual(game.election_players, [p2, p3])
+        next_state, _ = speech_state.transition()
+        self.assertEqual(next_state, "sheriff_withdraw")
+
+        # In SheriffWithdrawState, P3 withdraws, leaving only P2 -> P2 auto-elected Sheriff!
+        p2.controller.get_sheriff_withdraw_decision = lambda p: False
+        p3.controller.get_sheriff_withdraw_decision = lambda p: True
+
+        withdraw_state = SheriffWithdrawState(game)
+        withdraw_state.handle()
+
+        self.assertEqual(game.sheriff, p2)
+        self.assertTrue(p2.is_sheriff)
+        self.assertFalse(p3.is_sheriff_candidate)
+        next_after_withdraw, _ = withdraw_state.transition()
+        self.assertEqual(next_after_withdraw, "day_announcement")
+
+        withdraw_logs = [e for e in game.game_log if e.log_type == LogType.SHERIFF_WITHDRAW]
+        self.assertEqual(len(withdraw_logs), 2)
+
+    def test_dead_player_spectator_mode_and_seat_selection(self):
+        from starlette.testclient import TestClient
+        from web.server import app, game_manager
+        from game.controllers import SafeController
+        from game.log import LogEntry, LogType
+
+        client = TestClient(app)
+
+        # 1. Start game with custom seat = 3
+        start_res = client.post("/api/game/start", json={
+            "num_players": 6,
+            "user_role": "Villager",
+            "user_seat": 3,
+            "language": "zh"
+        })
+        self.assertEqual(start_res.status_code, 200)
+        start_data = start_res.json()
+        self.assertEqual(start_data["human_player"], "Player 3")
+        game_id = start_data["game_id"]
+
+        session = game_manager.get_game(game_id)
+        self.assertIsNotNone(session)
+        session.game_instance.stop()
+
+        # 2. Spectate blocked while human player is alive
+        human_p = session.game_instance.get_player_by_name("Player 3")
+        self.assertTrue(human_p.is_alive)
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = True
+        session.game_thread = mock_thread
+
+        spec_blocked = client.post("/api/game/spectate", json={"game_id": game_id})
+        self.assertEqual(spec_blocked.status_code, 403)
+
+        # 3. Once human player is dead and no pending input, spectate unlocks all roles & thoughts
+        human_p.is_alive = False
+        session.web_controller.pending_request = None
+        spec_ok = client.post("/api/game/spectate", json={"game_id": game_id})
+        self.assertEqual(spec_ok.status_code, 200)
+        self.assertTrue(spec_ok.json()["spectator_mode"])
+
+        state_res = client.get(f"/api/game/{game_id}/state")
+        state_json = state_res.json()
+        self.assertTrue(state_json["spectator_mode"])
+        self.assertEqual(state_json["human_player"], "Player 3")
+        for p_info in state_json["players"]:
+            self.assertNotEqual(p_info["role"], "Unknown")
+
+        # 4. Verify that after spectator mode is enabled, new AI THOUGHT and night logs are visible to the spectator
+        ai_player = session.game_instance.get_player_by_name("Player 1")
+        prev_log_len = len(session.web_controller.get_logs(0))
+        session.game_instance.log(
+            LogEntry(
+                log_type=LogType.THOUGHT,
+                message={"en": "(Player 1 thought): Secret wolf plan", "zh": "(Player 1 思考): 秘密狼人计划"},
+                source=ai_player,
+                visible_to_players=[ai_player],
+            )
+        )
+        new_logs = session.web_controller.get_logs(prev_log_len)
+        self.assertEqual(len(new_logs), 1)
+        self.assertEqual(new_logs[0]["type"], "THOUGHT")
+
+        # 5. LLM test endpoint without API key returns random mode
+        llm_test_res = client.post("/api/llm/test", json={"language": "zh"})
+        self.assertEqual(llm_test_res.status_code, 200)
+        self.assertEqual(llm_test_res.json()["mode"], "random")
+
+        game_manager.remove_game(game_id)
+
+    def test_llm_and_web_controller_sheriff_withdrawal_end_to_end(self):
+        import json
+        from llm_player.controller import LLMController
+        from game.states.sheriff_states import SheriffSpeechState, SheriffVoteState
+        from game.player import Seer, Villager, Werewolf
+        from game.controllers import SafeController
+
+        mock_llm = MagicMock()
+        llm_ctrl = LLMController(personality="cautious", llm_client=mock_llm, language="zh")
+        web_ctrl = WebController(timeout=2.0)
+
+        game = Game(
+            {
+                "Player 1": web_ctrl,
+                "Player 2": llm_ctrl,
+                "Player 3": SafeController(),
+                "Player 4": SafeController(),
+            },
+            language="zh",
+        )
+        p1, p2, p3, p4 = game.players
+        p1.role = Villager()
+        p2.role = Villager()
+        p3.role = Seer()
+        p4.role = Werewolf()
+
+        for p in (p1, p2, p3):
+            p.is_sheriff_candidate = True
+        game.election_players = [p1, p2, p3]
+        game.initial_election_players = [p1, p2, p3]
+
+        speech_state = SheriffSpeechState(game)
+        game.state = speech_state
+
+        # 1. WebController candidate submits {"speech": "", "withdraw": True}
+        def feed_web_withdraw():
+            while web_ctrl.pending_request is None:
+                time.sleep(0.01)
+            self.assertIn("Withdraw", web_ctrl.pending_request.get("options") or [])
+            web_ctrl.set_input({"speech": "", "withdraw": True})
+
+        t = threading.Thread(target=feed_web_withdraw)
+        t.start()
+        p1_speech = web_ctrl.get_speech(p1)
+        t.join()
+        self.assertEqual(p1_speech, "我选择退水。")
+        self.assertTrue(getattr(p1, "withdrew_in_speech", False))
+
+        # 2. LLMController natural-phrase withdrawal ("我退水了") sets withdrew_in_speech=True
+        mock_llm.get_completion.return_value = json.dumps({
+            "thought": "上警表水后退水",
+            "action": {"speech": "我是好人，上警表个水，我退水了。"}
+        })
+        p2_speech = llm_ctrl.get_speech(p2)
+        self.assertIn("退水", p2_speech)
+        self.assertTrue(getattr(p2, "withdrew_in_speech", False))
+
+        # 3. Negated phrase ("我绝不退水") does NOT set withdrew_in_speech
+        setattr(p2, "withdrew_in_speech", False)
+        mock_llm.get_completion.return_value = json.dumps({
+            "thought": "死战到底",
+            "action": {"speech": "我是真预言家，我绝不退水！"}
+        })
+        llm_ctrl.get_speech(p2)
+        self.assertFalse(getattr(p2, "withdrew_in_speech", False))
+
+        # 4. Real Seer skips LLM call (0 tokens) in get_sheriff_withdraw_decision
+        mock_llm.get_completion.reset_mock()
+        p3.controller = llm_ctrl
+        self.assertFalse(llm_ctrl.get_sheriff_withdraw_decision(p3))
+        mock_llm.get_completion.assert_not_called()
+
+        # 5. In SheriffVoteState, withdrawn candidate P1 (who was in initial_election_players) cannot vote; only P4 votes
+        game.election_players = [p2, p3]
+        p1.is_sheriff_candidate = False
+        p1_vote_mock = MagicMock(return_value=p2)
+        p4_vote_mock = MagicMock(return_value=p3)
+        p1.controller.get_vote_for_sheriff = p1_vote_mock
+        p4.controller.get_vote_for_sheriff = p4_vote_mock
+
+        vote_state = SheriffVoteState(game)
+        vote_state.handle()
+        p1_vote_mock.assert_not_called()
+        p4_vote_mock.assert_called_once()
+        self.assertEqual(game.sheriff, p3)
+
 
 if __name__ == "__main__":
     unittest.main()

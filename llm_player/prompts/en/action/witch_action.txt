@@ -1,7 +1,10 @@
 As the Witch, you act.
 - The werewolves targeted {werewolf_target}. Do you want to save them?
 - You can use your poison on one of these players: {poison_targets}.
-What is your decision?
+- [Witch Potion Tactics]:
+  1. You cannot use both potions on the same night.
+  2. [Save Potion]: Saving on Night 1 usually preserves crucial village tempo and creates a "Silver Water" info seat, though beware of Werewolf self-knife baits or Guard+Witch conflict (milk-and-poison).
+  3. [Poison Potion]: A poisoned Hunter or Black Werewolf King CANNOT shoot! Use poison on high-confidence wolves or fake-Seers identified via the Vote Ledger, never randomly on suspected Gods.
 
 You MUST respond with a valid JSON object in the following format:
-{{ "thought": "...", "action": {{ "save": true or false, "poison": "PlayerName" or null }} }}
+{{ "thought": "1.[Night Victim & Self-Knife/Guard Check]... 2.[Wolf Suspects]... 3.[Potion Decision]...", "action": {{ "save": true or false, "poison": "PlayerName" or null }} }}

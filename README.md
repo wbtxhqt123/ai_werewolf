@@ -11,16 +11,19 @@
 
 ## ✨ 为什么好玩？（核心亮点）
 
-1. **🎭 真人感拉满的 AI 玩家**
+1. **🎭 真人感拉满的 AI 玩家 & 标准狼人杀博弈**
    * 每个 AI 都有独立的隐藏性格（**谨慎型、激进型、逻辑帝、情绪流、老好人、跟风党、阴谋家、多疑症、闷葫芦**）。
-   * AI 会悍跳预言家、发金水/查杀、倒钩、冲票，甚至在夜晚狼人频道里密谋战术。
+   * AI 会悍跳预言家、发金水/查杀、**警上表水与退水（Candidate Withdrawal）**、倒钩、冲票，甚至在夜晚狼人频道里密谋战术（若人类玩家为狼人，夜晚由人类狼人掌握最终袭击目标选择权）。
 2. **🎙️ 本地离线语音转文字（支持中英混说 + 高级设置内进度条下载激活）**
-   * 点击 **「⚙️ 高级设置 (Advanced Settings)」**，在语音输入模型卡片中选择语音模型（默认 **SenseVoiceSmall ~230MB** 或 **Whisper Large-v3-Turbo ~800MB**），点击 **「⬇️ 下载并启用语音」**，即可查看实时 **下载与加载进度条**。
+   * 点击 **「⚙️ 高级设置 (Advanced Settings)」**，在语音输入模型卡片中选择语音模型（默认 **Paraformer-Large ~220MB** 或 **Whisper Large-v3-Turbo ~800MB**），点击 **「⬇️ 下载并启用语音」**，即可查看实时 **下载与加载进度条**。
    * 模型在开局前下载并激活就绪后，进入对局点击发言框旁的 **🎤 麦克风按钮** 即可直接说话发言（支持普通话、英语及中英夹杂，Mac 与个人电脑 CPU 均可秒级识别）。
 3. **🏆 赛后复盘中心 & 揪 AI 互辩**
    * **🤖 AI 评价员**：游戏结束后，可选择「😊 温和鼓励」「😐 客观分析」或「😈 毒舌锐评」模式，让 AI 裁判复盘你整局的表现，还能和裁判多轮聊天。
    * **🗣️ 揪 AI 复盘对线**：不服气白天被投出局？在赛后复盘室勾选任意 AI 玩家（比如一键「🐺 选狼队」或「🔮 选神职」），直接质问他们当时为什么这么操作，AI 会亮明底牌和你当场互辩！
-4. **📖 全景记录与昼夜沉浸交互**
+4. **📖 全景记录、随手身份标记与亡灵上帝视角**
+   * **🏷️ 局内身份标记本**：点击任意 AI 玩家头像卡片右下角的 `🏷️` 按钮，即可快速循环标记你的猜测（`🐺 狼嫌` / `🔮 预言?` / `💧 金水/好` / `🛡️ 神职?`）。
+   * **👻 亡灵上帝视角 & 极速观战**：如果人类玩家中途出局，可在底部控制栏一键开启 **「👁️ 开启上帝视角」**（实时透视全员底牌、夜间行动与 AI 内心思考）或 **「⚡ 极速观战」**。
+   * **🎲 自由/随机选座**：支持固定座号或随机分配座号（`1..N` 号位），告别把把固定 1 号位。
    * 动态日月交替昼夜动画、背景音乐（BGM）、发言气泡、座位号高亮追踪（点击聊天中的 `@3号玩家` 即可筛选该玩家全场发言）。
 
 ---
@@ -98,8 +101,8 @@ python main_web.py
 ### 方式 A：直接在网页里填（最简单，推荐！）
 1. 打开网页 `http://127.0.0.1:8000`。
 2. 点击页面上的 **「⚙️ 高级设置 (Advanced Settings)」**。
-3. 选择服务商（支持 **OpenAI、豆包 Doubao、通义千问 Qwen、DeepSeek、Gemini** 或任意兼容 OpenAI 接口的 **Custom** 地址），填入你的 `API Key` 即可保存开玩！
-   *(注：如果不填 API Key，游戏也能正常启动，AI 会使用内置随机策略代打，适合测试流程。)*
+3. 选择服务商（支持 **OpenAI、豆包 Doubao、通义千问 Qwen、DeepSeek、Gemini** 或任意兼容 OpenAI 接口的 **Custom** 地址），填入你的 `API Key`，可点击 **「🔌 测试大模型连接」** 验证连通性后保存开玩！
+   *(注：大厅界面会实时显示当前是「🧠 大模型驱动」还是「🎲 内置随机机器人」模式。)*
 
 ### 方式 B：通过 `.env` 配置文件设置
 你也可以复制根目录下的 `.env.example` 为 `.env` 文件：
@@ -115,9 +118,9 @@ cp .env.example .env
 OPENAI_API_KEY=sk-xxxx
 
 # 语音识别（ASR）配置（可选）
-# 默认使用 "sensevoice"（阿里 SenseVoiceSmall int8，极速中英混识）
-# 也可改为 "faster-whisper" 使用 OpenAI Whisper 模型
-ASR_BACKEND=sensevoice
+# 默认使用 "paraformer"（阿里 FunASR Paraformer-Large int8 ONNX，高精中英混识+狼人杀热词纠正）
+# 也可改为 "faster-whisper" 或 "sensevoice"
+ASR_BACKEND=paraformer
 ASR_WHISPER_MODEL=large-v3-turbo
 ASR_DEVICE=auto
 ```
@@ -126,12 +129,13 @@ ASR_DEVICE=auto
 
 ## 🎙️ 语音输入模型对比与切换
 
-本项目移除了旧版低精度的 `whisper-tiny`，升级为双引擎架构（位于 `web/transcriber.py`）：
+本项目采用多引擎离线语音识别架构（位于 `web/transcriber.py`）：
 
 | 语音引擎 (`ASR_BACKEND`) | 默认模型 | 体积 | 特点与适用场景 |
 | :--- | :--- | :---: | :--- |
-| **`sensevoice`** *(默认)* | `SenseVoiceSmall` (`int8` ONNX) | ~230 MB | **首选推荐**：Mac (M系列/Intel) 与普通 PC 均可 **0.1秒内极速出字**，对中文、英文、中英夹杂及狼人杀黑话识别极准，且静音不乱出幻觉词。 |
-| **`faster-whisper`** *(备选)* | `large-v3-turbo` / `small` | ~250–800 MB | 内置狼人杀专属中英文词库提示词（Prompt）与 Silero VAD 静音过滤；适合配备独立显卡（CUDA）或偏爱 Whisper 模型的玩家。 |
+| **`paraformer`** *(默认)* | `Paraformer-Large` (`int8` ONNX) | ~220 MB | **首选推荐**：Mac (CoreML/CPU) 与普通 PC 均可 **0.1秒内极速出字**，内置狼人杀专属谐音热词纠正（金水/查杀/悍跳/退水/警徽流等），且静音不乱出幻觉词。 |
+| **`faster-whisper`** *(备选)* | `large-v3-turbo` / `small` | ~250–800 MB | 支持 Mac Apple Silicon (`mlx-whisper` Metal GPU) 与 NVIDIA CUDA (`CTranslate2`)，内置狼人杀中英双语提示词与 VAD 静音过滤。 |
+| **`sensevoice`** *(兼容)* | `SenseVoiceSmall` (`int8` ONNX) | ~230 MB | 阿里多语种轻量 ONNX 模型，支持环境变量切换。 |
 
 ---
 

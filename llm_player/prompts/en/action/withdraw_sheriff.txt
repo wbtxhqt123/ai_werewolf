@@ -1,0 +1,7 @@
+All Sheriff campaign speeches have concluded. Currently remaining candidates on the ballot: {candidates}.
+Decide whether you want to WITHDRAW (step down from the Sheriff election):
+- If you are a non-Seer good player (Villager/Witch/Guard/Hunter) and a Seer has claimed on the podium, you should WITHDRAW (`"withdraw_sheriff": true`) so you do not split votes away from the real Seer.
+- If you are a Werewolf actively competing for the badge, stay in the race (`"withdraw_sheriff": false`); if you only ran as a decoy wolf, you may withdraw (`"withdraw_sheriff": true`) to blend in as a villager.
+
+You MUST respond with a valid JSON object in the following format:
+{{ "thought": "Analyze the Sheriff claims and whether I should withdraw...", "action": {{ "withdraw_sheriff": true }} }}

@@ -1187,3 +1187,188 @@ body.night-mode .public-card {
     justify-content: space-between;
     align-items: center;
 }
+
+/* --- Match History Picker Modal --- */
+.history-picker-content {
+    max-width: 720px;
+}
+
+.history-stats-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 20px;
+    background: var(--modal-subtle, #f8fafc);
+    border-bottom: 2px solid var(--panel-border);
+    flex-shrink: 0;
+}
+
+.history-stat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: var(--modal-surface, #ffffff);
+    border: 2px solid var(--panel-border);
+    box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.14);
+    font-size: 0.84rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.history-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 20px;
+}
+
+.history-match-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 18px;
+    background: var(--modal-surface, #ffffff);
+    border: 2.5px solid var(--panel-border);
+    border-radius: 16px;
+    box-shadow: 3px 3px 0px var(--ink-color, #2d3436);
+    cursor: pointer;
+    transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.16s ease,
+                background-color 0.16s ease;
+    text-align: left;
+    width: 100%;
+    font-family: var(--font-body);
+}
+
+.history-match-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 5px 5px 0px var(--ink-color, #2d3436);
+    background: #fffdf4;
+}
+
+body.night-mode .history-match-card:hover {
+    background: #24344d;
+}
+
+.history-match-card:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1.5px 1.5px 0px var(--ink-color, #2d3436);
+}
+
+.history-match-card.active-reading {
+    border-color: var(--accent-secondary, #ff6b6b);
+    background: #fff9db;
+}
+
+body.night-mode .history-match-card.active-reading {
+    background: #28374f;
+    border-color: #facc15;
+}
+
+.history-card-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+}
+
+.history-card-top-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.history-game-id {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 1.05rem;
+    color: var(--text-primary);
+}
+
+.history-outcome-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 900;
+    border: 2px solid #2d3436;
+    box-shadow: 1.5px 1.5px 0px #2d3436;
+}
+
+.history-outcome-badge.won {
+    background: #55efc4;
+    color: #14532d;
+}
+
+.history-outcome-badge.lost {
+    background: #ff7675;
+    color: #ffffff;
+}
+
+.history-camp-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 800;
+    border: 1.5px solid var(--panel-border);
+    background: var(--modal-subtle, #f1f5f9);
+    color: var(--text-primary);
+}
+
+.history-card-meta-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 0.83rem;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.history-role-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 9px;
+    border-radius: 8px;
+    background: #fff3bf;
+    color: #2d3436;
+    border: 1.5px solid #2d3436;
+    font-weight: 800;
+    font-size: 0.8rem;
+}
+
+.history-card-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.history-read-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 14px;
+    border-radius: 12px;
+    border: 2px solid #2d3436;
+    background: #FFE66D;
+    color: #2d3436;
+    font-weight: 900;
+    font-size: 0.85rem;
+    box-shadow: 2px 2px 0px #2d3436;
+    white-space: nowrap;
+}
+

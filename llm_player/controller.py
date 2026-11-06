@@ -70,17 +70,19 @@ class LLMClient:
         else:
             print(f"Warning: API Key not found for provider {provider} or environment.")
         
+        self.temperature: float | None = None
         self.client = OpenAI(
             base_url=self.base_url,
             api_key=self.api_key,
         )
 
-    def get_completion(self, prompt: str, json_mode: bool = True) -> str:
+    def get_completion(self, prompt: str, json_mode: bool = True, temperature: float | None = None) -> str:
         """Sends a prompt to the LLM and returns the generated completion.
 
         Args:
             prompt: The complete prompt to send to the model.
             json_mode: When True, requests structured JSON object output from the API.
+            temperature: Optional sampling temperature override.
 
         Returns:
             The content of the LLM's response as a string. In case of an API error,
@@ -97,13 +99,20 @@ class LLMClient:
                 "model": self.model,
                 "messages": messages,
             }
+            eff_temp = temperature if temperature is not None else self.temperature
+            if eff_temp is not None:
+                kwargs["temperature"] = eff_temp
             if json_mode:
                 kwargs["response_format"] = {"type": "json_object"}
             try:
                 response = self.client.chat.completions.create(**kwargs)
             except Exception as api_err:
-                if json_mode and ("response_format" in str(api_err).lower() or "json_object" in str(api_err).lower()):
+                err_str = str(api_err).lower()
+                if json_mode and ("response_format" in err_str or "json_object" in err_str):
                     kwargs.pop("response_format", None)
+                    response = self.client.chat.completions.create(**kwargs)
+                elif "temperature" in err_str and "temperature" in kwargs:
+                    kwargs.pop("temperature", None)
                     response = self.client.chat.completions.create(**kwargs)
                 else:
                     raise
@@ -125,6 +134,8 @@ class MockLLMClient:
     in the prompt, which is useful for running the game without an active internet
     connection or API key.
     """
+    temperature: float | None = None
+
     def get_completion(self, prompt: str) -> str:
         print("\n--- LLM PROMPT ---")
         print(prompt)
@@ -138,6 +149,8 @@ class MockLLMClient:
             action = {"vote": None} # Abstain by default
         elif "run for sheriff?" in prompt.lower():
             action = {"run_for_sheriff": random.choice([True, False])}
+        elif "withdraw_sheriff" in prompt.lower() or "退水" in prompt.lower():
+            action = {"withdraw_sheriff": False}
         elif "vote for to be sheriff?" in prompt.lower():
             action = {"vote_for_sheriff": None} # Abstain
         elif "choose a player to eliminate" in prompt.lower():
@@ -273,6 +286,11 @@ ACTION_SCHEMAS: dict[str, dict[str, Any]] = {
         "type": "bool",
         "example": '{"thought": "...", "action": {"run_for_sheriff": true}}',
     },
+    "withdraw_sheriff": {
+        "keys": ("withdraw_sheriff",),
+        "type": "bool",
+        "example": '{"thought": "...", "action": {"withdraw_sheriff": false}}',
+    },
     "seer_action": {
         "keys": ("check",),
         "type": "optional_target",
@@ -331,6 +349,35 @@ def _coerce_optional_target(val: Any) -> tuple[bool, str | None]:
     return False, None
 
 
+PERSONALITY_TEMPERATURES: dict[str, float] = {
+    "analytical": 0.55,
+    "cautious": 0.60,
+    "silent": 0.65,
+    "diplomat": 0.70,
+    "follower": 0.72,
+    "paranoid": 0.80,
+    "emotional": 0.85,
+    "aggressive": 0.88,
+    "manipulative": 0.90,
+    "random": 0.95,
+}
+
+
+def _normalize_thought(val: Any) -> str | None:
+    """Normalizes the 'thought' field whether the LLM returns a string, dict, or list."""
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return val.strip()
+    if isinstance(val, dict):
+        parts = [f"[{k}] {v}" for k, v in val.items() if v is not None and str(v).strip()]
+        return " | ".join(parts) if parts else None
+    if isinstance(val, list):
+        parts = [str(item).strip() for item in val if item is not None and str(item).strip()]
+        return " | ".join(parts) if parts else None
+    return str(val).strip()
+
+
 def validate_and_normalize_response(parsed: dict, action_name: str | None = None) -> dict:
     """Validates and normalizes a parsed LLM JSON response against the expected schema for `action_name`.
 
@@ -339,6 +386,9 @@ def validate_and_normalize_response(parsed: dict, action_name: str | None = None
     """
     if not isinstance(parsed, dict):
         raise ValueError("Top-level JSON value must be an object/dictionary.")
+
+    if "thought" in parsed:
+        parsed["thought"] = _normalize_thought(parsed.get("thought"))
 
     if not action_name or action_name not in ACTION_SCHEMAS:
         return parsed
@@ -390,6 +440,9 @@ def validate_and_normalize_response(parsed: dict, action_name: str | None = None
         if not isinstance(raw_val, str) or not raw_val.strip():
             raise ValueError(f"Field 'action.{key}' must be a non-empty string. Expected format: {example}")
         action[key] = raw_val.strip()
+        if "withdraw" in action:
+            w_val = _coerce_bool(action.get("withdraw"))
+            action["withdraw"] = bool(w_val) if w_val is not None else False
     elif schema_type == "bool":
         coerced = _coerce_bool(raw_val)
         if coerced is None:
@@ -450,6 +503,7 @@ class LLMController(Controller):
         if game:
             self.game = game
         self.personality = personality
+        self.temperature = PERSONALITY_TEMPERATURES.get(personality, 0.75)
         self.language = language
         self.last_witch_decision: dict | None = None
         self.prompt_dir = os.path.join(os.path.dirname(__file__), "prompts")
@@ -545,6 +599,8 @@ class LLMController(Controller):
         lang = self._get_effective_language()
 
         for attempt in range(max_retries):
+            if hasattr(self.llm_client, "temperature"):
+                self.llm_client.temperature = self.temperature
             response_str = self.llm_client.get_completion(current_prompt)
             try:
                 parsed = extract_json(response_str)
@@ -583,6 +639,66 @@ class LLMController(Controller):
 
         return {"thought": "Failed to get valid response.", "action": {}}
 
+    def _build_vote_ledger(self, is_zh: bool) -> str:
+        """Formats historical votes into a compact ledger for Vote-Pattern Analysis (看票型)."""
+        vote_history = getattr(self.game, "vote_history", None) if getattr(self, "game", None) else None
+        if not vote_history:
+            return ""
+        lines: list[str] = []
+        for record in vote_history:
+            phase = record.get("phase", "")
+            votes = record.get("votes", {})
+            result = record.get("result", "")
+            if is_zh:
+                pairs = "，".join([f"{voter}->{target or '弃票'}" for voter, target in votes.items()])
+                lines.append(f"  * [{phase}] {pairs}（结果：{result}）")
+            else:
+                pairs = ", ".join([f"{voter}->{target or 'Abstain'}" for voter, target in votes.items()])
+                lines.append(f"  * [{phase}] {pairs} (Result: {result})")
+        header = "\n历史票型记录（用于看票型盘逻辑）：\n" if is_zh else "\nHistorical Vote Ledger (for vote-pattern deduction):\n"
+        return header + "\n".join(lines)
+
+    def _build_personal_tactical_lens(self, player: Player, is_zh: bool) -> str:
+        """Assigns each player seat a distinct analytical entry point and role-specific trick focus
+        so players sharing the same LLM model never produce identical thoughts."""
+        players = getattr(self.game, "players", []) if getattr(self, "game", None) else []
+        seat_idx = players.index(player) if player in players else 0
+
+        if isinstance(player.role, Werewolf):
+            all_wolves = [p for p in players if isinstance(p.role, Werewolf)]
+            wolf_idx = all_wolves.index(player) if player in all_wolves else 0
+            if is_zh:
+                wolf_styles = [
+                    "【你的本局狼人战术定位：悍跳主攻位】你倾向于主动争夺话语权（如第1天上警悍跳预言家，给好人发“金水”拉拢或给硬骨头发“查杀”施压；若队友已悍跳，则强势带节奏主推好人）。",
+                    "【你的本局狼人战术定位：深水倒钩位】你倾向于伪装成理性客观的闭眼好人（如留在警下投票、站边真预言家拿好人信任，必要时甚至果断“卖队友/倒钩”踩一脚暴露的狼队友以坐实自己的好人身份，留到决赛圈抗推好人）。",
+                    "【你的本局狼人战术定位：煽动冲锋/抿神位】你倾向于在发言中抓好人的口误与票型漏洞，替悍跳狼队友打掩护（冲锋），或暗中观察谁像女巫/守卫/猎人（抿神）以便夜晚精准刀神屠边；若被集火可适当“穿神职衣服”挡推。",
+                ]
+                return wolf_styles[wolf_idx % len(wolf_styles)]
+            else:
+                wolf_styles_en = [
+                    "[Your Personal Werewolf Playstyle: Aggro Fake-Seer / Pace-Setter] You prefer seizing the initiative (e.g., running for Sheriff to fake-claim Seer with a strategic Gold Water or Wolf Check; or if a teammate already jumped Seer, aggressively driving the daytime mislynch).",
+                    "[Your Personal Werewolf Playstyle: Deep-Cover Busser (倒钩)] You prefer disguising as an objective Villager (staying off the Sheriff ballot to cast a key vote, siding with the real Seer to earn trust, and even 'bussing' an exposed wolf teammate to survive into the endgame).",
+                    "[Your Personal Werewolf Playstyle: Flanker & God-Hunter (冲锋/抿神)] You focus on exploiting flaws in good players' speeches to support your fake-Seer teammate, reading subtle cues to identify hidden Gods (Witch/Guard/Hunter) for night kills, and fake-claiming a God role if pushed on the block.",
+                ]
+                return wolf_styles_en[wolf_idx % len(wolf_styles_en)]
+
+        if is_zh:
+            good_lenses = [
+                "【你的专属盘逻辑视角：票型与抱团审计】思考时优先对照《历史票型记录》，重点抓谁在警长竞选和放逐投票中暗中保人、分票或跟风冲票。",
+                "【你的专属盘逻辑视角：发言矛盾与视角审计】思考时重点抓谁的发言前后矛盾、谁存在“开天眼”（知道了好人不该知道的信息）、谁在空洞划水和稀泥。",
+                "【你的专属盘逻辑视角：真假预言家对跳与警徽流审计】思考时重点对比起跳预言家的查验心路历程、警徽流合理性，分辨谁是真预言家、谁是悍跳狼、谁是倒钩狼。",
+                "【你的专属盘逻辑视角：屠边局神民掩护与反套路审计】思考时重点评估当前狼人是试图“屠神”还是“屠民”，警惕狼人“自刀骗解药（骗银水）”或“穿神职衣服逃脱放逐”。",
+            ]
+            return good_lenses[seat_idx % len(good_lenses)]
+        else:
+            good_lenses_en = [
+                "[Your Personal Analytical Lens: Vote-Matrix & Alignment Auditor] Prioritize cross-checking the Historical Vote Ledger to catch who is protecting suspects, splitting votes, or bandwagoning.",
+                "[Your Personal Analytical Lens: Contradiction & Perspective Detector] Focus on catching players whose speeches contradict earlier claims, who slip up with insider wolf knowledge, or who hide behind vague filler.",
+                "[Your Personal Analytical Lens: Seer Counter-Claim & Badge-Flow Critic] Scrutinize competing Seer claims, the logic behind their check targets, and their badge flow plans to separate real Seer, fake Seer, and bussing wolves.",
+                "[Your Personal Analytical Lens: Slaughter-the-Side & Bluff Counter] Evaluate whether wolves are hunting Gods or Villagers, and stay alert for wolf tricks like Night 1 self-knifing to bait Witch's save or fake-claiming God roles on the block.",
+            ]
+            return good_lenses_en[seat_idx % len(good_lenses_en)]
+
     def _build_status_prompt(self, player: Player) -> str:
         """Constructs the comprehensive status section of the main prompt.
 
@@ -610,24 +726,35 @@ class LLMController(Controller):
             visible_log = "Nothing has happened yet."
 
         if player.logs:
+            # Keep the player's OWN prior THOUGHT entries so they maintain strategic continuity across phases,
+            # while excluding UI thinking indicators and any other player's thoughts.
             filtered_entries = [
                 entry for entry in player.logs
-                if entry.log_type not in (LogType.PLAYER_THINKING, LogType.PLAYER_DONE_THINKING, LogType.THOUGHT)
+                if entry.log_type not in (LogType.PLAYER_THINKING, LogType.PLAYER_DONE_THINKING)
+                and (entry.log_type != LogType.THOUGHT or entry.source == player)
             ]
             if filtered_entries:
                 visible_log = "\n".join([f"- {log_entry.get_text(lang)}" for log_entry in filtered_entries])
 
+        vote_ledger = self._build_vote_ledger(is_zh)
         long_term_memory = ""
         if player.long_term_memory:
             long_term_memory = f"\n长期记忆：\n{player.long_term_memory}" if is_zh else f"\nLong Term Memory:\n{player.long_term_memory}"
 
+        personal_lens = self._build_personal_tactical_lens(player, is_zh)
+
         # Role-specific information is added to give the LLM crucial context.
         if is_zh:
-            role_info = "- 你是普通村民，没有夜间特殊技能。请通过白天发言与投票找出狼人，同时注意掩护神职避免狼人屠边。"
+            role_info = (
+                "- 你是普通村民，没有夜间特殊技能。\n"
+                "- 进阶套路提示：通过听发言逻辑与【看票型】找出悍跳狼、冲锋狼与深水倒钩狼；在屠边局中注意替真神职打掩护（必要时可适当模糊身份替神职挡刀，但若被真神职质疑需及时退水表水）。\n"
+                f"- {personal_lens}"
+            )
             if isinstance(player.role, Witch):
                 role_info = (f"- 你是女巫。你还有{'一瓶解药' if player.role.has_save else '0瓶解药（已用完）'}。\n"
                              f"- 你还有{'一瓶毒药' if player.role.has_poison else '0瓶毒药（已用完）'}。\n"
-                             "- 战术提示：屠边局中神职全部出局则狼人直接获胜，前期请谨慎隐藏神职身份，在关键轮次或带队归票时再亮明身份。")
+                             "- 进阶套路提示：屠边局中神职全部出局则狼人直接获胜。前期请隐藏女巫身份；警惕狼人第1夜【自刀骗药】（骗取银水身份混入好人阵营），但第1夜救人通常能保住关键轮次并防止好人阵营崩盘；毒药留给铁狼或悍跳狼，带队归票时可报出银水信息。\n"
+                             f"- {personal_lens}")
                 if player.role.has_save and self.game.state.__class__.__name__ == "WitchNightState" and self.game.night_kill_target:
                     role_info += f"\n- 今晚狼人袭击的目标是：{self.game.night_kill_target.name}。"
             elif isinstance(player.role, Werewolf):
@@ -644,24 +771,36 @@ class LLMController(Controller):
                 )
                 role_info = (f"- 狼人阵营全员名单：{', '.join(pack_desc)}。\n"
                              f"- {king_info}\n"
-                             "- 战术提示：本局为屠边规则（杀光所有神职或杀光所有普通村民即可获胜）。夜间密谋时请与队友商议刀人目标及白天战术（如谁上警竞选警长、谁悍跳预言家、谁在警下倒钩或冲票）；白天公开发言时切勿暴露狼队友。")
+                             "- 狼人高阶战术套路：本局为屠边规则（杀光所有神职或杀光所有普通村民即可获胜）。请灵活运用狼人套路：\n"
+                             "  1)【悍跳预言家】：派1名狼人上警起跳预言家争夺警徽，可发好人“金水”拉票，或发“查杀”施压；\n"
+                             "  2)【倒钩与冲锋】：切勿全员抱团！至少安排队友打“倒钩”（站边真预言家、必要时踩悍跳狼队友一脚以做高自己身份）和“冲锋”（配合悍跳狼归票抗推好人）；\n"
+                             "  3)【自刀骗药与抿神】：第1夜可考虑自刀骗女巫解药拿“银水”做高身份（注意风险），被推上PK台时可【穿神职衣服】（假跳猎人/守卫/女巫）自保或诈出真神职。\n"
+                             f"- {personal_lens}")
             elif isinstance(player.role, Seer):
                 role_info = ("- 你是预言家。你每晚可以查验一名玩家的身份。\n"
-                             "- 战术提示：作为核心信息位，你通常应当竞选警长并在发言中报出查验结果（金水/查杀）与警徽流，带领好人放逐狼人。")
+                             "- 进阶套路提示：作为好人核心信息位，第1天务必上警竞选警长，清晰报出昨晚【查验结果（金水/查杀）】、查验心路历程，并安排好【警徽流】（预告今晚及明晚准备查验谁，以便若夜里被刀无遗言时通过移交或撕毁警徽传递查验结果）。面对悍跳狼时重点点破其逻辑漏洞与警下票型。\n"
+                             f"- {personal_lens}")
             elif isinstance(player.role, Guard):
                 role_info = ("- 你是守卫。你每晚可以守护一名玩家。\n"
-                             "- 战术提示：注意尽量低调隐藏身份避免被狼人针对，且第 1 夜女巫大概率使用解药时需谨防“同守同救（奶穿）”。")
+                             "- 进阶套路提示：前期务必深藏身份扮作普通村民，避免被狼人抿出身份刀死；第1夜女巫大概率使用解药，建议【空守或自守】以防与女巫“同守同救（奶穿）”救死好人；中后期优先守护已跳明的真预言家或女巫，打出平安夜。\n"
+                             f"- {personal_lens}")
                 if player.role.last_protected:
                     role_info += f"\n- 昨晚你守护了 {player.role.last_protected.name}，今晚不能连续守护同一个人。"
             elif isinstance(player.role, Hunter):
                 role_info = ("- 你是猎人。如果你出局（被女巫毒死除外），你可以开枪带走一名玩家。\n"
-                             "- 战术提示：前期尽量隐藏神职身份，避免过早成为狼人屠神目标。")
+                             "- 进阶套路提示：前期深藏身份避免被狼人针对或被女巫盲毒（被毒无法开枪）；若有狼人假跳猎人【穿你衣服】，或你被当成抗推位时，果断拍出猎人身份震慑全场。\n"
+                             f"- {personal_lens}")
         else:
-            role_info = "- You are a plain Villager with no night ability. Use daytime logic and voting to eliminate Werewolves and help protect God roles under Slaughter-the-Side rules."
+            role_info = (
+                "- You are a plain Villager with no night ability.\n"
+                "- Advanced Tactics: Use speech logic and the Historical Vote Ledger to spot Fake-Seer wolves (悍跳), Flanker wolves (冲锋), and Deep-Cover Bussers (倒钩). Under Slaughter-the-Side rules, help shield God roles and never give wolves a free mislynch.\n"
+                f"- {personal_lens}"
+            )
             if isinstance(player.role, Witch):
                 role_info = (f"- You have {'a save potion' if player.role.has_save else 'no save potion'} left.\n"
                              f"- You have {'a poison potion' if player.role.has_poison else 'no poison potion'} left.\n"
-                             "- Tactical Tip: Under Slaughter-the-Side rules, Werewolves win if all God roles die; stay hidden early and reveal only when decisive.")
+                             "- Advanced Tactics: Under Slaughter-the-Side rules, Werewolves win if all God roles die; stay hidden early. Beware of Night 1 Werewolf self-knife (自刀骗药) to earn 'Silver Water' trust, though saving on Night 1 usually preserves crucial tempo. Save your poison for confirmed wolves or fake-Seers.\n"
+                             f"- {personal_lens}")
                 if player.role.has_save and self.game.state.__class__.__name__ == "WitchNightState" and self.game.night_kill_target:
                      role_info += f"\n- Tonight, the werewolves targeted: {self.game.night_kill_target.name}."
             elif isinstance(player.role, Werewolf):
@@ -678,18 +817,25 @@ class LLMController(Controller):
                 )
                 role_info = (f"- Werewolf Pack Roster: {', '.join(pack_desc)}.\n"
                              f"- {king_info}\n"
-                             "- Tactical Tip: Under Slaughter-the-Side rules, your pack wins by eliminating either all God roles or all plain Villagers. During night whispers, coordinate tonight's kill and daytime strategy (who runs for Sheriff, who fake-claims Seer, who busses or supports). Never expose teammates in public daytime speeches.")
+                             "- Advanced Werewolf Playbook: Under Slaughter-the-Side rules, eliminate all Gods OR all Villagers. Use meta-game tricks:\n"
+                             "  1) [Fake-Claim Seer (悍跳)]: Send 1 wolf to run for Sheriff and claim Seer, giving a 'Gold Water' (good check) to buy trust or a 'Wolf Check' (查杀) to pressure a target;\n"
+                             "  2) [Deep-Cover Bussing (倒钩) & Aggro Support (冲锋)]: Never vote as a monolith! Have one teammate bus/criticize the fake-Seer to look like a pure villager while another pushes the mislynch;\n"
+                             "  3) [Self-Knife (自刀骗药) & Fake God Claims (穿衣服)]: Consider Night 1 self-knife to bait Witch's save, or claim Hunter/Guard when on the execution block to survive.\n"
+                             f"- {personal_lens}")
             elif isinstance(player.role, Seer):
                 role_info = ("- You are the Seer. You can check one player's identity each night.\n"
-                             "- Tactical Tip: As the village's information leader, consider running for Sheriff and sharing your check results and badge plan to guide the village.")
+                             "- Advanced Tactics: Run for Sheriff on Day 1, clearly state your Night 1 check result (Gold Water / Wolf Check), explain why you checked that seat, and set a [Sheriff Badge Flow (警徽流)] (announcing who you will check tonight so passing/destroying the badge at dawn reveals the result even without Last Words).\n"
+                             f"- {personal_lens}")
             elif isinstance(player.role, Guard):
                 role_info = ("- You are the Guard. You can protect one player each night.\n"
-                             "- Tactical Tip: Keep a low profile so Werewolves cannot easily hunt Gods, and beware of Guard+Witch save conflict on Night 1.")
+                             "- Advanced Tactics: Stay hidden early as a plain villager; on Night 1, consider guarding nobody or yourself to avoid the deadly Guard+Witch save conflict (同守同救奶穿) on the Night 1 victim. Later, protect confirmed Seer/Witch to create peaceful nights.\n"
+                             f"- {personal_lens}")
                 if player.role.last_protected:
                     role_info += f"\n- Last night you protected {player.role.last_protected.name}. You cannot protect them again tonight."
             elif isinstance(player.role, Hunter):
                 role_info = ("- You are the Hunter. If you die (except by poison), you can shoot someone.\n"
-                             "- Tactical Tip: Hide your God identity early so Werewolves cannot easily complete a God-wipe.")
+                             "- Advanced Tactics: Hide your God identity early to avoid wolf God-hunting or accidental Witch poison; if a werewolf fake-claims Hunter (stealing your role) or the village tries to execute you, reveal boldly.\n"
+                             f"- {personal_lens}")
 
         role_display_name = (
             getattr(player.role, "name_zh", player.role.name)
@@ -708,7 +854,7 @@ class LLMController(Controller):
             game=self.game,
             player_status=player_status,
             role_info=role_info,
-            visible_log=visible_log + long_term_memory
+            visible_log=visible_log + vote_ledger + long_term_memory
         )
 
     def _get_thinking_visibility(self, player: Player) -> dict[str, Any]:
@@ -830,6 +976,8 @@ class LLMController(Controller):
             return {"vote_for_sheriff": None}
         elif action_name == "run_for_sheriff":
             return {"run_for_sheriff": False}
+        elif action_name == "withdraw_sheriff":
+            return {"withdraw_sheriff": False}
         elif action_name == "seer_action":
             return {"check": None}
         elif action_name == "guard_protect":
@@ -852,14 +1000,26 @@ class LLMController(Controller):
 
         if state_cls_name == "WerewolfNightState":
             if is_zh:
-                night1_extra = "特别是今晚是第 1 夜，请重点商量天亮后谁去上警竞选警长、谁悍跳预言家（发谁金水或查杀）、谁在警下投票或倒钩，以及白天如何打配合；" if day_num == 1 else "请结合白天各玩家的发言与投票表现，分析谁是神职、谁是村民，商量今晚刀谁以及明天白天谁主推带节奏；"
+                night1_extra = (
+                    "今晚是第 1 夜，请重点分工：1) 谁在天亮后上警【悍跳预言家】（发谁“金水”拉票，或发谁“查杀”施压，留什么警徽流）；"
+                    "2) 谁留在警下投出关键警长票或打【倒钩】（站边真预言家做高身份）；"
+                    "3) 今晚是正常刀外置位好人，还是由悍跳狼/黑狼王【自刀骗解药】拿女巫银水；"
+                    if day_num == 1
+                    else "请结合白天各玩家的发言与历史票型，【抿神】判断谁是预言家、女巫、守卫或猎人，评估屠神与屠民哪条路线更快，商量今晚刀谁以及明天谁主推带节奏；"
+                )
                 return (
                     f"【当前场景：狼人夜间秘密频道（仅狼人队友可见，好人听不到）】"
                     f"请直接对你的狼队友说话：{night1_extra}"
                     f"明确提出你建议今晚袭击的目标座位号与白天战术安排（控制在 2-4 句话）。"
                 )
             else:
-                night1_extra = "Especially since this is Night 1, coordinate who will run for Sheriff at dawn, who will fake-claim Seer, who will stay off the badge to vote, and how to align daytime speeches. " if day_num == 1 else "Based on daytime speeches and votes, analyze who the remaining Gods or Villagers are, agree on tonight's kill target, and plan tomorrow's narrative. "
+                night1_extra = (
+                    "Since this is Night 1, assign roles: 1) Who runs for Sheriff to [Fake-Claim Seer (悍跳)] (giving a Gold Water or Wolf Check); "
+                    "2) Who stays off the ballot to vote for Sheriff or plays [Deep-Cover Busser (倒钩)]; "
+                    "3) Whether to knife an outside player or attempt a [Night 1 Self-Knife (自刀骗药)] to bait the Witch's save. "
+                    if day_num == 1
+                    else "Based on daytime speeches and the Vote Ledger, deduce who the remaining Gods (Seer/Witch/Guard/Hunter) or Villagers are, decide whether God-wipe or Villager-wipe is faster, and agree on tonight's kill target. "
+                )
                 return (
                     f"[Context: Private Werewolf Night Channel (visible ONLY to werewolf teammates)] "
                     f"Speak directly to your werewolf pack: {night1_extra}"
@@ -870,26 +1030,28 @@ class LLMController(Controller):
             if is_zh:
                 return (
                     "【当前场景：警长竞选演说】你正在竞选警长（拥有 1.5 票投票权并决定发言顺序）。"
-                    "请向全场发表你的竞选演说：如果你是预言家，请直接报出昨晚的查验结果（金水/查杀）并留好警徽流；"
-                    "如果你是其他好人，请说明上警理由与盘逻辑方向；如果你是狼人，可以选择悍跳预言家争夺警徽，或伪装好人拉票（控制在 2-4 句话）。"
+                    "请向全场发表你的竞选演说：如果你是真预言家，请直接报出昨晚的查验结果（金水/查杀）、查验心路历程并留好【警徽流】（今晚及明晚查谁），绝不退水；"
+                    "如果你是悍跳狼人，请逼真地伪装预言家报出编造的查验结果（金水拉拢好人或查杀施压）与警徽流，争夺警徽；"
+                    "如果你是上警表水/诈身份的好人，或者决定让路给真预言家/狼队友的候选人，请说明上警理由与站边判断，并可在发言末尾宣布“我退水”（或在 JSON 的 action 中附上 `\"withdraw\": true`）（控制在 2-4 句话）。"
                 )
             else:
                 return (
                     "[Context: Sheriff Election Campaign Speech] You are campaigning for Sheriff (1.5x vote weight and speech order control). "
-                    "If you are the Seer, reveal your Night 1 check result and badge plan; if you are another good role, explain why you should hold the badge; "
-                    "if you are a Werewolf, you may fake-claim Seer or campaign as a villager to secure the badge (keep it to 2-4 sentences)."
+                    "If you are the real Seer, reveal your Night 1 check result (Gold Water / Wolf Check), your reasoning, and your [Badge Flow (警徽流)] plan, and never withdraw; "
+                    "if you are a Werewolf fake-claiming Seer, deliver a convincing fabricated check result and badge plan to win the badge; "
+                    "if you are a good player who only ran to share reads or wish to step down for the real Seer, explain your stance and state 'I withdraw' (or include `\"withdraw\": true` inside `action`) (keep it to 2-4 sentences)."
                 )
 
         if state_cls_name == "TieSpeechState":
             if is_zh:
                 return (
                     "【当前场景：平票 PK 辩护发言】你目前处于平票 PK 环节。"
-                    "请指出平票对手发言中的逻辑漏洞，坚定为自己的身份辩护，并号召其他玩家把票投给对手（控制在 2-4 句话）。"
+                    "请犀利指出平票对手发言与票型中的逻辑漏洞，坚定表水为自己辩护（若你是神职或急需自保的狼人，可考虑亮身份/穿神职衣服施压），并号召其他玩家把票投给对手（控制在 2-4 句话）。"
                 )
             else:
                 return (
                     "[Context: Tie-Breaker PK Speech] You are in a tie-breaker runoff. "
-                    "Point out flaws in your tied opponent's statements, defend your own role/stance, and rally voters to vote for your side (keep it to 2-4 sentences)."
+                    "Attack the contradictions and voting record of your tied opponent, defend your stance (claiming or bluffing a key role if necessary to survive), and rally voters to eliminate your opponent (keep it to 2-4 sentences)."
                 )
 
         if state_cls_name == "LastWordsState":
@@ -897,31 +1059,42 @@ class LLMController(Controller):
                 return (
                     "【当前场景：出局遗言】你已经出局，正在发表最后的遗言。"
                     "注意你已无法继续参与后续投票，切勿说“看大家一会儿怎么投我”之类的话；"
-                    "如果你是好人或神职，请交代清楚你的真实底牌、技能使用记录以及你最怀疑的狼人座位号；"
-                    "如果你是狼人，请在遗言中继续伪装好人误导好人视线或掩护狼队友（控制在 2-4 句话）。"
+                    "如果你是好人或神职，请交代清楚你的真实底牌、技能使用记录（如银水/刀口/守护记录）以及你通过票型锁定的狼人座位号；"
+                    "如果你是狼人，请在遗言中继续伪装好人或假神职（如假装被冤死的预言家/守卫/女巫），误导好人视线并掩护存活的狼队友（控制在 2-4 句话）。"
                 )
             else:
                 return (
                     "[Context: Last Words (Eliminated)] You have been eliminated and are giving your final Last Words. "
-                    "Do NOT speak as if you are still alive to vote; if you are on the Villager side, clearly leave your role, ability history, and top suspects; "
-                    "if you are a Werewolf, use your final words to mislead the village or protect your pack (keep it to 2-4 sentences)."
+                    "Do NOT speak as if you are still alive to vote; if you are on the Villager side, clearly reveal your true role, ability history, and wolf suspects; "
+                    "if you are a Werewolf, keep bluffing as a wronged villager or God role to mislead the village and protect your surviving pack (keep it to 2-4 sentences)."
                 )
 
         if is_zh:
             return (
-                "【当前场景：白天公开发言】请结合昨晚死讯、警上竞选情况、已有的发言与投票记录进行分析："
-                "点出具体的玩家座位号（如“X号”），说明你怀疑谁、相信谁，并明确表态你今天准备归票/投票给谁（控制在 2-4 句话，避免空洞套话）。"
+                "【当前场景：白天公开发言】请结合昨晚死讯、真假预言家对跳（金水/查杀/警徽流）、《历史票型记录》与之前发言进行深度推理："
+                "点出具体的玩家座位号（如“X号”），明确说明你站边哪位预言家、怀疑谁在冲锋或倒钩（如果你是狼人，请按你的定位执行悍跳带队、倒钩卖队友或冲锋抗推好人），并明确表态你今天准备归票/投票给谁（控制在 2-4 句话，拒绝复读和空话）。"
             )
         else:
             return (
-                "[Context: Daytime Public Speech] Analyze last night's casualties, sheriff election, and prior speeches/votes: "
-                "reference specific seat numbers (e.g., 'Player X'), explain who you suspect or trust, and state clearly who you intend to vote for today (keep it to 2-4 sentences, avoid generic filler)."
+                "[Context: Daytime Public Speech] Analyze last night's casualties, competing Seer claims (Gold Water/Wolf Check/Badge Flow), and the Historical Vote Ledger: "
+                "reference specific seat numbers (e.g., 'Player X'), state which Seer claim you back, call out suspected flankers or bussers (or execute your werewolf bluff/bus strategy if you are a wolf), and state clearly who you intend to vote for today (keep it to 2-4 sentences, no generic filler)."
             )
 
     def get_speech(self, player: Player) -> str:
         speech_context = self._build_speech_context(player)
         action = self._get_decision(player, "speech", {"speech_context": speech_context})
-        return action.get("speech", "...")
+        speech_text = action.get("speech", "...")
+        state_cls_name = self.game.state.__class__.__name__ if (getattr(self, "game", None) and getattr(self.game, "state", None)) else ""
+        if state_cls_name == "SheriffSpeechState" and not isinstance(player.role, Seer):
+            explicit_withdraw = bool(action.get("withdraw", False))
+            if not explicit_withdraw and isinstance(speech_text, str):
+                has_negation = bool(re.search(r"(不退水|不会退水|绝不退水|don'?t\s+withdraw|not\s+withdraw|never\s+withdraw)", speech_text, re.IGNORECASE))
+                has_withdraw_phrase = bool(re.search(r"(我选择退水|我宣布退水|我退水|在此退水|表完水退水|退水了|i\s+withdraw(?:\s+from\s+the\s+sheriff)?)", speech_text, re.IGNORECASE))
+                if has_withdraw_phrase and not has_negation:
+                    explicit_withdraw = True
+            if explicit_withdraw:
+                setattr(player, "withdrew_in_speech", True)
+        return speech_text
 
     def get_vote(self, player: Player, potential_targets: list[Player]) -> Player | None:
         targets_str = ", ".join([p.name for p in potential_targets])
@@ -1003,6 +1176,26 @@ class LLMController(Controller):
         if target_name == "destroy_badge":
             return None
         return self._find_player_by_name(target_name, potential_targets)
+
+    def get_sheriff_withdraw_decision(self, player: Player) -> bool:
+        # Real Seer never withdraws from Sheriff election (0 token cost)
+        if isinstance(player.role, Seer):
+            return False
+        # If this player already hard-claimed Seer during SheriffSpeechState, keep them in the race (0 token cost)
+        if getattr(self, "game", None):
+            my_sheriff_speeches = [
+                e.get_text("zh") + " " + e.get_text("en")
+                for e in self.game.game_log
+                if e.log_type == LogType.SPEECH and e.source == player and e.state == "SheriffSpeechState"
+            ]
+            combined = " ".join(my_sheriff_speeches)
+            if re.search(r"(我是预言家|我跳预言家|真预言家|昨晚查验了|i\s+am\s+the\s+(?:real\s+)?seer|i\s+checked\s+player)", combined, re.IGNORECASE):
+                return False
+
+        candidates = getattr(self.game, "election_players", []) if getattr(self, "game", None) else []
+        candidates_str = ", ".join([p.name for p in candidates])
+        action = self._get_decision(player, "withdraw_sheriff", {"candidates": candidates_str})
+        return bool(action.get("withdraw_sheriff", False))
 
     def summarize_history(self, player: Player, logs_to_summarize: list[LogEntry]):
         """Uses the LLM to summarize the events of the day for a player.

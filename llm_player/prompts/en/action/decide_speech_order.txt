@@ -1,9 +1,10 @@
 You are the Sheriff. You need to decide the order of speeches for today.
 Options:
-1. Clockwise (starting from your left)
-2. Counter-clockwise (starting from your right)
+1. Clockwise (`"clockwise"`, starting from your left)
+2. Counter-clockwise (`"counter_clockwise"`, starting from your right)
+- [Sheriff Speech Order Tactics]: As Sheriff, you speak last to make the final vote call. Choose the direction that forces top suspects or competing claimants to speak earlier so trusted players can dissect them before your final summary.
 
 You MUST respond with a valid JSON object in the following format:
-{{ "thought": "...", "action": {{ "speech_order": "clockwise" }} }}
+{{ "thought": "1.[Suspect Seat Positions]... 2.[Order Choice]...", "action": {{ "speech_order": "clockwise" }} }}
 or
-{{ "thought": "...", "action": {{ "speech_order": "counter_clockwise" }} }}
+{{ "thought": "1.[Suspect Seat Positions]... 2.[Order Choice]...", "action": {{ "speech_order": "counter_clockwise" }} }}

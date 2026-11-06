@@ -146,8 +146,12 @@ class WerewolfNightState(GameState):
                     camps=["Werewolves"]
                 ))
 
-        # Werewolf private discussion
-        for werewolf in werewolves:
+        # Werewolf private discussion (AI wolves speak first so human wolf can read their suggestions)
+        ordered_werewolves = sorted(
+            werewolves,
+            key=lambda w: 1 if getattr(w.controller, "is_human", False) else 0,
+        )
+        for werewolf in ordered_werewolves:
             speech = werewolf.controller.get_speech(werewolf)
             self.game.log(LogEntry(
                 log_type=LogType.WHISPER,
@@ -157,8 +161,9 @@ class WerewolfNightState(GameState):
                 camps=["Werewolves"]
             ))
 
-        # One werewolf chooses the target
-        acting_werewolf = random.choice(werewolves)
+        # Prioritize human werewolf to choose the final kill target; fallback to random AI wolf
+        human_werewolf = next((w for w in werewolves if getattr(w.controller, "is_human", False)), None)
+        acting_werewolf = human_werewolf if human_werewolf is not None else random.choice(werewolves)
         
         potential_targets = [p for p in self.game.players if p.is_alive]
         target = acting_werewolf.controller.get_werewolf_target(acting_werewolf, potential_targets)

@@ -18,6 +18,7 @@ STATE_TRANSLATIONS = {
     "NightEndState": "长夜结束阶段",
     "SheriffElectionState": "警长竞选阶段",
     "SheriffSpeechState": "竞选发言阶段",
+    "SheriffWithdrawState": "警上退水阶段",
     "SheriffVoteState": "警长投票阶段",
     "DayStartState": "天亮阶段",
     "DayEndState": "天黑阶段",

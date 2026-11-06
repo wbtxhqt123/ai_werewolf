@@ -538,6 +538,147 @@ class TestOperationsAndVoteHistory(unittest.TestCase):
         self.assertEqual([e.target.name for e in elim_logs], ["Player 2", "Player 8"])
         self.assertEqual([d["player"] for d in self.game.death], ["Player 2", "Player 8"])
 
+    def test_game_history_enrichment_and_legacy_reconstruction(self):
+        import tempfile
+        import os
+        from game.history import GameHistory
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+            tmp_path = tmp.name
+            tmp.write("[]")
+
+        try:
+            gh = GameHistory(storage_file=tmp_path)
+            legacy_players = [
+                {"name": "Player 1", "role": "Seer", "is_alive": True},
+                {"name": "Player 2", "role": "Werewolf", "is_alive": False},
+                {"name": "Player 3", "role": "Black Werewolf King", "is_alive": False},
+            ]
+            legacy_logs = [
+                {
+                    "type": "WEREWOLF_TARGET",
+                    "message": {"en": "Wolves targeted Player 1", "zh": "狼人袭击了 Player 1"},
+                    "source": "Player 2",
+                    "target": "Player 1",
+                    "data": {},
+                    "camps": ["Werewolves"],
+                    "round": 1,
+                    "state": "WerewolfNightState",
+                },
+                {
+                    "type": "SEER_CHECK",
+                    "message": {"en": "Checked Player 2", "zh": "查验了 Player 2"},
+                    "source": "Player 1",
+                    "target": "Player 2",
+                    "data": {"result": "Werewolf"},
+                    "camps": ["Villagers"],
+                    "round": 1,
+                    "state": "SeerNightState",
+                },
+                {
+                    "type": "SHERIFF_ELECTED",
+                    "message": {"en": "Player 1 elected Sheriff", "zh": "Player 1 当选警长"},
+                    "source": None,
+                    "target": "Player 1",
+                    "data": {},
+                    "camps": ["All"],
+                    "round": 1,
+                    "state": "SheriffVoteState",
+                },
+                {
+                    "type": "VOTE_RESULT",
+                    "message": {"en": "Player 2 executed.", "zh": "Player 2 被放逐。"},
+                    "source": None,
+                    "target": None,
+                    "data": {
+                        "phase": "Execution Vote",
+                        "votes": {"Player 2": ["Player 1", "Player 3"], "Abstained": ["Player 2"]},
+                        "result": "Player 2",
+                        "sheriff": "Player 1",
+                    },
+                    "camps": ["All"],
+                    "round": 2,
+                    "state": "VoteState",
+                },
+                {
+                    "type": "PLAYER_ELIMINATED",
+                    "message": {"en": "Player 2 eliminated", "zh": "Player 2 出局"},
+                    "source": None,
+                    "target": "Player 2",
+                    "data": {},
+                    "camps": ["All"],
+                    "round": 2,
+                    "state": "ExecutionState",
+                },
+            ]
+
+            gid = gh.add_game(winner="Villagers", players=legacy_players, logs=legacy_logs)
+            self.assertEqual(gid, 1)
+
+            summaries = gh.get_history_summary()
+            self.assertEqual(len(summaries), 1)
+            self.assertEqual(summaries[0]["human_role"], "Seer")
+            self.assertTrue(summaries[0]["human_won"])
+            self.assertEqual(summaries[0]["rounds"], 2)
+
+            detail = gh.get_game_details(1)
+            self.assertIsNotNone(detail)
+            assert detail is not None
+            self.assertEqual(detail["human_role"], "Seer")
+            self.assertTrue(detail["players"][0]["is_sheriff"])
+            self.assertEqual(len(detail["votes"]), 1)
+            self.assertEqual(detail["votes"][0]["votes"]["Player 1"], "Player 2")
+            self.assertEqual(len(detail["deaths"]), 1)
+            self.assertEqual(detail["deaths"][0]["player"], "Player 2")
+
+            seer_ops = gh.reconstruct_player_operations(detail, "Player 1")
+            self.assertEqual(seer_ops["role"], "Seer")
+            self.assertEqual(len(seer_ops["checked"]), 1)
+            self.assertEqual(seer_ops["checked"][0]["player"], "Player 2")
+            self.assertEqual(seer_ops["checked"][0]["camp"], "Werewolves")
+
+            wolf_ops = gh.reconstruct_player_operations(detail, "Player 2")
+            self.assertEqual(wolf_ops["role"], "Werewolf")
+            self.assertIn("Player 3", wolf_ops["teammates"])
+            self.assertEqual(wolf_ops["king"], "Player 3")
+            self.assertEqual(wolf_ops["kills"][0]["target"], "Player 1")
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    def test_api_historical_game_endpoints_and_rehydration(self):
+        from starlette.testclient import TestClient
+        from web.server import app, game_history
+
+        client = TestClient(app)
+        res_list = client.get("/api/game/history")
+        self.assertEqual(res_list.status_code, 200)
+        hist_list = res_list.json().get("history", [])
+        if hist_list:
+            first_id = hist_list[0]["id"]
+            res_detail = client.get(f"/api/game/history/{first_id}")
+            self.assertEqual(res_detail.status_code, 200)
+            detail = res_detail.json()
+            self.assertEqual(detail["id"], first_id)
+            self.assertIn("votes", detail)
+            self.assertIn("deaths", detail)
+
+            # Test rehydrated records, operations, and evaluation via history_<id>
+            res_rec = client.get(f"/api/game/history_{first_id}/records")
+            self.assertEqual(res_rec.status_code, 200)
+            self.assertIn("votes", res_rec.json())
+
+            res_ops = client.get(f"/api/game/history_{first_id}/player/Player 1/operations")
+            self.assertEqual(res_ops.status_code, 200)
+            self.assertIn("role", res_ops.json())
+
+            res_eval = client.post(
+                "/api/game/evaluate",
+                json={"game_id": f"history_{first_id}", "mode": "mild", "language": "zh"},
+            )
+            self.assertEqual(res_eval.status_code, 200)
+            self.assertIn("evaluation", res_eval.json())
+
 
 if __name__ == "__main__":
     unittest.main()

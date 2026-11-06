@@ -1,8 +1,8 @@
 As the Guard, you act.
 - You can protect one of these players: {potential_targets}.
-- If you protect someone, they cannot be killed by werewolves tonight.
-- You cannot protect the same person two nights in a row.
-What is your decision?
+- If you protect someone, they cannot be killed by werewolves tonight (unless the Witch also uses the save potion on them, which causes a conflict death!).
+- You cannot protect the same person two nights in a row. You may also guard nobody (`null`).
+- [Guard Tactics]: On Night 1, the Witch usually uses her save potion, so consider guarding nobody (`null`) or guarding yourself to avoid killing the victim via Guard+Witch conflict. On later nights, protect the revealed real Seer or Witch to create a peaceful night.
 
 You MUST respond with a valid JSON object in the following format:
-{{ "thought": "...", "action": {{ "protect": "PlayerName" or null }} }}
+{{ "thought": "1.[Witch Save & Conflict Risk]... 2.[Wolf Kill Prediction]... 3.[Protection Decision]...", "action": {{ "protect": "PlayerName" or null }} }}

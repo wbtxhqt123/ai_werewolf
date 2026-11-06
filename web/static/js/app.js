@@ -44,6 +44,10 @@ let gameState = {
     lastLogIndex: 0,
     myRole: 'Random',
     myAvatar: '👤',
+    myPlayerName: 'Player 1',
+    userSeatChoice: '1',
+    spectatorMode: false,
+    playerNotes: {},
     phase: 'Day 1',
     pendingAction: null,
     lang: 'zh',
@@ -53,11 +57,55 @@ let gameState = {
     selectedArguePlayers: new Set(),
     isSending: false,
     isPolling: false,
-    pendingVoteLogs: []
+    pendingVoteLogs: [],
+    isArchiveMode: false,
+    archiveGameId: null,
+    archivePerspective: 'god',
+    showArchiveThoughts: true,
+    archiveRawLogs: [],
+    archiveSummaryList: [],
+    historyPickerFilter: 'all'
 };
 
 /** @type {number|null} - The interval ID for the game state polling timer. */
 let pollingInterval = null;
+
+/**
+ * Returns the human player's seat name (e.g. 'Player 1' or 'Player 5').
+ * @returns {string}
+ */
+function getMyPlayerName() {
+    return gameState.myPlayerName || 'Player 1';
+}
+
+const PLAYER_NOTE_STATES = [
+    { key: '', icon: '🏷️', zh: '标记', en: 'Tag', cls: 'note-none' },
+    { key: 'wolf', icon: '🐺', zh: '🐺 狼嫌', en: '🐺 Wolf?', cls: 'note-wolf' },
+    { key: 'seer', icon: '🔮', zh: '🔮 预言?', en: '🔮 Seer?', cls: 'note-seer' },
+    { key: 'good', icon: '💧', zh: '💧 金水/好', en: '💧 Good', cls: 'note-good' },
+    { key: 'god', icon: '🛡️', zh: '🛡️ 神职?', en: '🛡️ God?', cls: 'note-god' }
+];
+
+function cyclePlayerNoteTag(playerName) {
+    if (!playerName) return;
+    if (!gameState.playerNotes) gameState.playerNotes = {};
+    const currentKey = gameState.playerNotes[playerName] || '';
+    const idx = PLAYER_NOTE_STATES.findIndex(s => s.key === currentKey);
+    const nextState = PLAYER_NOTE_STATES[(idx + 1) % PLAYER_NOTE_STATES.length];
+    if (nextState.key) {
+        gameState.playerNotes[playerName] = nextState.key;
+    } else {
+        delete gameState.playerNotes[playerName];
+    }
+    try {
+        if (gameState.gameId) {
+            sessionStorage.setItem(`werewolf_notes_${gameState.gameId}`, JSON.stringify(gameState.playerNotes));
+        }
+    } catch (e) {}
+    if (gameState.players && gameState.players.length > 0) {
+        updatePlayers(gameState.players);
+    }
+}
 
 // --- CONSTANTS & CONFIGURATION ---
 
@@ -176,6 +224,25 @@ const I18N = {
             titleMax: "消息速度：极速无延迟 (点击切换 1x)",
             skip: "快进",
             skipTitle: "立即显示所有排队中的消息"
+        },
+        history: {
+            btn: "📜 历史战绩",
+            switchBtn: "📋 切换对局",
+            modalTitle: "往期对局战绩",
+            filterAll: "🌟 全部对局",
+            filterWon: "🏆 获胜局",
+            filterGood: "👱 好人胜",
+            filterWolf: "🐺 狼人胜",
+            perspLabel: "视角:",
+            perspGod: "👁️ 全知视角",
+            perspMe: "👤 第一视角",
+            perspSpeech: "🗣️ 仅看发言",
+            thoughtsBtn: "🧠 AI心路",
+            collapseAll: "📂 全部收起",
+            expandAll: "📂 全部展开",
+            emptyList: "暂无往期对局记录，快去开始第一局狼人杀吧！",
+            readBtn: "📖 阅读对局",
+            readingNow: "✨ 当前回看中"
         }
     },
     en: {
@@ -291,6 +358,25 @@ const I18N = {
             titleMax: "Message Speed: Instant (Click for 1x)",
             skip: "Skip",
             skipTitle: "Show all queued messages immediately"
+        },
+        history: {
+            btn: "📜 Match History",
+            switchBtn: "📋 Switch Game",
+            modalTitle: "Previous Games & Records",
+            filterAll: "🌟 All Matches",
+            filterWon: "🏆 Victories",
+            filterGood: "👱 Villagers Win",
+            filterWolf: "🐺 Werewolves Win",
+            perspLabel: "View:",
+            perspGod: "👁️ God View",
+            perspMe: "👤 My View",
+            perspSpeech: "🗣️ Speeches Only",
+            thoughtsBtn: "🧠 AI Thoughts",
+            collapseAll: "📂 Collapse All",
+            expandAll: "📂 Expand All",
+            emptyList: "No previous games recorded yet. Start your first match!",
+            readBtn: "📖 Read Match",
+            readingNow: "✨ Reading Now"
         }
     }
 };
@@ -726,7 +812,145 @@ function init() {
 
     setupEvaluationListeners();
     setupSettingsListeners();
+    initCartoonDropdowns();
     setupVoiceInput();
+}
+
+/**
+ * Replaces native OS <select> menus inside the Settings Modal with custom Neo-Brutalist / Cartoon Pop dropdowns,
+ * keeping the underlying <select> elements synchronized for events and values.
+ */
+function initCartoonDropdowns() {
+    const selects = [
+        document.getElementById('provider-select'),
+        document.getElementById('voice-backend-select')
+    ].filter(Boolean);
+
+    selects.forEach(selectEl => {
+        if (selectEl.dataset.cartoonEnhanced === 'true') return;
+        selectEl.dataset.cartoonEnhanced = 'true';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'cartoon-dropdown-wrapper';
+        wrapper.dataset.forSelect = selectEl.id;
+
+        selectEl.parentNode.insertBefore(wrapper, selectEl);
+        wrapper.appendChild(selectEl);
+        selectEl.style.display = 'none';
+
+        const triggerBtn = document.createElement('button');
+        triggerBtn.type = 'button';
+        triggerBtn.className = 'cartoon-dropdown-trigger';
+        triggerBtn.setAttribute('aria-haspopup', 'listbox');
+        triggerBtn.setAttribute('aria-expanded', 'false');
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'cartoon-dropdown-label';
+
+        const arrowSpan = document.createElement('span');
+        arrowSpan.className = 'cartoon-dropdown-arrow';
+        arrowSpan.innerText = '▾';
+
+        triggerBtn.appendChild(labelSpan);
+        triggerBtn.appendChild(arrowSpan);
+
+        const menuDiv = document.createElement('div');
+        menuDiv.className = 'cartoon-dropdown-menu';
+        menuDiv.setAttribute('role', 'listbox');
+
+        wrapper.appendChild(triggerBtn);
+        wrapper.appendChild(menuDiv);
+
+        triggerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = wrapper.classList.contains('open');
+            document.querySelectorAll('.cartoon-dropdown-wrapper.open').forEach(w => {
+                w.classList.remove('open');
+                const tb = w.querySelector('.cartoon-dropdown-trigger');
+                if (tb) tb.setAttribute('aria-expanded', 'false');
+            });
+            if (!isOpen) {
+                refreshSingleCartoonDropdown(selectEl);
+                wrapper.classList.add('open');
+                triggerBtn.setAttribute('aria-expanded', 'true');
+            }
+        });
+    });
+
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.cartoon-dropdown-wrapper.open').forEach(w => {
+            w.classList.remove('open');
+            const tb = w.querySelector('.cartoon-dropdown-trigger');
+            if (tb) tb.setAttribute('aria-expanded', 'false');
+        });
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.cartoon-dropdown-wrapper.open').forEach(w => {
+                w.classList.remove('open');
+                const tb = w.querySelector('.cartoon-dropdown-trigger');
+                if (tb) tb.setAttribute('aria-expanded', 'false');
+            });
+        }
+    });
+
+    refreshCartoonDropdowns();
+}
+
+function refreshSingleCartoonDropdown(selectEl) {
+    if (!selectEl) return;
+    const wrapper = selectEl.closest('.cartoon-dropdown-wrapper');
+    if (!wrapper) return;
+    const labelSpan = wrapper.querySelector('.cartoon-dropdown-label');
+    const menuDiv = wrapper.querySelector('.cartoon-dropdown-menu');
+    if (!labelSpan || !menuDiv) return;
+
+    const options = Array.from(selectEl.options || []);
+    const selectedOpt = options.find(o => o.value === selectEl.value) || options[0];
+    labelSpan.innerText = selectedOpt ? selectedOpt.text : '';
+
+    menuDiv.innerHTML = '';
+    options.forEach(opt => {
+        const isSelected = opt.value === selectEl.value;
+        const itemBtn = document.createElement('button');
+        itemBtn.type = 'button';
+        itemBtn.className = `cartoon-dropdown-item${isSelected ? ' selected' : ''}`;
+        itemBtn.setAttribute('role', 'option');
+        itemBtn.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+
+        const textSpan = document.createElement('span');
+        textSpan.innerText = opt.text;
+        itemBtn.appendChild(textSpan);
+
+        if (isSelected) {
+            const checkSpan = document.createElement('span');
+            checkSpan.className = 'cartoon-dropdown-check';
+            checkSpan.innerText = '✔';
+            itemBtn.appendChild(checkSpan);
+        }
+
+        itemBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (selectEl.value !== opt.value) {
+                selectEl.value = opt.value;
+                selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            refreshSingleCartoonDropdown(selectEl);
+            wrapper.classList.remove('open');
+            const tb = wrapper.querySelector('.cartoon-dropdown-trigger');
+            if (tb) tb.setAttribute('aria-expanded', 'false');
+        });
+
+        menuDiv.appendChild(itemBtn);
+    });
+}
+
+function refreshCartoonDropdowns() {
+    [
+        document.getElementById('provider-select'),
+        document.getElementById('voice-backend-select')
+    ].forEach(sel => refreshSingleCartoonDropdown(sel));
 }
 
 /**
@@ -919,8 +1143,8 @@ const voiceModelState = {
     cached: false,
     status: 'not_downloaded',
     percent: 0,
-    backend: 'sensevoice',
-    model: 'SenseVoiceSmall (int8 ONNX)',
+    backend: 'paraformer',
+    model: 'Paraformer-Large (int8 ONNX)',
     message: '',
     pollTimer: null
 };
@@ -938,11 +1162,12 @@ function renderVoiceModelStatusUI() {
 
     if (setupUI.voiceBackendSelect && setupUI.voiceBackendSelect.options.length >= 2) {
         setupUI.voiceBackendSelect.options[0].text = isZh
-            ? 'SenseVoiceSmall (中英混说极速 ~230MB)'
-            : 'SenseVoiceSmall (Fast ZH/EN ~230MB)';
+            ? 'Paraformer-Large (中文/中英精调 · CoreML/GPU ~220MB)'
+            : 'Paraformer-Large (High-Accuracy ZH/EN · CoreML/GPU ~220MB)';
         setupUI.voiceBackendSelect.options[1].text = isZh
-            ? 'Whisper Large-v3-Turbo (~800MB)'
-            : 'Whisper Large-v3-Turbo (~800MB)';
+            ? 'Whisper Large-v3-Turbo (多语种旗舰 · Metal/GPU ~800MB)'
+            : 'Whisper Large-v3-Turbo (Multilingual · Metal/GPU ~800MB)';
+        refreshSingleCartoonDropdown(setupUI.voiceBackendSelect);
     }
 
     const badge = setupUI.voiceModelBadge;
@@ -1031,20 +1256,21 @@ function renderVoiceModelStatusUI() {
 /**
  * Fetches current ASR model status from the server and updates the UI.
  */
-async function fetchVoiceModelStatus() {
+async function fetchVoiceModelStatus(requestedBackend = null) {
     try {
-        const res = await fetch('/api/transcribe/status');
+        const query = requestedBackend ? `?backend=${encodeURIComponent(requestedBackend)}` : '';
+        const res = await fetch(`/api/transcribe/status${query}`);
         if (!res.ok) return;
         const data = await res.json();
         voiceModelState.ready = Boolean(data.ready);
         voiceModelState.cached = Boolean(data.cached);
         voiceModelState.status = data.status || (data.ready ? 'ready' : 'not_downloaded');
         voiceModelState.percent = data.ready ? 100 : (Number(data.percent) || 0);
-        voiceModelState.backend = data.backend || 'sensevoice';
-        voiceModelState.model = data.model || data.backend || 'SenseVoiceSmall';
+        voiceModelState.backend = data.backend || 'paraformer';
+        voiceModelState.model = data.model || data.backend || 'Paraformer-Large';
         voiceModelState.message = data.message || '';
 
-        if (setupUI.voiceBackendSelect && data.backend && voiceModelState.status === 'not_downloaded') {
+        if (setupUI.voiceBackendSelect && data.backend && !requestedBackend && voiceModelState.status === 'not_downloaded') {
             setupUI.voiceBackendSelect.value = data.backend;
         }
 
@@ -1065,7 +1291,7 @@ async function fetchVoiceModelStatus() {
  * Triggers pre-game downloading and loading of the selected ASR model with progress bar polling.
  */
 async function triggerVoiceModelPrepare() {
-    const selectedBackend = setupUI.voiceBackendSelect ? setupUI.voiceBackendSelect.value : 'sensevoice';
+    const selectedBackend = setupUI.voiceBackendSelect ? setupUI.voiceBackendSelect.value : 'paraformer';
     voiceModelState.status = 'downloading';
     voiceModelState.percent = 1;
     voiceModelState.message = gameState.lang === 'zh' ? '正在连接下载服务...' : 'Starting download...';
@@ -1097,13 +1323,7 @@ function setupVoiceInput() {
     }
     if (setupUI.voiceBackendSelect) {
         setupUI.voiceBackendSelect.addEventListener('change', () => {
-            if (voiceModelState.ready && setupUI.voiceBackendSelect.value !== voiceModelState.backend) {
-                voiceModelState.ready = false;
-                voiceModelState.status = 'not_downloaded';
-                voiceModelState.percent = 0;
-                voiceModelState.message = '';
-                renderVoiceModelStatusUI();
-            }
+            fetchVoiceModelStatus(setupUI.voiceBackendSelect.value);
         });
     }
     fetchVoiceModelStatus();
@@ -1239,6 +1459,7 @@ function loadStoredSettings() {
 
                 if (saved.provider && providerEl) {
                     providerEl.value = saved.provider;
+                    refreshSingleCartoonDropdown(providerEl);
                 }
                 if (typeof saved.apiKey === 'string' && apiKeyEl) {
                     apiKeyEl.value = saved.apiKey;
@@ -1395,8 +1616,103 @@ function setupSettingsListeners() {
     if (settingsUI.saveBtn) {
         settingsUI.saveBtn.addEventListener('click', async () => {
             saveStoredSettings();
+            updateLobbyAIModeBadge();
             settingsUI.modal.classList.remove('active');
         });
+    }
+
+    const testLlmBtn = document.getElementById('test-llm-btn');
+    if (testLlmBtn) {
+        testLlmBtn.addEventListener('click', () => testLLMConnection());
+    }
+
+    if (setupUI.apiKeyInput) {
+        setupUI.apiKeyInput.addEventListener('input', () => updateLobbyAIModeBadge());
+    }
+    const modelNameInput = document.getElementById('model-name');
+    if (modelNameInput) {
+        modelNameInput.addEventListener('input', () => updateLobbyAIModeBadge());
+    }
+    if (providerSelect) {
+        providerSelect.addEventListener('change', () => updateLobbyAIModeBadge());
+    }
+    updateLobbyAIModeBadge();
+}
+
+function updateLobbyAIModeBadge() {
+    const badge = document.getElementById('lobby-ai-mode-badge');
+    const testBtn = document.getElementById('test-llm-btn');
+    const isZh = gameState.lang === 'zh';
+    if (testBtn && !testBtn.disabled) {
+        testBtn.innerText = isZh ? '🔌 测试大模型连接' : '🔌 Test LLM Connection';
+    }
+    if (!badge) return;
+
+    const apiKey = (setupUI.apiKeyInput && setupUI.apiKeyInput.value || '').trim();
+    const provider = (document.getElementById('provider-select') && document.getElementById('provider-select').value) || 'openai';
+    const modelName = (document.getElementById('model-name') && document.getElementById('model-name').value || '').trim();
+    const defaultModels = {
+        openai: 'gpt-4o',
+        doubao: 'doubao-seed-1-6-flash',
+        gemini: 'gemini-1.5-flash',
+        qwen: 'qwen-plus',
+        deepseek: 'deepseek-chat',
+        custom: 'custom'
+    };
+    const effectiveModel = modelName || defaultModels[provider] || 'gpt-4o';
+
+    badge.classList.remove('ai-mode-llm', 'ai-mode-random');
+    if (apiKey) {
+        badge.classList.add('ai-mode-llm');
+        badge.innerText = isZh
+            ? `🧠 AI 模式：大模型驱动 (${provider.toUpperCase()} · ${effectiveModel})`
+            : `🧠 AI Mode: LLM Powered (${provider.toUpperCase()} · ${effectiveModel})`;
+    } else {
+        badge.classList.add('ai-mode-random');
+        badge.innerText = isZh
+            ? '🎲 AI 模式：内置随机机器人（可在 ⚙️ 高级设置 中填入 API Key 开启大模型）'
+            : '🎲 AI Mode: Built-in Random Bot (Add API Key in ⚙️ Advanced Settings for LLM)';
+    }
+}
+
+async function testLLMConnection() {
+    const testBtn = document.getElementById('test-llm-btn');
+    const statusEl = document.getElementById('llm-test-status');
+    const isZh = gameState.lang === 'zh';
+    if (!statusEl) return;
+
+    const apiKey = (setupUI.apiKeyInput && setupUI.apiKeyInput.value || '').trim();
+    const baseUrl = (document.getElementById('base-url') && document.getElementById('base-url').value || '').trim();
+    const modelName = (document.getElementById('model-name') && document.getElementById('model-name').value || '').trim();
+    const provider = (document.getElementById('provider-select') && document.getElementById('provider-select').value) || 'openai';
+
+    statusEl.classList.remove('hidden', 'ok', 'err');
+    statusEl.innerText = isZh ? '⏳ 正在测试连接...' : '⏳ Testing connection...';
+    if (testBtn) testBtn.disabled = true;
+
+    try {
+        const res = await fetch('/api/llm/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                api_key: apiKey || null,
+                base_url: baseUrl || null,
+                model_name: modelName || null,
+                provider: provider,
+                language: gameState.lang
+            })
+        });
+        const data = await res.json();
+        statusEl.classList.add(data.ok ? 'ok' : 'err');
+        statusEl.innerText = data.message || (data.ok ? 'OK' : 'Failed');
+    } catch (e) {
+        statusEl.classList.add('err');
+        statusEl.innerText = isZh ? '❌ 网络错误，无法连接服务器' : '❌ Network error';
+    } finally {
+        if (testBtn) {
+            testBtn.disabled = false;
+            testBtn.innerText = isZh ? '🔌 测试大模型连接' : '🔌 Test LLM Connection';
+        }
     }
 }
 
@@ -1504,7 +1820,7 @@ function setupEvaluationListeners() {
         selectWolvesBtn.onclick = () => {
             gameState.selectedArguePlayers.clear();
             (gameState.players || []).forEach(p => {
-                if (p.name !== 'Player 1' && (p.role === 'Werewolf' || p.role === 'Black Werewolf King')) {
+                if (p.name !== getMyPlayerName() && (p.role === 'Werewolf' || p.role === 'Black Werewolf King')) {
                     gameState.selectedArguePlayers.add(p.name);
                 }
             });
@@ -1515,7 +1831,7 @@ function setupEvaluationListeners() {
         selectGodsBtn.onclick = () => {
             gameState.selectedArguePlayers.clear();
             (gameState.players || []).forEach(p => {
-                if (p.name !== 'Player 1' && ['Seer', 'Witch', 'Guard', 'Hunter'].includes(p.role)) {
+                if (p.name !== getMyPlayerName() && ['Seer', 'Witch', 'Guard', 'Hunter'].includes(p.role)) {
                     gameState.selectedArguePlayers.add(p.name);
                 }
             });
@@ -1526,7 +1842,7 @@ function setupEvaluationListeners() {
         selectAllBtn.onclick = () => {
             gameState.selectedArguePlayers.clear();
             (gameState.players || []).forEach(p => {
-                if (p.name !== 'Player 1') {
+                if (p.name !== getMyPlayerName()) {
                     gameState.selectedArguePlayers.add(p.name);
                 }
             });
@@ -2155,9 +2471,11 @@ function syncPostQueueState() {
     }
 
     handleInputRequest(gameState.latestServerInputRequired);
+    updateSpectatorBannerUI();
 
     if (!gameState.latestServerGameActive && !gameState.latestServerInputRequired && gameState.active) {
         gameState.active = false;
+        updateSpectatorBannerUI();
         stopTurnTimer();
         clearInterval(pollingInterval);
         addSystemMessage(I18N[gameState.lang].gameOver);
@@ -2311,13 +2629,24 @@ function renderLogs() {
         if (isUserDecidingBlindAction() && isHiddenDecisionLog(log)) {
             return;
         }
-        if (isRedundantChatNoiseLog(log)) {
+    if (log.type === 'SHERIFF_WITHDRAW' && log.source) {
+        const card = Array.from(document.querySelectorAll('.player-card')).find(c => c.dataset.name === log.source);
+        if (card) {
+            card.classList.remove('candidate');
+        }
+    }
+
+    if (isRedundantChatNoiseLog(log)) {
             return;
         }
         processLog(log);
     });
     updateInteractiveBarUI();
-    scrollToBottom();
+    if (gameState.isArchiveMode) {
+        gameUI.chatBox.scrollTop = 0;
+    } else {
+        scrollToBottom();
+    }
 }
 
 /**
@@ -2399,6 +2728,7 @@ function updateLanguage() {
                 opt.text = providerNames[opt.value];
             }
         });
+        refreshSingleCartoonDropdown(providerSelect);
     }
     if (setupUI.apiKeyInput) {
         setupUI.apiKeyInput.placeholder = isZh ? '请输入 API Key' : 'API Key';
@@ -2465,6 +2795,8 @@ function updateLanguage() {
                 const noActionText = isZh ? "不行动 / 弃票" : "No Action / Abstain";
                 const hasAbstain = options.includes(noActionText) || options.includes("Abstain") || options.includes("弃票");
                 renderChoiceButtons(options, !hasAbstain);
+            } else if (gameState.pendingAction.type === 'speech' && Array.isArray(gameState.pendingAction.options) && gameState.pendingAction.options.includes('Withdraw')) {
+                renderSpeechWithdrawButton();
             }
         } else {
             gameUI.actionPrompt.innerText = t.waiting;
@@ -2577,6 +2909,50 @@ function updateLanguage() {
         }
     }
 
+    // History Picker Modal & Archive Reader Toolbar
+    const t_hist = I18N[gameState.lang]?.history;
+    if (t_hist) {
+        const lobbyHistBtn = document.getElementById('lobby-history-label');
+        if (lobbyHistBtn) lobbyHistBtn.innerText = isZh ? '历史战绩' : 'History';
+        const openHistBtn = document.getElementById('open-history-btn');
+        if (openHistBtn) openHistBtn.innerText = t_hist.btn;
+        const archiveListLabel = document.getElementById('archive-list-label');
+        if (archiveListLabel) archiveListLabel.innerText = isZh ? '切换对局' : 'Matches';
+        const pickerTitle = document.getElementById('history-picker-title');
+        if (pickerTitle) pickerTitle.innerText = t_hist.modalTitle;
+
+        const hfAll = document.getElementById('hfilter-all-btn');
+        const hfWon = document.getElementById('hfilter-won-btn');
+        const hfGood = document.getElementById('hfilter-good-btn');
+        const hfWolf = document.getElementById('hfilter-wolf-btn');
+        if (hfAll) hfAll.innerText = t_hist.filterAll;
+        if (hfWon) hfWon.innerText = t_hist.filterWon;
+        if (hfGood) hfGood.innerText = t_hist.filterGood;
+        if (hfWolf) hfWolf.innerText = t_hist.filterWolf;
+
+        const perspLabel = document.getElementById('archive-perspective-label');
+        const perspGod = document.getElementById('persp-god-btn');
+        const perspMe = document.getElementById('persp-me-btn');
+        const perspSpeech = document.getElementById('persp-speech-btn');
+        const thoughtsBtn = document.getElementById('toggle-thoughts-btn');
+        if (perspLabel) perspLabel.innerText = t_hist.perspLabel;
+        if (perspGod) perspGod.innerText = t_hist.perspGod;
+        if (perspMe) perspMe.innerText = t_hist.perspMe;
+        if (perspSpeech) perspSpeech.innerText = t_hist.perspSpeech;
+        if (thoughtsBtn) thoughtsBtn.innerText = t_hist.thoughtsBtn;
+        updateArchiveExpandBtnLabel();
+
+        if (gameState.isArchiveMode && gameState.archiveGameId) {
+            updateArchiveHeaderBadge();
+            renderArchivePhaseJumpBar();
+        }
+        const pickerModal = document.getElementById('history-picker-modal');
+        if (pickerModal && pickerModal.classList.contains('active')) {
+            renderHistoryStatsBanner();
+            renderHistoryMatchList();
+        }
+    }
+
     if (typeof BGMManager !== 'undefined') {
         BGMManager.updateButtonsUI();
     }
@@ -2613,6 +2989,39 @@ function renderRoleSelection(playerCount) {
             <div class="role-name">${t.roles[role.id]}</div>
         </div>
     `).join('');
+
+    renderSeatSelection(playerCount || 9);
+    updateLobbyAIModeBadge();
+}
+
+function renderSeatSelection(playerCount) {
+    const seatSelect = document.getElementById('user-seat-select');
+    const seatLabel = document.getElementById('seat-select-label');
+    const isZh = gameState.lang === 'zh';
+    if (seatLabel) {
+        seatLabel.innerText = isZh ? '选择座位 (Seat)' : 'Select Seat';
+    }
+    if (!seatSelect) return;
+
+    const prevVal = gameState.userSeatChoice || seatSelect.value || '1';
+    const count = Number(playerCount) || 9;
+    const opts = [
+        `<option value="1">${isZh ? '1号位 (默认)' : 'Seat 1 (Default)'}</option>`,
+        `<option value="random">${isZh ? '🎲 随机座号 (Random Seat)' : '🎲 Random Seat'}</option>`
+    ];
+    for (let i = 2; i <= count; i++) {
+        opts.push(`<option value="${i}">${isZh ? `${i}号位` : `Seat ${i}`}</option>`);
+    }
+    seatSelect.innerHTML = opts.join('');
+    if (prevVal === 'random' || (Number(prevVal) >= 1 && Number(prevVal) <= count)) {
+        seatSelect.value = String(prevVal);
+    } else {
+        seatSelect.value = '1';
+        gameState.userSeatChoice = '1';
+    }
+    seatSelect.onchange = () => {
+        gameState.userSeatChoice = seatSelect.value;
+    };
 }
 
 
@@ -2704,12 +3113,92 @@ function setupEventListeners() {
     });
 
     gameUI.quitBtn.addEventListener('click', () => {
+        if (gameState.isArchiveMode) {
+            exitArchiveModeToLobby();
+            return;
+        }
         if (confirm(I18N[gameState.lang].confirmQuit)) {
             location.reload();
         }
     });
 
     setupRecordsModalListeners();
+    setupHistoryPickerAndReaderListeners();
+    setupSpectatorListeners();
+}
+
+function setupSpectatorListeners() {
+    const enableBtn = document.getElementById('enable-spectator-btn');
+    const ffBtn = document.getElementById('spectator-fastforward-btn');
+    if (enableBtn) {
+        enableBtn.addEventListener('click', async () => {
+            if (!gameState.gameId || gameState.spectatorMode) return;
+            enableBtn.disabled = true;
+            try {
+                const res = await fetch('/api/game/spectate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_id: gameState.gameId })
+                });
+                if (res.ok) {
+                    gameState.spectatorMode = true;
+                    updateSpectatorBannerUI();
+                    await pollGameState();
+                } else {
+                    enableBtn.disabled = false;
+                }
+            } catch (e) {
+                enableBtn.disabled = false;
+            }
+        });
+    }
+    if (ffBtn) {
+        ffBtn.addEventListener('click', () => {
+            gameState.pacingMultiplier = 0;
+            updatePacingControlsUI();
+            if (typeof skipMessageQueue === 'function') {
+                skipMessageQueue();
+            }
+            updateSpectatorBannerUI();
+        });
+    }
+}
+
+function updateSpectatorBannerUI() {
+    const banner = document.getElementById('spectator-banner');
+    const textEl = document.getElementById('spectator-banner-text');
+    const enableBtn = document.getElementById('enable-spectator-btn');
+    const ffBtn = document.getElementById('spectator-fastforward-btn');
+    if (!banner) return;
+
+    const shouldShow = Boolean(
+        gameState.active &&
+        !gameState.isArchiveMode &&
+        !gameState.isAlive &&
+        !gameState.latestServerInputRequired &&
+        !gameState.pendingAction
+    );
+    banner.classList.toggle('hidden', !shouldShow);
+    if (!shouldShow) return;
+
+    const isZh = gameState.lang === 'zh';
+    if (textEl) {
+        textEl.innerText = gameState.spectatorMode
+            ? (isZh ? '👁️ 亡灵上帝视角已开启：全员底牌、夜间行动与 AI 思考均已实时显示' : '👁️ God View Active: All roles, night actions & AI thoughts revealed')
+            : (isZh ? '👻 你已出局，可开启上帝视角查看全员底牌与 AI 心路' : '👻 You are eliminated. Enable God View to reveal all roles & AI thoughts');
+    }
+    if (enableBtn) {
+        enableBtn.disabled = Boolean(gameState.spectatorMode);
+        enableBtn.innerText = gameState.spectatorMode
+            ? (isZh ? '✅ 上帝视角已开启' : '✅ God View On')
+            : (isZh ? '👁️ 开启上帝视角' : '👁️ God View');
+    }
+    if (ffBtn) {
+        const isMaxSpeed = gameState.pacingMultiplier === 0;
+        ffBtn.innerText = isMaxSpeed
+            ? (isZh ? '⚡ 已是极速模式' : '⚡ Max Speed Active')
+            : (isZh ? '⚡ 极速观战' : '⚡ Fast-Forward');
+    }
 }
 
 
@@ -2726,6 +3215,8 @@ async function startGame() {
     const role = gameState.myRole || (selectedRoleEl ? selectedRoleEl.dataset.role : 'Random');
     const avatar = selectedAvatarEl ? selectedAvatarEl.dataset.avatar : '👤';
     const count = selectedCountEl ? parseInt(selectedCountEl.dataset.value) : 9;
+    const seatSelectEl = document.getElementById('user-seat-select');
+    const userSeatVal = seatSelectEl ? seatSelectEl.value : (gameState.userSeatChoice || '1');
     const apiKey = setupUI.apiKeyInput.value;
     const baseUrl = document.getElementById('base-url').value;
     const modelName = document.getElementById('model-name').value;
@@ -2740,6 +3231,7 @@ async function startGame() {
                 num_players: count,
                 user_role: role,
                 user_avatar: avatar,
+                user_seat: userSeatVal === 'random' ? 'random' : (parseInt(userSeatVal, 10) || 1),
                 api_key: apiKey,
                 base_url: baseUrl,
                 model_name: modelName,
@@ -2750,7 +3242,21 @@ async function startGame() {
 
         if (response.ok) {
             const data = await response.json();
+            gameState.isArchiveMode = false;
+            gameState.archiveGameId = null;
+            gameState.archiveRawLogs = [];
+            const actionArea = document.getElementById('action-area');
+            const archiveToolbar = document.getElementById('archive-reader-toolbar');
+            const archiveListBtn = document.getElementById('archive-list-btn');
+            if (actionArea) actionArea.classList.remove('hidden');
+            if (archiveToolbar) archiveToolbar.classList.add('hidden');
+            if (archiveListBtn) archiveListBtn.classList.add('hidden');
+            if (gameUI.speedToggleBtn) gameUI.speedToggleBtn.classList.remove('hidden');
+
             gameState.gameId = data.game_id;
+            gameState.myPlayerName = data.human_player || 'Player 1';
+            gameState.spectatorMode = false;
+            gameState.playerNotes = {};
             gameState.myRole = role;
             gameState.myAvatar = avatar;
             gameState.isAlive = true;
@@ -2837,6 +3343,12 @@ async function pollGameState() {
 
         gameState.latestServerInputRequired = data.input_required || null;
         gameState.latestServerGameActive = Boolean(data.game_active);
+        if (data.human_player) {
+            gameState.myPlayerName = data.human_player;
+        }
+        if (typeof data.spectator_mode === 'boolean') {
+            gameState.spectatorMode = data.spectator_mode;
+        }
         if (data.winner) {
             gameState.winner = data.winner;
         }
@@ -2886,7 +3398,7 @@ async function pollGameState() {
             }
             updatePlayers(data.players, queuedDeaths);
             
-            const myPlayer = data.players.find(p => p.name === 'Player 1');
+            const myPlayer = data.players.find(p => p.name === getMyPlayerName());
             if (myPlayer) {
                 gameState.isAlive = myPlayer.is_alive;
                 if (gameUI.myStatus) {
@@ -2989,7 +3501,7 @@ function showEvaluationModal(isReopen = false) {
 
         // Pre-select up to 2 AI players (e.g., 1 wolf + 1 god/villager) for the Debate tab
         if (gameState.selectedArguePlayers.size === 0 && gameState.players && gameState.players.length > 1) {
-            const aiPlayers = gameState.players.filter(p => p.name !== 'Player 1');
+            const aiPlayers = gameState.players.filter(p => p.name !== getMyPlayerName());
             const oneWolf = aiPlayers.find(p => p.role === 'Werewolf' || p.role === 'Black Werewolf King');
             const oneGood = aiPlayers.find(p => p.role !== 'Werewolf' && p.role !== 'Black Werewolf King');
             if (oneWolf) gameState.selectedArguePlayers.add(oneWolf.name);
@@ -3167,7 +3679,7 @@ function renderArguePlayerRoster() {
     const grid = evalUI.argueGrid || document.getElementById('argue-player-grid');
     if (!grid) return;
     const isZh = gameState.lang === 'zh';
-    const aiPlayers = (gameState.players || []).filter(p => p.name !== 'Player 1');
+    const aiPlayers = (gameState.players || []).filter(p => p.name !== getMyPlayerName());
 
     if (aiPlayers.length === 0) {
         grid.innerHTML = `<div style="color:var(--text-muted); font-size:0.85rem;">${isZh ? '暂无 AI 玩家数据' : 'No AI players found'}</div>`;
@@ -3342,7 +3854,7 @@ function renderPostGameRolesOverview() {
         const roleObj = ROLES.find(r => r.id === roleEn) || { icon: '👱' };
         const roleLocalized = I18N[gameState.lang].roles[roleEn] || roleEn;
         const isWolf = roleEn === 'Werewolf' || roleEn === 'Black Werewolf King';
-        const avatar = p.name === 'Player 1' ? gameState.myAvatar : getAvatar(p.name);
+        const avatar = p.name === getMyPlayerName() ? gameState.myAvatar : getAvatar(p.name);
         const seatLabel = formatPlayerSeatLabel(p.name, isZh);
         return `
             <div class="argue-ai-card" style="cursor:default;">
@@ -3365,7 +3877,7 @@ function renderPostGameRolesOverview() {
 function formatPlayerSeatLabel(playerName, isZh) {
     if (!playerName || typeof playerName !== 'string') return '';
     const num = playerName.replace('Player ', '');
-    const isMe = playerName === 'Player 1';
+    const isMe = playerName === getMyPlayerName();
     if (isZh) {
         return `${num}号${isMe ? '(我)' : ''}`;
     }
@@ -3554,7 +4066,7 @@ function createRoleSpotlightCardIfApplicable(log) {
         const resultCamp = (log.data && log.data.result) || '';
         const isWolf = resultCamp === 'Werewolf' || resultCamp === 'Werewolves';
         gameState.seerChecks[targetName] = isWolf ? 'Werewolf' : 'Villager';
-        if (gameState.players && gameState.players.length > 0) {
+        if (!gameState.isArchiveMode && gameState.players && gameState.players.length > 0) {
             updatePlayers(gameState.players);
         }
 
@@ -3564,6 +4076,9 @@ function createRoleSpotlightCardIfApplicable(log) {
             ? (isZh ? '🐺 狼人阵营 (坏人)' : '🐺 WEREWOLF CAMP')
             : (isZh ? '👱 好人阵营 (村民/神职)' : '👱 VILLAGER CAMP');
         const campClass = isWolf ? 'wolf-reveal' : 'good-reveal';
+        const privateTagText = (gameState.isArchiveMode && sourceName)
+            ? `${formatPlayerSeatLabel(sourceName, isZh)} · ${isZh ? '预言家' : 'Seer'}`
+            : (isZh ? '仅你可见' : 'Private');
 
         const card = document.createElement('div');
         card.className = `role-spotlight-card seer-spotlight ${campClass}`;
@@ -3571,7 +4086,7 @@ function createRoleSpotlightCardIfApplicable(log) {
             <div class="spotlight-header">
                 <span class="spotlight-icon">🔮</span>
                 <span class="spotlight-title">${isZh ? '预言家查验结果' : 'Seer Vision Result'}</span>
-                <span class="spotlight-private-tag">${isZh ? '仅你可见' : 'Private'}</span>
+                <span class="spotlight-private-tag">${privateTagText}</span>
             </div>
             <div class="spotlight-body">
                 <div class="spotlight-target-chip">
@@ -3593,6 +4108,9 @@ function createRoleSpotlightCardIfApplicable(log) {
         const isSave = actionType === 'save';
         const seatLabel = targetName ? formatPlayerSeatLabel(targetName, isZh) : '';
         const avatar = targetName ? getAvatar(targetName) : '🧪';
+        const privateTagText = (gameState.isArchiveMode && sourceName)
+            ? `${formatPlayerSeatLabel(sourceName, isZh)} · ${isZh ? '女巫' : 'Witch'}`
+            : (isZh ? '仅你可见' : 'Private');
 
         const card = document.createElement('div');
         card.className = `role-spotlight-card witch-spotlight ${isSave ? 'witch-save' : 'witch-poison'}`;
@@ -3600,7 +4118,7 @@ function createRoleSpotlightCardIfApplicable(log) {
             <div class="spotlight-header">
                 <span class="spotlight-icon">${isSave ? '💖' : '🧪'}</span>
                 <span class="spotlight-title">${isSave ? (isZh ? '女巫解药已使用' : 'Antidote Used') : (isZh ? '女巫毒药已使用' : 'Poison Used')}</span>
-                <span class="spotlight-private-tag">${isZh ? '仅你可见' : 'Private'}</span>
+                <span class="spotlight-private-tag">${privateTagText}</span>
             </div>
             <div class="spotlight-body">
                 <div class="spotlight-target-chip">
@@ -3620,13 +4138,16 @@ function createRoleSpotlightCardIfApplicable(log) {
     if (type === 'GUARD_PROTECT' && targetName) {
         const seatLabel = formatPlayerSeatLabel(targetName, isZh);
         const avatar = getAvatar(targetName);
+        const privateTagText = (gameState.isArchiveMode && sourceName)
+            ? `${formatPlayerSeatLabel(sourceName, isZh)} · ${isZh ? '守卫' : 'Guard'}`
+            : (isZh ? '仅你可见' : 'Private');
         const card = document.createElement('div');
         card.className = 'role-spotlight-card guard-spotlight';
         card.innerHTML = `
             <div class="spotlight-header">
                 <span class="spotlight-icon">🛡️</span>
                 <span class="spotlight-title">${isZh ? '守卫守护确认' : 'Guard Protection'}</span>
-                <span class="spotlight-private-tag">${isZh ? '仅你可见' : 'Private'}</span>
+                <span class="spotlight-private-tag">${privateTagText}</span>
             </div>
             <div class="spotlight-body">
                 <div class="spotlight-target-chip">
@@ -3673,8 +4194,8 @@ function createRoleSpotlightCardIfApplicable(log) {
         const shooterLabel = formatPlayerSeatLabel(sourceName, isZh);
         const targetLabel = formatPlayerSeatLabel(targetName, isZh);
         const isWolfViewer = gameState.myRole === 'Werewolf' || gameState.myRole === 'Black Werewolf King';
-        const isSelfShooter = sourceName === 'Player 1';
-        const knowsShooterRole = (isWolfViewer || isSelfShooter) && type !== 'PLAYER_SHOOT';
+        const isSelfShooter = sourceName === getMyPlayerName();
+        const knowsShooterRole = ((isWolfViewer || isSelfShooter || Boolean(gameState.spectatorMode)) || (gameState.isArchiveMode && gameState.archivePerspective !== 'me')) && type !== 'PLAYER_SHOOT';
         const isHunter = type === 'HUNTER_SHOOT';
         const spotlightIcon = !knowsShooterRole ? '🔫' : (isHunter ? '🔫' : '👹');
         const spotlightTitle = !knowsShooterRole
@@ -3715,7 +4236,7 @@ function processLog(log) {
     if (log.type === 'PLAYER_THINKING') {
         const isNight = log.state && ['GuardNightState', 'WerewolfNightState', 'WitchNightState', 'SeerNightState', 'NightBeginState', 'NightEndState'].includes(log.state);
         const isWolfViewer = gameState.myRole === 'Werewolf' || gameState.myRole === 'Black Werewolf King';
-        if (isNight && log.source !== 'Player 1' && !(log.state === 'WerewolfNightState' && isWolfViewer)) {
+        if (isNight && !gameState.spectatorMode && log.source !== getMyPlayerName() && !(log.state === 'WerewolfNightState' && isWolfViewer)) {
             return;
         }
         const card = Array.from(document.querySelectorAll('.player-card')).find(c => c.dataset.name === log.source);
@@ -3743,11 +4264,15 @@ function processLog(log) {
             const b = c.querySelector('.player-speech-bubble');
             if (b) b.classList.remove('visible');
         });
-        setPhase('Night', log.message);
+        if (!gameState.isArchiveMode) {
+            setPhase('Night', log.message);
+        }
         startNewChatPhaseSection('Night', log);
         return;
     } else if (log.type === 'DAY_BREAKS') {
-        setPhase('Day', log.message);
+        if (!gameState.isArchiveMode) {
+            setPhase('Day', log.message);
+        }
         startNewChatPhaseSection('Day', log);
         return;
     }
@@ -3796,7 +4321,7 @@ function processLog(log) {
         text.includes('Your teammates are')
     ));
 
-    if (log.source && log.source.startsWith('Player') && (log.type === 'SPEECH' || log.type === 'WHISPER')) {
+    if (log.source && log.source.startsWith('Player') && (log.type === 'SPEECH' || log.type === 'WHISPER' || log.type === 'THOUGHT')) {
         msgContainer.dataset.speaker = log.source;
         const avatar = getAvatar(log.source);
         const avatarDiv = document.createElement('div');
@@ -3813,12 +4338,17 @@ function processLog(log) {
         senderDiv.className = 'chat-sender';
         
         const playerNum = log.source.replace('Player ', '');
-        const isMe = log.source === 'Player 1';
-        const whisperTag = log.type === 'WHISPER' ? (gameState.lang === 'zh' ? ' 🐺[狼频]' : ' 🐺[Pack]') : '';
+        const isMe = log.source === getMyPlayerName();
+        let modeTag = '';
+        if (log.type === 'WHISPER') {
+            modeTag = gameState.lang === 'zh' ? ' 🐺[狼频]' : ' 🐺[Pack]';
+        } else if (log.type === 'THOUGHT') {
+            modeTag = gameState.lang === 'zh' ? ' 💭[内心思考]' : ' 💭[Thought]';
+        }
         if (gameState.lang === 'zh') {
-            senderDiv.innerText = (isMe ? `${playerNum}号玩家 (我)` : `${playerNum}号玩家`) + whisperTag;
+            senderDiv.innerText = (isMe ? `${playerNum}号玩家 (我)` : `${playerNum}号玩家`) + modeTag;
         } else {
-            senderDiv.innerText = (isMe ? `Player ${playerNum} (Me)` : `Player ${playerNum}`) + whisperTag;
+            senderDiv.innerText = (isMe ? `Player ${playerNum} (Me)` : `Player ${playerNum}`) + modeTag;
         }
 
         // Strip redundant leading "(Player X): " prefix from speech bubble text if present, and localize last words tag
@@ -3829,7 +4359,7 @@ function processLog(log) {
             .replace(/^\(Player\s+\d+'s last words\):\s*/i, isZh ? '【遗言】' : '[Last Words] ');
 
         const bubbleDiv = document.createElement('div');
-        bubbleDiv.className = `chat-bubble${log.type === 'WHISPER' ? ' whisper-bubble' : ''}`;
+        bubbleDiv.className = `chat-bubble${log.type === 'WHISPER' ? ' whisper-bubble' : ''}${log.type === 'THOUGHT' ? ' thought-bubble' : ''}`;
         bubbleDiv.innerHTML = formatSpeechWithSeatPills(cleanSpeechText);
         
         contentDiv.appendChild(senderDiv);
@@ -3838,7 +4368,9 @@ function processLog(log) {
         msgContainer.appendChild(avatarDiv);
         msgContainer.appendChild(contentDiv);
 
-        showSpeechBubble(log.source, cleanSpeechText);
+        if (!gameState.isArchiveMode && log.type !== 'THOUGHT') {
+            showSpeechBubble(log.source, cleanSpeechText);
+        }
     } else {
         const isDebug = isDebugStateBoundaryLog(log);
         const debugActive = gameUI.chatBox && gameUI.chatBox.classList.contains('show-debug-logs');
@@ -3872,7 +4404,7 @@ function getLogClass(log) {
     const msgStr = typeof log.message === 'object' ? (log.message.zh || log.message.en || '') : String(log.message || '');
     if (msgStr.includes('---') || msgStr.includes('State')) return 'debug';
     if (['SYSTEM', 'GAME_START', 'NIGHT_FALLS', 'DAY_BREAKS'].includes(log.type)) return 'system';
-    if (log.source === 'Player 1') return 'user';
+    if (log.source === getMyPlayerName()) return 'user';
     return 'ai';
 }
 
@@ -3936,8 +4468,9 @@ function updatePlayers(playersData, justDied = new Set()) {
             }
         }
 
+        const mySeatName = getMyPlayerName();
         const avatarEl = card.querySelector('.player-avatar');
-        const expectedAvatar = p.name === 'Player 1' ? gameState.myAvatar : getAvatar(p.name);
+        const expectedAvatar = p.name === mySeatName ? gameState.myAvatar : getAvatar(p.name);
         if (avatarEl && avatarEl.innerText !== expectedAvatar) {
             avatarEl.innerText = expectedAvatar;
         }
@@ -3956,12 +4489,13 @@ function updatePlayers(playersData, justDied = new Set()) {
         }
 
         const isSheriffAlive = Boolean(p.is_sheriff && p.is_alive);
-        const hideOtherCandidates = isUserDecidingBlindAction() && p.name !== 'Player 1';
+        const hideOtherCandidates = isUserDecidingBlindAction() && p.name !== mySeatName;
         const isCandidateActive = Boolean(p.is_sheriff_candidate && !hideOtherCandidates);
+        const seatNumStr = p.name.replace('Player ', '');
 
-        if (p.name === 'Player 1') {
+        if (p.name === mySeatName) {
             card.classList.add('me');
-            card.querySelector('.player-name').innerText = "1";
+            card.querySelector('.player-name').innerText = seatNumStr;
             const meLabel = card.querySelector('.player-me-label');
             if (meLabel) {
                 meLabel.style.display = 'block';
@@ -3980,8 +4514,10 @@ function updatePlayers(playersData, justDied = new Set()) {
             card.classList.toggle('sheriff-candidate', isCandidateActive);
             card.classList.toggle('tie', Boolean(p.is_tie));
         } else {
-            const num = p.name.replace('Player ', '');
-            card.querySelector('.player-name').innerText = num;
+            card.classList.remove('me');
+            const meLabel = card.querySelector('.player-me-label');
+            if (meLabel) meLabel.style.display = 'none';
+            card.querySelector('.player-name').innerText = seatNumStr;
 
             const tieLabel = card.querySelector('.player-tie-label');
             if (p.is_tie) {
@@ -4036,13 +4572,26 @@ function updatePlayers(playersData, justDied = new Set()) {
             }
         }
 
-        // Private Seer Checked Badge on sidebar card
+        // Private Seer Checked Badge or Revealed Role Badge on sidebar card
         const seerBadge = card.querySelector('.player-seer-badge');
         if (seerBadge) {
+            const isZh = gameState.lang === 'zh';
+            const showRevealedRole = (
+                p.role && p.role !== 'Unknown' &&
+                ((gameState.isArchiveMode && gameState.archivePerspective !== 'me') || (!gameState.active && gameState.winner && !gameState.isArchiveMode) || Boolean(gameState.spectatorMode))
+            );
             const seerCheckResult = gameState.seerChecks && gameState.seerChecks[p.name];
-            if (seerCheckResult) {
+
+            if (showRevealedRole) {
+                const isWolf = p.role === 'Werewolf' || p.role === 'Black Werewolf King';
+                const roleObj = ROLES.find(r => r.id === p.role) || { icon: '👱' };
+                const localizedRole = I18N[gameState.lang]?.roles?.[p.role] || p.role;
+                seerBadge.style.display = 'inline-flex';
+                seerBadge.className = `player-seer-badge ${isWolf ? 'seer-wolf' : 'seer-good'}`;
+                seerBadge.innerText = `${roleObj.icon}${localizedRole}`;
+                seerBadge.title = isZh ? `真实身份：${localizedRole}` : `True Role: ${localizedRole}`;
+            } else if (seerCheckResult) {
                 const isWolf = seerCheckResult === 'Werewolf' || seerCheckResult === 'Werewolves';
-                const isZh = gameState.lang === 'zh';
                 seerBadge.style.display = 'inline-flex';
                 seerBadge.className = `player-seer-badge ${isWolf ? 'seer-wolf' : 'seer-good'}`;
                 seerBadge.innerText = isWolf ? (isZh ? '🔮狼' : '🔮W') : (isZh ? '🔮好' : '🔮G');
@@ -4052,6 +4601,26 @@ function updatePlayers(playersData, justDied = new Set()) {
             } else {
                 seerBadge.style.display = 'none';
                 seerBadge.innerText = '';
+            }
+        }
+
+        // Quick Notepad Identity Tag on AI player cards
+        const noteBtn = card.querySelector('.player-note-tag');
+        if (noteBtn) {
+            if (p.name === mySeatName || gameState.isArchiveMode) {
+                noteBtn.style.display = 'none';
+            } else {
+                noteBtn.style.display = 'inline-flex';
+                const noteKey = (gameState.playerNotes && gameState.playerNotes[p.name]) || '';
+                const noteObj = PLAYER_NOTE_STATES.find(s => s.key === noteKey) || PLAYER_NOTE_STATES[0];
+                const isZh = gameState.lang === 'zh';
+                noteBtn.className = `player-note-tag ${noteObj.cls}`;
+                noteBtn.innerText = noteObj.key ? (isZh ? noteObj.zh : noteObj.en) : noteObj.icon;
+                noteBtn.title = isZh ? '点击切换身份猜测标记 (未标 / 狼嫌 / 预言? / 金水 / 神职?)' : 'Click to cycle identity guess tag (None / Wolf? / Seer? / Good / God?)';
+                noteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    cyclePlayerNoteTag(p.name);
+                };
             }
         }
     });
@@ -4278,6 +4847,9 @@ function handleInputRequest(req) {
         if (gameUI.voiceInputBtn) gameUI.voiceInputBtn.disabled = !voiceModelState.ready;
         gameUI.input.focus();
         gameUI.choiceButtons.innerHTML = '';
+        if (Array.isArray(req.options) && req.options.includes('Withdraw')) {
+            renderSpeechWithdrawButton();
+        }
         updatePlayerSelectableState([]);
         startTurnTimer(() => {
             const text = gameUI.input.value.trim();
@@ -4308,6 +4880,23 @@ function handleInputRequest(req) {
     }
 }
 
+function renderSpeechWithdrawButton() {
+    if (!gameUI.choiceButtons) return;
+    gameUI.choiceButtons.innerHTML = '';
+    const isZh = gameState.lang === 'zh';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'choice-btn no-action withdraw-speech-btn';
+    btn.innerText = isZh ? '🏳️ 发言并退水' : '🏳️ Speak & Withdraw';
+    btn.title = isZh ? '发表当前输入框中的发言并退出警长竞选（若输入框为空则直接宣布退水）' : 'Submit your speech (or default message) and withdraw from the Sheriff election';
+    btn.onclick = () => {
+        const text = gameUI.input ? gameUI.input.value.trim() : '';
+        sendAction({ speech: text, withdraw: true });
+        if (gameUI.input) gameUI.input.value = '';
+    };
+    gameUI.choiceButtons.appendChild(btn);
+}
+
 /**
  * Renders the choice buttons for a vote or selection action.
  * @param {Array<string>} options - The list of choices.
@@ -4321,6 +4910,8 @@ function renderChoiceButtons(options, addNoAction) {
     const choiceTranslations = {
         "Yes": isZh ? "是" : "Yes",
         "No": isZh ? "否" : "No",
+        "Keep Running": isZh ? "👑 继续竞选" : "👑 Keep Running",
+        "Withdraw": isZh ? "🏳️ 退水" : "🏳️ Withdraw",
         "Clockwise": isZh ? "顺时针" : "Clockwise",
         "Counter-clockwise": isZh ? "逆时针" : "Counter-clockwise",
         "Abstain": isZh ? "不行动 / 弃票" : "No Action / Abstain"
@@ -4345,7 +4936,7 @@ function renderChoiceButtons(options, addNoAction) {
     });
     
     // Only add the extra "No Action / Abstain" button when options are player targets (not Yes/No or Clockwise/Counter-clockwise)
-    const isBinaryChoice = options.includes('Yes') || options.includes('Clockwise');
+    const isBinaryChoice = options.includes('Yes') || options.includes('Clockwise') || options.includes('Keep Running');
     if (addNoAction && !isBinaryChoice) {
         const btn = document.createElement('button');
         btn.className = 'choice-btn no-action';
@@ -4703,7 +5294,7 @@ function setPhase(phase, rawMessage = null) {
  * @returns {string} An emoji avatar.
  */
 function getAvatar(name) {
-    if (name === 'Player 1') {
+    if (name === getMyPlayerName()) {
         return gameState.myAvatar;
     }
     const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -4807,7 +5398,7 @@ async function loadUnifiedTimeline() {
 
     try {
         const [opRes, recRes] = await Promise.all([
-            fetch(`/api/game/${gameState.gameId}/player/Player 1/operations`),
+            fetch(`/api/game/${gameState.gameId}/player/${encodeURIComponent(getMyPlayerName())}/operations`),
             fetch(`/api/game/${gameState.gameId}/records`)
         ]);
 
@@ -5144,7 +5735,7 @@ async function loadOperationsHistory(containerId = 'op-history-content') {
     }
 
     try {
-        const response = await fetch(`/api/game/${gameState.gameId}/player/Player 1/operations`);
+        const response = await fetch(`/api/game/${gameState.gameId}/player/${encodeURIComponent(getMyPlayerName())}/operations`);
         const data = await response.json();
 
         if (response.ok) {
@@ -5282,6 +5873,513 @@ function renderOperationsHistory(data, t) {
     }
 
     return html;
+}
+
+// --- MATCH HISTORY PICKER & ARCHIVE READER MODE ---
+
+function setupHistoryPickerAndReaderListeners() {
+    const lobbyHistoryBtn = document.getElementById('lobby-history-btn');
+    const openHistoryBtn = document.getElementById('open-history-btn');
+    const archiveListBtn = document.getElementById('archive-list-btn');
+    const closePickerBtn = document.getElementById('close-history-picker-btn');
+    const pickerModal = document.getElementById('history-picker-modal');
+
+    [lobbyHistoryBtn, openHistoryBtn, archiveListBtn].forEach(btn => {
+        if (btn) {
+            btn.addEventListener('click', () => openHistoryPickerModal());
+        }
+    });
+
+    if (closePickerBtn && pickerModal) {
+        closePickerBtn.addEventListener('click', () => {
+            pickerModal.classList.remove('active');
+        });
+    }
+
+    if (pickerModal) {
+        pickerModal.addEventListener('click', (e) => {
+            if (e.target === pickerModal) {
+                pickerModal.classList.remove('active');
+            }
+        });
+    }
+
+    const filterBtns = document.querySelectorAll('#history-picker-filters .filter-pill');
+    filterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            filterBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            gameState.historyPickerFilter = btn.dataset.hfilter || 'all';
+            renderHistoryMatchList();
+        });
+    });
+
+    // Archive Reader Toolbar Perspective Buttons
+    const perspBtns = document.querySelectorAll('#archive-reader-toolbar [data-perspective]');
+    perspBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            perspBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            gameState.archivePerspective = btn.dataset.perspective || 'god';
+            applyArchiveLogsAndRender();
+        });
+    });
+
+    // Toggle AI Thoughts Button
+    const thoughtsBtn = document.getElementById('toggle-thoughts-btn');
+    if (thoughtsBtn) {
+        thoughtsBtn.addEventListener('click', () => {
+            gameState.showArchiveThoughts = !gameState.showArchiveThoughts;
+            thoughtsBtn.classList.toggle('active', gameState.showArchiveThoughts);
+            applyArchiveLogsAndRender();
+        });
+    }
+
+    // Expand / Collapse All Phases Button
+    const expandAllBtn = document.getElementById('expand-all-phases-btn');
+    if (expandAllBtn) {
+        expandAllBtn.addEventListener('click', () => {
+            const sections = Array.from(document.querySelectorAll('#chat-box .chat-phase-section'));
+            if (sections.length === 0) return;
+            const anyExpanded = sections.some(s => !s.classList.contains('collapsed'));
+            sections.forEach(sec => {
+                const phaseId = sec.dataset.phaseId;
+                const pill = sec.querySelector('.phase-ribbon-pill');
+                if (anyExpanded) {
+                    sec.classList.add('collapsed');
+                    if (pill) pill.setAttribute('aria-expanded', 'false');
+                    if (phaseId) gameState.collapsedPhases.add(phaseId);
+                } else {
+                    sec.classList.remove('collapsed');
+                    if (pill) pill.setAttribute('aria-expanded', 'true');
+                    if (phaseId) gameState.collapsedPhases.delete(phaseId);
+                }
+            });
+            updateArchiveExpandBtnLabel();
+        });
+    }
+}
+
+function updateArchiveExpandBtnLabel() {
+    const expandAllBtn = document.getElementById('expand-all-phases-btn');
+    if (!expandAllBtn) return;
+    const isZh = gameState.lang === 'zh';
+    const t_hist = I18N[gameState.lang]?.history;
+    const sections = Array.from(document.querySelectorAll('#chat-box .chat-phase-section'));
+    const allCollapsed = sections.length > 0 && sections.every(s => s.classList.contains('collapsed'));
+    if (allCollapsed) {
+        expandAllBtn.innerText = t_hist ? t_hist.expandAll : (isZh ? '📂 全部展开' : '📂 Expand All');
+    } else {
+        expandAllBtn.innerText = t_hist ? t_hist.collapseAll : (isZh ? '📂 全部收起' : '📂 Collapse All');
+    }
+}
+
+async function openHistoryPickerModal() {
+    const pickerModal = document.getElementById('history-picker-modal');
+    const listContainer = document.getElementById('history-list-content');
+    const isZh = gameState.lang === 'zh';
+    if (!pickerModal || !listContainer) return;
+
+    pickerModal.classList.add('active');
+    listContainer.innerHTML = `<p class="op-history-loading">${isZh ? '正在加载往期战绩...' : 'Loading previous games...'}</p>`;
+
+    try {
+        const res = await fetch('/api/game/history');
+        const data = await res.json();
+        gameState.archiveSummaryList = (data && Array.isArray(data.history)) ? data.history : [];
+        renderHistoryStatsBanner();
+        renderHistoryMatchList();
+    } catch (err) {
+        console.error('Error fetching game history:', err);
+        listContainer.innerHTML = `<div class="op-empty-card"><p>${isZh ? '加载历史记录失败，请稍后重试。' : 'Failed to load match history.'}</p></div>`;
+    }
+}
+
+function renderHistoryStatsBanner() {
+    const banner = document.getElementById('history-stats-banner');
+    if (!banner) return;
+    const isZh = gameState.lang === 'zh';
+    const list = gameState.archiveSummaryList || [];
+    const total = list.length;
+
+    if (total === 0) {
+        banner.style.display = 'none';
+        return;
+    }
+    banner.style.display = 'flex';
+
+    const wins = list.filter(g => g.human_won).length;
+    const winRate = Math.round((wins / total) * 100);
+    const goodWins = list.filter(g => g.winner === 'Villagers').length;
+    const wolfWins = list.filter(g => g.winner === 'Werewolves').length;
+
+    banner.innerHTML = `
+        <span class="history-stat-pill">📊 ${isZh ? `共 ${total} 局` : `${total} Matches`}</span>
+        <span class="history-stat-pill">🏆 ${isZh ? `胜率 ${winRate}% (${wins}胜/${total - wins}负)` : `Win Rate ${winRate}% (${wins}W/${total - wins}L)`}</span>
+        <span class="history-stat-pill">👱 ${isZh ? `好人胜 ${goodWins}` : `Villagers ${goodWins}`} · 🐺 ${isZh ? `狼人胜 ${wolfWins}` : `Wolves ${wolfWins}`}</span>
+    `;
+}
+
+function formatHistoryTimestamp(isoStr) {
+    if (!isoStr) return '';
+    try {
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return String(isoStr).slice(0, 16).replace('T', ' ');
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch {
+        return String(isoStr).slice(0, 16);
+    }
+}
+
+function renderHistoryMatchList() {
+    const listContainer = document.getElementById('history-list-content');
+    if (!listContainer) return;
+    const isZh = gameState.lang === 'zh';
+    const t_hist = I18N[gameState.lang]?.history || {};
+    const filter = gameState.historyPickerFilter || 'all';
+    const allGames = gameState.archiveSummaryList || [];
+
+    const filtered = allGames.filter(g => {
+        if (filter === 'won') return Boolean(g.human_won);
+        if (filter === 'Villagers') return g.winner === 'Villagers';
+        if (filter === 'Werewolves') return g.winner === 'Werewolves';
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        const emptyMsg = allGames.length === 0
+            ? (t_hist.emptyList || (isZh ? '暂无往期对局记录' : 'No previous games recorded yet.'))
+            : (isZh ? '当前筛选下暂无对局记录' : 'No matches found for this filter.');
+        listContainer.innerHTML = `<div class="op-empty-card"><p>${emptyMsg}</p></div>`;
+        return;
+    }
+
+    listContainer.innerHTML = filtered.map(g => {
+        const isCurrent = gameState.isArchiveMode && gameState.archiveGameId === g.id;
+        const roleId = g.human_role || 'Villager';
+        const roleObj = ROLES.find(r => r.id === roleId) || { icon: '👱' };
+        const roleLabel = I18N[gameState.lang]?.roles?.[roleId] || roleId;
+        const won = Boolean(g.human_won);
+        const outcomeBadge = won
+            ? `<span class="history-outcome-badge won">🎉 ${isZh ? '胜利' : 'Victory'}</span>`
+            : `<span class="history-outcome-badge lost">💀 ${isZh ? '落败' : 'Defeat'}</span>`;
+        const campWinnerText = g.winner === 'Villagers'
+            ? (isZh ? '👱 好人阵营胜' : '👱 Villagers Won')
+            : (isZh ? '🐺 狼人阵营胜' : '🐺 Werewolves Won');
+        const pCountText = isZh ? `👥 ${g.player_count || 9}人局` : `👥 ${g.player_count || 9} Players`;
+        const roundsText = isZh ? `⏳ 共 ${g.rounds || 1} 天` : `⏳ ${g.rounds || 1} Days`;
+        const timeText = formatHistoryTimestamp(g.timestamp);
+        const ctaText = isCurrent
+            ? (t_hist.readingNow || (isZh ? '✨ 当前回看中' : '✨ Reading Now'))
+            : (t_hist.readBtn || (isZh ? '📖 阅读对局' : '📖 Read Match'));
+
+        return `
+            <button type="button" class="history-match-card${isCurrent ? ' active-reading' : ''}" data-hist-id="${g.id}">
+                <div class="history-card-left">
+                    <div class="history-card-top-row">
+                        <span class="history-game-id">#${g.id}</span>
+                        ${outcomeBadge}
+                        <span class="history-camp-badge">${campWinnerText}</span>
+                        <span class="history-role-tag">${roleObj.icon} ${isZh ? '我:' : 'Me:'} ${escapeHtml(roleLabel)}</span>
+                    </div>
+                    <div class="history-card-meta-row">
+                        <span>${pCountText}</span>
+                        <span>·</span>
+                        <span>${roundsText}</span>
+                        <span>·</span>
+                        <span>🕒 ${escapeHtml(timeText)}</span>
+                    </div>
+                </div>
+                <div class="history-card-right">
+                    <span class="history-read-cta">${ctaText}</span>
+                </div>
+            </button>
+        `;
+    }).join('');
+
+    listContainer.querySelectorAll('.history-match-card').forEach(cardEl => {
+        cardEl.addEventListener('click', () => {
+            const histId = parseInt(cardEl.dataset.histId, 10);
+            if (!isNaN(histId)) {
+                loadHistoricalGameToBoard(histId);
+            }
+        });
+    });
+}
+
+function updateArchiveHeaderBadge() {
+    if (!gameUI.phaseIndicator || !gameState.isArchiveMode) return;
+    const isZh = gameState.lang === 'zh';
+    const winLabel = gameState.winner === 'Villagers'
+        ? (isZh ? '好人胜' : 'Villagers Win')
+        : (gameState.winner === 'Werewolves' ? (isZh ? '狼人胜' : 'Wolves Win') : '');
+    gameUI.phaseIndicator.innerText = isZh
+        ? `📜 回看 #${gameState.archiveGameId}${winLabel ? ` · ${winLabel}` : ''}`
+        : `📜 Game #${gameState.archiveGameId}${winLabel ? ` · ${winLabel}` : ''}`;
+}
+
+async function loadHistoricalGameToBoard(histId) {
+    const isZh = gameState.lang === 'zh';
+    try {
+        const res = await fetch(`/api/game/history/${histId}`);
+        if (!res.ok) {
+            alert(isZh ? '未找到该局历史记录' : 'Historical game not found');
+            return;
+        }
+        const detail = await res.json();
+
+        // Stop any live polling or message queue timers
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+        if (gameState.queueTimer) {
+            clearTimeout(gameState.queueTimer);
+            gameState.queueTimer = null;
+        }
+        if (gameState.toastTimer) {
+            clearTimeout(gameState.toastTimer);
+            gameState.toastTimer = null;
+        }
+
+        gameState.active = false;
+        gameState.isArchiveMode = true;
+        gameState.archiveGameId = histId;
+        gameState.gameId = `history_${histId}`;
+        gameState.winner = detail.winner || null;
+        gameState.players = detail.players || [];
+        const p1 = gameState.players.find(p => p.is_human) || gameState.players.find(p => p.name === 'Player 1') || gameState.players[0] || {};
+        gameState.myPlayerName = p1.name || 'Player 1';
+        gameState.spectatorMode = false;
+        gameState.myRole = detail.human_role || p1.role || 'Villager';
+        gameState.isAlive = Boolean(p1.is_alive);
+        gameState.archiveRawLogs = detail.logs || [];
+        gameState.archivePerspective = 'god';
+        gameState.showArchiveThoughts = true;
+        gameState.collapsedPhases = new Set();
+        gameState.focusedSpeaker = null;
+        gameState.seerChecks = {};
+        gameState.pendingAction = null;
+        gameState.hasEvaluated = false;
+        gameState.selectedArguePlayers = new Set();
+        gameState.logQueue = [];
+        gameState.isProcessingQueue = false;
+
+        // Reset Post-Game Modal chat boxes so if user opens Review for this historical game, it starts clean
+        if (evalUI.chatBox) {
+            evalUI.chatBox.innerHTML = `<div class="postgame-chat-empty" id="eval-chat-empty">${isZh ? '👆 选择上方 AI 评价员的性格并点击「⚡ 生成点评」，即可开始复盘这局往期对局！' : '👆 Pick an evaluator persona above and click Evaluate to review this historical match!'}</div>`;
+        }
+        if (evalUI.argueChatBox) {
+            evalUI.argueChatBox.innerHTML = `<div class="postgame-chat-empty" id="argue-chat-empty">${isZh ? '🗣️ 勾选上方任意 AI 玩家，在下方发消息质问他们在这局里的操作！' : '🗣️ Select any AI players above and question their moves in this match!'}</div>`;
+        }
+
+        // Configure Game Screen UI for Archive Reader Mode
+        document.body.classList.remove('night-mode');
+        const actionArea = document.getElementById('action-area');
+        const archiveToolbar = document.getElementById('archive-reader-toolbar');
+        const archiveListBtn = document.getElementById('archive-list-btn');
+        if (actionArea) actionArea.classList.add('hidden');
+        if (archiveToolbar) archiveToolbar.classList.remove('hidden');
+        if (archiveListBtn) archiveListBtn.classList.remove('hidden');
+        if (gameUI.postgameHubBtn) gameUI.postgameHubBtn.classList.remove('hidden');
+        if (gameUI.speedToggleBtn) gameUI.speedToggleBtn.classList.add('hidden');
+        if (gameUI.skipQueueBtn) gameUI.skipQueueBtn.classList.add('hidden');
+
+        // Reset toolbar button states
+        document.querySelectorAll('#archive-reader-toolbar [data-perspective]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.perspective === 'god');
+        });
+        const thoughtsBtn = document.getElementById('toggle-thoughts-btn');
+        if (thoughtsBtn) thoughtsBtn.classList.add('active');
+
+        // Update Player 1 footer summary card
+        const myAvatarEl = document.querySelector('.my-avatar');
+        if (myAvatarEl) myAvatarEl.innerText = gameState.myAvatar || '👤';
+        if (gameUI.myRole) {
+            gameUI.myRole.innerText = I18N[gameState.lang]?.roles?.[gameState.myRole] || gameState.myRole;
+        }
+        if (gameUI.myStatus) {
+            gameUI.myStatus.innerText = gameState.isAlive ? I18N[gameState.lang].alive : I18N[gameState.lang].dead;
+        }
+
+        updateArchiveHeaderBadge();
+        applyArchiveLogsAndRender();
+
+        const pickerModal = document.getElementById('history-picker-modal');
+        if (pickerModal) pickerModal.classList.remove('active');
+        switchScreen('game');
+    } catch (err) {
+        console.error('Error loading historical game:', err);
+        alert(isZh ? '读取对局详情失败' : 'Failed to load historical game details');
+    }
+}
+
+function exitArchiveModeToLobby() {
+    gameState.isArchiveMode = false;
+    gameState.archiveGameId = null;
+    gameState.gameId = null;
+    gameState.archiveRawLogs = [];
+    gameState.logs = [];
+    gameState.renderedLogs = [];
+    gameState.focusedSpeaker = null;
+    if (gameUI.chatBox) {
+        gameUI.chatBox.innerHTML = '';
+        gameUI.chatBox.classList.remove('has-speaker-focus');
+    }
+
+    const actionArea = document.getElementById('action-area');
+    const archiveToolbar = document.getElementById('archive-reader-toolbar');
+    const archiveListBtn = document.getElementById('archive-list-btn');
+    if (actionArea) actionArea.classList.remove('hidden');
+    if (archiveToolbar) archiveToolbar.classList.add('hidden');
+    if (archiveListBtn) archiveListBtn.classList.add('hidden');
+    if (gameUI.postgameHubBtn) gameUI.postgameHubBtn.classList.add('hidden');
+    if (gameUI.speedToggleBtn) gameUI.speedToggleBtn.classList.remove('hidden');
+
+    const selectedCountEl = document.querySelector('.toggle-btn.active');
+    const count = selectedCountEl ? parseInt(selectedCountEl.dataset.value, 10) : 9;
+    renderRoleSelection(count);
+    switchScreen('setup');
+}
+
+function filterArchiveLogs(rawLogs) {
+    const persp = gameState.archivePerspective || 'god';
+    const showThoughts = Boolean(gameState.showArchiveThoughts);
+    const myRole = gameState.myRole || 'Villager';
+    const isMyRoleWolf = myRole === 'Werewolf' || myRole === 'Black Werewolf King';
+
+    let seenTeammateNoticeInRound = new Set();
+
+    return (rawLogs || []).filter(log => {
+        if (!log) return false;
+        const type = log.type;
+        if (type === 'PLAYER_THINKING' || type === 'PLAYER_DONE_THINKING') return false;
+
+        if (type === 'THOUGHT') {
+            if (!showThoughts) return false;
+            if (persp === 'me' && log.source !== getMyPlayerName()) return false;
+            return true;
+        }
+
+        const msgZh = typeof log.message === 'object' ? (log.message.zh || '') : String(log.message || '');
+        const msgEn = typeof log.message === 'object' ? (log.message.en || '') : String(log.message || '');
+        const combined = `${msgZh} ${msgEn}`;
+
+        // Hide internal full-role dump line since sidebar cards and Roles tab display all roles cleanly
+        if (combined.includes('Player roles:') || combined.includes('玩家角色:')) {
+            return false;
+        }
+
+        // Deduplicate repeated per-wolf "Your teammates are" lines in God View
+        if (persp !== 'me' && (combined.includes('你的队友是') || combined.includes('Your teammates are'))) {
+            const rKey = log.day || log.round || 1;
+            if (seenTeammateNoticeInRound.has(rKey)) return false;
+            seenTeammateNoticeInRound.add(rKey);
+        }
+
+        // Hide "There is no guard" filler noise
+        if (combined.includes('场上没有守卫') || combined.includes('There is no guard')) {
+            return false;
+        }
+
+        if (persp === 'speech') {
+            if (['NIGHT_FALLS', 'DAY_BREAKS', 'SPEECH', 'WHISPER', 'VOTE_RESULT', 'SHERIFF_ELECTED', 'PLAYER_ELIMINATED', 'HUNTER_SHOOT', 'BLACKWEREWOLFKING_SHOOT', 'PLAYER_SHOOT'].includes(type)) {
+                return true;
+            }
+            if (log.data && log.data.phase === 'Sheriff Signup') {
+                return true;
+            }
+            return false;
+        }
+
+        if (persp === 'me') {
+            if (['GAME_START', 'NIGHT_FALLS', 'DAY_BREAKS', 'GAME_OVER'].includes(type)) {
+                return true;
+            }
+            const camps = Array.isArray(log.camps) ? log.camps : [];
+            if (camps.includes('All')) {
+                return true;
+            }
+            const visPlayers = Array.isArray(log.visible_to_players) ? log.visible_to_players : [];
+            if (visPlayers.includes(getMyPlayerName())) {
+                return true;
+            }
+            if (combined.includes('你被分配的角色是') || combined.includes('You have been assigned the role')) {
+                return true;
+            }
+            const state = log.state || '';
+            if (isMyRoleWolf && state === 'WerewolfNightState') {
+                return true;
+            }
+            if (myRole === 'Witch' && state === 'WitchNightState') {
+                return true;
+            }
+            if (myRole === 'Seer' && state === 'SeerNightState') {
+                return true;
+            }
+            if (myRole === 'Guard' && state === 'GuardNightState') {
+                return true;
+            }
+            return false;
+        }
+
+        // Default: 'god' perspective shows everything
+        if (combined.includes('你被分配的角色是') || combined.includes('You have been assigned the role')) {
+            return false;
+        }
+        return true;
+    });
+}
+
+function applyArchiveLogsAndRender() {
+    if (!gameState.isArchiveMode) return;
+    gameState.seerChecks = {};
+    const filtered = filterArchiveLogs(gameState.archiveRawLogs);
+    gameState.logs = filtered;
+    gameState.renderedLogs = filtered;
+    renderLogs();
+    updatePlayers(gameState.players);
+    renderArchivePhaseJumpBar();
+    updateArchiveExpandBtnLabel();
+}
+
+function renderArchivePhaseJumpBar() {
+    const jumpBar = document.getElementById('archive-phase-jump-bar');
+    if (!jumpBar) return;
+    const isZh = gameState.lang === 'zh';
+    const sections = Array.from(document.querySelectorAll('#chat-box .chat-phase-section'));
+    if (sections.length === 0) {
+        jumpBar.innerHTML = '';
+        return;
+    }
+
+    jumpBar.innerHTML = sections.map(sec => {
+        const phaseId = sec.dataset.phaseId || '';
+        const isNight = phaseId.startsWith('Night_');
+        const num = phaseId.split('_')[1] || '1';
+        const label = isNight
+            ? (isZh ? `🌙 夜${num}` : `🌙 N${num}`)
+            : (isZh ? `☀️ 天${num}` : `☀️ D${num}`);
+        return `<button type="button" class="phase-jump-chip ${isNight ? 'night' : 'day'}" data-target-phase="${phaseId}">${label}</button>`;
+    }).join('');
+
+    jumpBar.querySelectorAll('.phase-jump-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            const targetPhase = chip.dataset.targetPhase;
+            const targetEl = document.querySelector(`#chat-box .chat-phase-section[data-phase-id="${targetPhase}"]`);
+            if (targetEl) {
+                if (targetEl.classList.contains('collapsed')) {
+                    targetEl.classList.remove('collapsed');
+                    const pill = targetEl.querySelector('.phase-ribbon-pill');
+                    if (pill) pill.setAttribute('aria-expanded', 'true');
+                    gameState.collapsedPhases.delete(targetPhase);
+                    updateArchiveExpandBtnLabel();
+                }
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
 }
 
 // Expose helper on window for debugging & testing

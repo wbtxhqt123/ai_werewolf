@@ -9,10 +9,10 @@
     <link href="https://fonts.loli.net/css2?family=Cinzel:wght@600;700;800;900&family=Fredoka:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/base.css?v=10">
     <link rel="stylesheet" href="/static/css/layout.css?v=14">
-    <link rel="stylesheet" href="/static/css/components.css?v=15">
-    <link rel="stylesheet" href="/static/css/setup.css?v=12">
-    <link rel="stylesheet" href="/static/css/game.css?v=17">
-    <link rel="stylesheet" href="/static/css/modals.css?v=12">
+    <link rel="stylesheet" href="/static/css/components.css?v=16">
+    <link rel="stylesheet" href="/static/css/setup.css?v=13">
+    <link rel="stylesheet" href="/static/css/game.css?v=18">
+    <link rel="stylesheet" href="/static/css/modals.css?v=13">
 </head>
 <body>
     <div id="app">
@@ -45,6 +45,7 @@
         <!-- Login / Setup Screen -->
         <div id="setup-screen" class="screen active">
             <div class="top-fixed-controls">
+                <button id="lobby-history-btn" class="top-fixed-btn" title="Previous Games" aria-label="Previous Games">📜 <span id="lobby-history-label">历史战绩</span></button>
                 <button id="lobby-audio-btn" class="top-fixed-btn" title="Toggle Music" aria-label="Toggle Music">🎵 <span class="audio-label">音乐</span></button>
                 <button id="lobby-lang-btn" class="top-fixed-btn lang-toggle-fixed">中文/EN</button>
             </div>
@@ -70,8 +71,20 @@
                         <!-- Roles injected by JS -->
                     </div>
                 </div>
+                <div class="form-group seat-select-group">
+                    <label id="seat-select-label" for="user-seat-select">选择座位 (Seat)</label>
+                    <select id="user-seat-select" class="seat-select-dropdown">
+                        <option value="1">1号位 (默认)</option>
+                        <option value="random">🎲 随机座号 (Random Seat)</option>
+                    </select>
+                </div>
+
+                <div id="lobby-ai-mode-badge" class="lobby-ai-mode-badge" aria-live="polite">
+                    🎲 AI 模式：内置随机机器人（可在高级设置中配置大模型 API Key）
+                </div>
                 
                 <button id="open-settings-btn" class="secondary-btn">⚙️ Advanced Settings</button>
+                <button id="open-history-btn" class="secondary-btn">📜 历史战绩</button>
 
                 <button id="start-game-btn" class="primary-btn">Start Game</button>
             </div>
@@ -105,6 +118,10 @@
                     <label id="setting-modelname-label">Model Name (Optional)</label>
                     <input type="text" id="model-name" placeholder="e.g. gpt-4o">
                 </div>
+                <div class="llm-test-row">
+                    <button type="button" id="test-llm-btn" class="secondary-btn llm-test-btn">🔌 测试大模型连接</button>
+                    <div id="llm-test-status" class="llm-test-status hidden" aria-live="polite"></div>
+                </div>
 
                 <!-- Voice Transcription Model Setup & Progress Bar in Advanced Settings -->
                 <div class="voice-model-setup-card" id="voice-model-setup-card">
@@ -114,8 +131,8 @@
                     </div>
                     <div class="voice-model-controls">
                         <select id="voice-backend-select" class="voice-backend-select" aria-label="Select Voice Model">
-                            <option value="sensevoice">SenseVoiceSmall (中英混说极速 ~230MB)</option>
-                            <option value="faster-whisper">Whisper Large-v3-Turbo (~800MB)</option>
+                            <option value="paraformer">Paraformer-Large (中文/中英精调 · CoreML/GPU ~220MB)</option>
+                            <option value="faster-whisper">Whisper Large-v3-Turbo (多语种旗舰 · Metal/GPU ~800MB)</option>
                         </select>
                         <button type="button" id="prepare-voice-model-btn" class="voice-prepare-btn">⬇️ 下载并启用语音</button>
                     </div>
@@ -142,6 +159,7 @@
                     <div class="alive-counter-pill" id="alive-counter-pill">👥 9 / 9</div>
                 </div>
                 <div class="header-right">
+                    <button id="archive-list-btn" class="icon-btn header-pill-btn hidden" title="Switch Historical Game" aria-label="Switch Historical Game">📋 <span id="archive-list-label">切换对局</span></button>
                     <button id="speed-toggle-btn" class="icon-btn header-pill-btn speed-pill-btn" title="Message Pacing Speed" aria-label="Message Pacing Speed">🐢 <span class="speed-label">1x</span></button>
                     <button id="skip-queue-btn" class="icon-btn header-pill-btn skip-pill-btn hidden" title="Show All Queued Messages" aria-label="Show All Queued Messages">⏭️ <span class="skip-label">跳过</span></button>
                     <button id="audio-toggle-btn" class="icon-btn header-pill-btn" title="Toggle Music" aria-label="Toggle Music">🎵 <span class="audio-label">音乐</span></button>
@@ -197,12 +215,36 @@
                         <div id="action-prompt" aria-live="polite">Waiting...</div>
                         <div id="turn-timer" class="turn-timer hidden" aria-label="Turn Timer">⏳ 02:00</div>
                     </div>
+                    <div id="spectator-banner" class="spectator-banner hidden" aria-live="polite">
+                        <span id="spectator-banner-text">👻 你已出局，可开启上帝视角查看全员底牌与AI心路</span>
+                        <div class="spectator-banner-actions">
+                            <button type="button" id="enable-spectator-btn" class="spectator-pill-btn">👁️ 开启上帝视角</button>
+                            <button type="button" id="spectator-fastforward-btn" class="spectator-pill-btn">⚡ 极速观战</button>
+                        </div>
+                    </div>
                     <div class="input-wrapper">
                         <input type="text" id="game-input" placeholder="Type a message..." disabled>
                         <button type="button" id="voice-input-btn" class="icon-btn voice-mic-btn" title="Voice Input" aria-label="Voice Input">🎤</button>
                         <button id="send-action-btn" disabled>Send</button>
                     </div>
                     <div id="choice-buttons" class="choice-buttons"></div>
+                </div>
+                <div class="archive-reader-toolbar hidden" id="archive-reader-toolbar">
+                    <div class="archive-toolbar-row">
+                        <div class="archive-control-group">
+                            <span class="archive-group-label" id="archive-perspective-label">视角:</span>
+                            <button type="button" class="archive-pill-btn active" data-perspective="god" id="persp-god-btn">👁️ 全知视角</button>
+                            <button type="button" class="archive-pill-btn" data-perspective="me" id="persp-me-btn">👤 第一视角</button>
+                            <button type="button" class="archive-pill-btn" data-perspective="speech" id="persp-speech-btn">🗣️ 仅看发言</button>
+                        </div>
+                        <div class="archive-control-group">
+                            <button type="button" class="archive-pill-btn thought-toggle-btn active" id="toggle-thoughts-btn" title="Toggle AI Thoughts">🧠 AI心路</button>
+                            <button type="button" class="archive-pill-btn" id="expand-all-phases-btn" title="Expand / Collapse All Phases">📂 全部收起</button>
+                        </div>
+                    </div>
+                    <div class="archive-phase-jump-row" id="archive-phase-jump-bar">
+                        <!-- Dynamically populated phase jump pills -->
+                    </div>
                 </div>
             </footer>
         </div>
@@ -352,6 +394,35 @@
                 </div>
             </div>
         </div>
+
+        <!-- Match History Picker Modal -->
+        <div id="history-picker-modal" class="modal">
+            <div class="modal-content records-content history-picker-content">
+                <div class="records-header">
+                    <div class="records-title-group">
+                        <span class="records-icon">📜</span>
+                        <h2 id="history-picker-title">往期对局战绩</h2>
+                    </div>
+                    <button class="close-modal-round" id="close-history-picker-btn" aria-label="Close">&times;</button>
+                </div>
+
+                <!-- Stats Summary Banner -->
+                <div id="history-stats-banner" class="history-stats-banner"></div>
+
+                <!-- Filter Pills -->
+                <div class="records-filter-bar" id="history-picker-filters">
+                    <button class="filter-pill active" data-hfilter="all" id="hfilter-all-btn">🌟 全部对局</button>
+                    <button class="filter-pill" data-hfilter="won" id="hfilter-won-btn">🏆 获胜局</button>
+                    <button class="filter-pill" data-hfilter="Villagers" id="hfilter-good-btn">👱 好人胜</button>
+                    <button class="filter-pill" data-hfilter="Werewolves" id="hfilter-wolf-btn">🐺 狼人胜</button>
+                </div>
+
+                <!-- Match List Body -->
+                <div class="records-timeline-container history-list-container" id="history-list-content">
+                    <p class="op-history-loading">正在加载往期战绩...</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Templates -->
@@ -363,6 +434,7 @@
             <div class="player-tie-label">TIE</div>
             <div class="player-dead-label">DEAD</div>
             <div class="player-seer-badge"></div>
+            <button type="button" class="player-note-tag" title="点击标记身份猜测 (Click to tag suspect/role)">🏷️</button>
             <div class="player-avatar"></div>
             <div class="player-name"></div>
             <div class="player-status-icons"></div>
@@ -370,6 +442,6 @@
         </div>
     </template>
 
-    <script src="/static/js/app.js?v=26"></script>
+    <script src="/static/js/app.js?v=28"></script>
 </body>
 </html>

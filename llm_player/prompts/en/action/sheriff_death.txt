@@ -1,17 +1,14 @@
 You are the Sheriff, but you have died. You must decide what to do with the Sheriff badge.
-
-You have two options:
-1. Pass the badge to another living player.
-2. Destroy the badge (no Sheriff for the rest of the game).
-
 Living players: {potential_targets}
-
-Choose wisely. If you trust someone, pass it to them. If you don't trust anyone or want to cause chaos, destroy it.
+- [Sheriff Badge Flow Tactics]:
+  1. If you are the [Real Seer]: Honor your [Badge Flow (警徽流)]! Pass the badge to the player you checked as Good (Gold Water) last night (or an earlier verified Gold Water/God); if you checked a Werewolf (Wolf Check) and have no verified good heir, destroy the badge (`"destroy_badge"`) to signal that your check target is a wolf.
+  2. If you are another [Good Player]: Pass to the verified Seer, Silver Water, or trusted God; if unsure, destroy the badge so wolves cannot seize 1.5x vote weight.
+  3. If you are a [Werewolf Sheriff]: Pass the badge to a deep-cover wolf teammate (倒钩狼) to keep 1.5x vote control, or pass it to a suspected villager to frame them as your wolf accomplice!
 
 Return a JSON object with the following format:
 {{
-    "thought": "Your reasoning here...",
+    "thought": "1.[My Role & Badge Flow Plan]... 2.[Living Seats Read]... 3.[Badge Decision]...",
     "action": {{
-        "pass_badge": "PlayerName"  // OR "destroy_badge"
+        "pass_badge": "PlayerName or destroy_badge"
     }}
 }}

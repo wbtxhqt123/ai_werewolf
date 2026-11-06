@@ -27,6 +27,7 @@ class LogType(Enum):
     
     SHERIFF_ELECTION_START = auto()
     SHERIFF_CANDIDATE = auto()
+    SHERIFF_WITHDRAW = auto()
     SHERIFF_VOTE = auto()
     SHERIFF_ELECTED = auto()
 

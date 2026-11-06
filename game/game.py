@@ -52,6 +52,7 @@ class Game:
         self.sheriff = None
         self.speech_sequence = []  # List of players in order of speech
         self.election_players = []
+        self.initial_election_players = []
         self.tied_players = []
         self.tie_context = None
         self.player_role = player_role

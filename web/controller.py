@@ -41,6 +41,11 @@ class WebController(Controller):
         self.visible_logs: list[dict] = []
         self.log_lock = threading.Lock()
         self.timeout: float | None = timeout
+        self.spectator_mode: bool = False
+
+    def enable_spectator_mode(self):
+        """Enables spectator (God View) mode for a deceased human player so all subsequent logs and thoughts are visible."""
+        self.spectator_mode = True
 
     def set_timeout(self, timeout: float | None):
         """Updates the input timeout for this controller."""
@@ -58,7 +63,9 @@ class WebController(Controller):
                 my_player = next((p for p in self.game.players if p.controller == self), None)
 
             is_visible = False
-            if my_player and self.game:
+            if self.spectator_mode:
+                is_visible = True
+            elif my_player and self.game:
                 is_visible = self.game._is_visible(entry, my_player)
             else:
                 if "All" in entry.camps:
@@ -66,7 +73,7 @@ class WebController(Controller):
 
             if is_visible:
                 log_type_name = entry.log_type.name
-                if entry.log_type in (LogType.HUNTER_SHOOT, LogType.BLACKWEREWOLFKING_SHOOT):
+                if not self.spectator_mode and entry.log_type in (LogType.HUNTER_SHOOT, LogType.BLACKWEREWOLFKING_SHOOT):
                     is_wolf = bool(my_player and my_player.role and isinstance(my_player.role, Werewolf))
                     is_self = bool(my_player and entry.source == my_player)
                     if not (is_wolf or is_self):
@@ -105,6 +112,8 @@ class WebController(Controller):
         if request_type == "vote":
             return "Abstain"
         if options:
+            if "Keep Running" in options:
+                return "Keep Running"
             if "No" in options:
                 return "No"
             if "Clockwise" in options:
@@ -183,7 +192,34 @@ class WebController(Controller):
     # --- Controller Implementation ---
 
     def get_speech(self, player: Player) -> str:
-        return self._wait_for_input("speech", {"en": f"{player.name}, it's your turn to speak.", "zh": f"{player.name}，轮到你发言了。"})
+        is_sheriff_speech = bool(
+            self.game
+            and getattr(self.game, "state", None)
+            and self.game.state.__class__.__name__ == "SheriffSpeechState"
+            and getattr(player, "is_sheriff_candidate", False)
+        )
+        options = ["Withdraw"] if is_sheriff_speech else None
+        raw = self._wait_for_input(
+            "speech",
+            {"en": f"{player.name}, it's your turn to speak.", "zh": f"{player.name}，轮到你发言了。"},
+            options=options,
+        )
+        lang = getattr(self.game, "language", "zh") if self.game else "zh"
+        default_withdraw_text = "我选择退水。" if lang == "zh" else "I withdraw from the Sheriff election."
+        if isinstance(raw, dict):
+            if raw.get("withdraw"):
+                setattr(player, "withdrew_in_speech", True)
+            text = str(raw.get("speech") or "").strip()
+            return text or (default_withdraw_text if raw.get("withdraw") else "...")
+        if isinstance(raw, str):
+            if raw == "Withdraw":
+                setattr(player, "withdrew_in_speech", True)
+                return default_withdraw_text
+            if raw.startswith("[WITHDRAW]"):
+                setattr(player, "withdrew_in_speech", True)
+                cleaned = raw[len("[WITHDRAW]"):].strip()
+                return cleaned or default_withdraw_text
+        return str(raw) if raw is not None else "..."
 
     def get_vote(self, player: Player, potential_targets: list[Player]) -> Player | None:
         options = [p.name for p in potential_targets]
@@ -251,3 +287,14 @@ class WebController(Controller):
         if choice_name in (None, "Abstain"):
             return None
         return next((p for p in potential_targets if p.name == choice_name), None)
+
+    def get_sheriff_withdraw_decision(self, player: Player) -> bool:
+        choice = self._wait_for_input(
+            "choice",
+            {
+                "en": f"{player.name}, Sheriff speeches are over. Stay in the election or withdraw (退水)?",
+                "zh": f"{player.name}，警上发言已结束，你要继续竞选警长还是退水？",
+            },
+            ["Keep Running", "Withdraw"],
+        )
+        return choice == "Withdraw"

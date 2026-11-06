@@ -330,12 +330,13 @@ class PostGameDebateRoom:
     ) -> list[dict[str, Any]]:
         """Generates in-character post-game argument responses from the selected AI players."""
         is_zh = language == "zh"
-        human_player = self.game.get_player_by_name("Player 1")
+        human_player = next((p for p in self.game.players if getattr(p.controller, "is_human", False)), None) or self.game.get_player_by_name("Player 1")
+        human_name = human_player.name if human_player else "Player 1"
         human_role_en = human_player.role.name if (human_player and human_player.role) else "Unknown"
         human_role_disp = ROLE_ZH_MAP.get(human_role_en, human_role_en) if is_zh else human_role_en
 
         self.history.append({
-            "speaker": "Player 1",
+            "speaker": human_name,
             "role": human_role_en,
             "text": user_message,
         })
@@ -366,7 +367,7 @@ class PostGameDebateRoom:
 
         replies: list[dict[str, Any]] = []
         for p_name in selected_players:
-            if p_name == "Player 1":
+            if p_name == human_name:
                 continue
             player = self.game.get_player_by_name(p_name)
             if not player:

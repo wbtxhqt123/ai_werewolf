@@ -238,6 +238,46 @@ class TestLLMRobustness(unittest.TestCase):
         self.assertEqual(len([e for e in p2.logs if e.log_type == LogType.PLAYER_THINKING]), 0)
         self.assertEqual(len([e for e in p4.logs if e.log_type == LogType.PLAYER_THINKING]), 1)
 
+    def test_self_thought_continuity_and_vote_ledger_in_status_prompt(self):
+        from game.log import LogEntry, LogType
+
+        c1 = LLMController(personality="analytical", language="zh")
+        c2 = LLMController(personality="aggressive", language="zh")
+        game = Game({"Player 1": c1, "Player 2": c2}, language="zh")
+        p1, p2 = game.players
+        p1.role = Villager()
+        p2.role = Villager()
+
+        # Log a thought for Player 1 and a thought for Player 2
+        game.log(LogEntry(
+            log_type=LogType.THOUGHT,
+            message={"en": "(Player 1 thought): I suspect P2", "zh": "(Player 1 思考): 我怀疑2号是悍跳狼"},
+            source=p1,
+            visible_to_players=[p1],
+        ))
+        game.log(LogEntry(
+            log_type=LogType.THOUGHT,
+            message={"en": "(Player 2 thought): Secret wolf plan", "zh": "(Player 2 思考): 我要倒钩"},
+            source=p2,
+            visible_to_players=[p2],
+        ))
+
+        # Record a vote in game.vote_history
+        game.record_vote("Day 1 Vote", {p1: p2, p2: None}, result="Player 2 Executed")
+
+        status_p1 = c1._build_status_prompt(p1)
+        # Player 1 sees its own prior thought and the vote ledger, but never Player 2's thought
+        self.assertIn("我怀疑2号是悍跳狼", status_p1)
+        self.assertNotIn("我要倒钩", status_p1)
+        self.assertIn("历史票型记录", status_p1)
+        self.assertIn("Player 1->Player 2", status_p1)
+
+        # Distinct personalities have different temperatures and different seat lenses
+        self.assertNotEqual(c1.temperature, c2.temperature)
+        status_p2 = c2._build_status_prompt(p2)
+        self.assertNotEqual(c1._build_personal_tactical_lens(p1, True), c2._build_personal_tactical_lens(p2, True))
+        self.assertIn("我要倒钩", status_p2)
+
 
 if __name__ == "__main__":
     unittest.main()

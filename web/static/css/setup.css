@@ -391,3 +391,267 @@
     line-height: 1.35;
 }
 
+/* --- Custom Neo-Brutalist / Cartoon Pop Dropdown --- */
+.cartoon-dropdown-wrapper {
+    position: relative;
+    width: 100%;
+    font-family: var(--font-main);
+}
+
+.voice-model-controls .cartoon-dropdown-wrapper {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+}
+
+.cartoon-dropdown-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 11px 14px;
+    border-radius: var(--border-radius-md, 12px);
+    border: 2.5px solid var(--panel-border, #2d3436);
+    background: var(--modal-surface, #ffffff);
+    color: var(--text-primary, #2d3436);
+    font-family: var(--font-main);
+    font-size: 0.92rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 3px 3px 0px var(--ink-color, #2d3436);
+    text-align: left;
+    transition: transform 0.14s ease, box-shadow 0.14s ease, background-color 0.15s ease;
+}
+
+.voice-model-controls .cartoon-dropdown-trigger {
+    padding: 7px 11px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    box-shadow: 2px 2px 0px var(--text-dark, #2d3436);
+}
+
+.cartoon-dropdown-trigger:hover {
+    transform: translate(-1.5px, -1.5px);
+    box-shadow: 4px 4px 0px var(--ink-color, #2d3436);
+    background: #fffdf4;
+}
+
+body.night-mode .cartoon-dropdown-trigger:hover {
+    background: #24344d;
+}
+
+.cartoon-dropdown-trigger:active,
+.cartoon-dropdown-wrapper.open .cartoon-dropdown-trigger {
+    transform: translate(1px, 1px);
+    box-shadow: 1.5px 1.5px 0px var(--ink-color, #2d3436);
+    background: #fff9db;
+}
+
+body.night-mode .cartoon-dropdown-wrapper.open .cartoon-dropdown-trigger {
+    background: #28374f;
+    border-color: #facc15;
+}
+
+.cartoon-dropdown-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cartoon-dropdown-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #ffeaa7;
+    color: #2d3436;
+    border: 1.5px solid #2d3436;
+    font-size: 0.78rem;
+    font-weight: 900;
+    flex-shrink: 0;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.15s ease;
+}
+
+.cartoon-dropdown-wrapper.open .cartoon-dropdown-arrow {
+    transform: rotate(180deg);
+    background: var(--accent-yellow, #ffd32a);
+}
+
+.cartoon-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    z-index: 2500;
+    background: var(--modal-bg, #fffdf7);
+    border: 2.5px solid var(--panel-border, #2d3436);
+    border-radius: 14px;
+    box-shadow: 4px 4px 0px var(--ink-color, #2d3436);
+    padding: 6px;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 250px;
+    overflow-y: auto;
+    animation: dropdownPopIn 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+body.night-mode .cartoon-dropdown-menu {
+    background: #1e293b;
+    border-color: #475569;
+    box-shadow: 4px 4px 0px #0f172a;
+}
+
+.cartoon-dropdown-wrapper.open .cartoon-dropdown-menu {
+    display: flex;
+}
+
+@keyframes dropdownPopIn {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.cartoon-dropdown-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background: transparent;
+    color: var(--text-primary, #2d3436);
+    font-family: var(--font-main);
+    font-size: 0.85rem;
+    font-weight: 800;
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.cartoon-dropdown-item:hover {
+    background: #fff3bf;
+    color: #2d3436;
+    border-color: #2d3436;
+    transform: translateX(2px);
+}
+
+body.night-mode .cartoon-dropdown-item:hover {
+    background: #334155;
+    color: #fef08a;
+    border-color: #94a3b8;
+}
+
+.cartoon-dropdown-item.selected {
+    background: #FFE66D;
+    color: #2d3436;
+    border: 2px solid #2d3436;
+    box-shadow: 2px 2px 0px #2d3436;
+}
+
+body.night-mode .cartoon-dropdown-item.selected {
+    background: #facc15;
+    color: #0f172a;
+    border-color: #0f172a;
+    box-shadow: 2px 2px 0px #0f172a;
+}
+
+.cartoon-dropdown-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #2d3436;
+    color: #ffffff;
+    font-size: 0.72rem;
+    font-weight: 900;
+    flex-shrink: 0;
+}
+
+.seat-select-dropdown {
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 12px;
+    border: 2.5px solid #2d3436;
+    background: #ffffff;
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: #2d3436;
+    box-shadow: 2px 2px 0px #2d3436;
+    cursor: pointer;
+}
+
+.lobby-ai-mode-badge {
+    margin: 6px 0 10px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    border: 2px solid #2d3436;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-align: center;
+    background: #fff3bf;
+    color: #2d3436;
+    box-shadow: 2px 2px 0px #2d3436;
+}
+
+.lobby-ai-mode-badge.ai-mode-llm {
+    background: #d1fae5;
+    color: #065f46;
+    border-color: #059669;
+}
+
+.lobby-ai-mode-badge.ai-mode-random {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #d97706;
+}
+
+.llm-test-row {
+    margin: 6px 0 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.llm-test-status {
+    padding: 7px 10px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    border: 2px solid #2d3436;
+    background: #f8fafc;
+    color: #2d3436;
+}
+
+.llm-test-status.hidden {
+    display: none;
+}
+
+.llm-test-status.ok {
+    background: #d1fae5;
+    color: #065f46;
+    border-color: #059669;
+}
+
+.llm-test-status.err {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #dc2626;
+}
+
+
+

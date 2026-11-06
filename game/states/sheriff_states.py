@@ -40,7 +40,8 @@ class SheriffElectionState(GameState):
         for candidate in candidates:
             candidate.is_sheriff_candidate = True
 
-        self.game.election_players = candidates
+        self.game.election_players = list(candidates)
+        self.game.initial_election_players = list(candidates)
 
         # Announce election decisions simultaneously in player seat order
         pending_election_logs.sort(key=lambda item: self.game.players.index(item[0]) if item[0] in self.game.players else 0)
@@ -74,20 +75,143 @@ class SheriffElectionState(GameState):
             return "day_announcement", {}
 
 
+def _withdraw_candidate(game: Game, player: Player):
+    """Removes a candidate from the Sheriff election and logs the withdrawal (退水)."""
+    if player in game.election_players:
+        game.election_players.remove(player)
+    player.is_sheriff_candidate = False
+    setattr(player, "withdrew_in_speech", False)
+    game.log(
+        LogEntry(
+            log_type=LogType.SHERIFF_WITHDRAW,
+            message={
+                "en": f"{player.name} withdrew from the Sheriff election.",
+                "zh": f"{player.name} 宣布退水，退出警长竞选。",
+            },
+            source=player,
+            camps=["All"],
+        )
+    )
+
+
+def _auto_elect_or_cancel_if_needed(game: Game) -> bool:
+    """Checks if 0 or 1 candidates remain after withdrawals and resolves the election immediately.
+
+    Returns:
+        True if the election is already resolved (0 or 1 candidate remaining), False if >= 2 remain.
+    """
+    remaining = list(game.election_players)
+    if len(remaining) == 0:
+        for p in game.players:
+            p.is_sheriff_candidate = False
+        game.election_players = []
+        game.log(
+            LogEntry(
+                log_type=LogType.SYSTEM,
+                message={
+                    "en": "All candidates withdrew. No Sheriff is elected.",
+                    "zh": "所有候选人均已退水，本局没有警长。",
+                },
+                camps=["All"],
+            )
+        )
+        return True
+    if len(remaining) == 1:
+        sheriff = remaining[0]
+        game.sheriff = sheriff
+        sheriff.is_sheriff = True
+        for p in game.players:
+            p.is_sheriff_candidate = False
+        game.election_players = []
+        game.log(
+            LogEntry(
+                log_type=LogType.SHERIFF_ELECTED,
+                message={
+                    "en": f"All other candidates withdrew. {sheriff.name} is elected Sheriff automatically!",
+                    "zh": f"其他候选人已退水，{sheriff.name} 自动当选警长！",
+                },
+                target=sheriff,
+                camps=["All"],
+            )
+        )
+        return True
+    return False
+
+
 class SheriffSpeechState(GameState):
     """State for players who join the sheriff election."""
 
     def __init__(self, game: Game, **kwargs):
         super().__init__(game, **kwargs)
+        self._resolved_early = False
 
     @state_handler
     def handle(self):
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "All election players will now give their speeches.", "zh": "请竞选玩家发表竞选演说。"}, camps=["All"]))
-        for player in self.game.election_players:
+        for player in list(self.game.election_players):
+            setattr(player, "withdrew_in_speech", False)
             speech = player.controller.get_speech(player)
             self.game.log(LogEntry(log_type=LogType.SPEECH, message={"en": f"({player.name}): {speech}", "zh": f"({player.name}): {speech}"}, source=player, camps=["All"]))
+            if getattr(player, "withdrew_in_speech", False):
+                _withdraw_candidate(self.game, player)
+
+        if len(self.game.election_players) <= 1:
+            self._resolved_early = _auto_elect_or_cancel_if_needed(self.game)
 
     def transition(self):
+        if self._resolved_early or len(self.game.election_players) <= 1:
+            return "day_announcement", {}
+        return "sheriff_withdraw", {}
+
+
+class SheriffWithdrawState(GameState):
+    """State allowing remaining Sheriff candidates to withdraw (退水) after hearing all campaign speeches."""
+
+    def __init__(self, game: Game, **kwargs):
+        super().__init__(game, **kwargs)
+        self._resolved = False
+
+    @state_handler
+    def handle(self):
+        candidates = list(self.game.election_players)
+        if len(candidates) <= 1:
+            self._resolved = _auto_elect_or_cancel_if_needed(self.game)
+            return
+
+        self.game.log(
+            LogEntry(
+                log_type=LogType.SYSTEM,
+                message={
+                    "en": "Candidates may now choose to withdraw from the Sheriff election.",
+                    "zh": "现在是警上退水环节，候选人可选择退水。",
+                },
+                camps=["All"],
+            )
+        )
+
+        withdrawn_players: list[Player] = []
+        with ThreadPoolExecutor() as executor:
+            future_to_candidate = {
+                executor.submit(c.controller.get_sheriff_withdraw_decision, c): c
+                for c in candidates
+            }
+            for future in as_completed(future_to_candidate):
+                cand = future_to_candidate[future]
+                try:
+                    if future.result():
+                        withdrawn_players.append(cand)
+                except Exception:
+                    pass
+
+        withdrawn_players.sort(key=lambda p: self.game.players.index(p) if p in self.game.players else 0)
+        for cand in withdrawn_players:
+            _withdraw_candidate(self.game, cand)
+
+        self._resolved = _auto_elect_or_cancel_if_needed(self.game)
+
+    def transition(self):
+        if self._resolved or len(self.game.election_players) <= 1:
+            return "day_announcement", {}
         return "sheriff_vote", {}
 
 
@@ -101,7 +225,8 @@ class SheriffVoteState(GameState):
     def handle(self):
         self.game.log(LogEntry(log_type=LogType.SYSTEM, message={"en": "All living players who are not candidates will now vote for the sheriff.", "zh": "请警下玩家开始投票。"}, camps=["All"]))
         
-        voters = [p for p in self.game.players if p.is_alive and p not in self.game.election_players]
+        initial_ballot = getattr(self.game, "initial_election_players", None) or self.game.election_players
+        voters = [p for p in self.game.players if p.is_alive and p not in initial_ballot and p not in self.game.election_players]
         candidates = self.game.election_players
 
         if not voters:

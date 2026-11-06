@@ -1,4 +1,7 @@
 Who do you vote for to be sheriff? Choose from: {potential_targets}. You can also abstain.
+- [Sheriff Vote Tactics]:
+  1. As a [Good Player]: Compare competing Seer claims, their check rationale, and Badge Flow plans, and vote for the most credible Seer/leader.
+  2. As a [Werewolf]: Either vote for your Fake-Seer teammate (冲锋票) to secure the 1.5x badge, or vote for the real Seer (倒钩票) if your teammate's bluff collapsed and you want deep cover.
 
 You MUST respond with a valid JSON object in the following format:
-{{ "thought": "...", "action": {{ "vote_for_sheriff": "PlayerName" or null }} }}
+{{ "thought": "1.[Seer Claim Comparison]... 2.[Alignment Strategy]... 3.[Decision]...", "action": {{ "vote_for_sheriff": "PlayerName" or null }} }}

@@ -1,8 +1,10 @@
 import logging
 import os
+import platform
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import urllib.request
 import wave
@@ -17,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 # Domain-specific prompt for Whisper to boost Werewolf terminology and bilingual ZH/EN accuracy
 WEREWOLF_DOMAIN_PROMPT_ZH = (
-    "简体中文，English。狼人杀游戏发言：预言家、女巫、猎人、守卫、白狼王、狼人、村民、"
-    "警长、上警、退水、金水、查杀、银水、自刀、悍跳、倒钩、冲票、归票、"
+    "简体中文，English。狼人杀游戏发言：预言家、女巫、猎人、守卫、黑狼王、白狼王、狼人、村民、"
+    "警长、上警、退水、金水、查杀、银水、自刀、悍跳、倒钩、冲锋、冲票、归票、同守同救、奶穿、"
     "1号玩家、2号玩家、3号玩家、4号玩家、5号玩家、6号玩家、7号玩家、8号玩家、9号玩家、Player 1、Player 2。"
 )
 WEREWOLF_DOMAIN_PROMPT_EN = (
@@ -29,14 +31,46 @@ WEREWOLF_DOMAIN_PROMPT_EN = (
 
 SENSEVOICE_TAG_PATTERN = re.compile(r"<\|[^|>]+?\|>")
 
+# Post-ASR hotword correction for common Chinese Werewolf homophones
+WEREWOLF_HOTWORD_REPLACEMENTS: Tuple[Tuple[str, str], ...] = (
+    ("汗跳", "悍跳"),
+    ("汉跳", "悍跳"),
+    ("旱跳", "悍跳"),
+    ("焊跳", "悍跳"),
+    ("警会流", "警徽流"),
+    ("警灰流", "警徽流"),
+    ("警回流", "警徽流"),
+    ("倒勾", "倒钩"),
+    ("导购狼", "倒钩狼"),
+    ("茶杀", "查杀"),
+    ("察杀", "查杀"),
+    ("迎水", "银水"),
+    ("退睡", "退水"),
+    ("上井", "上警"),
+    ("归飘", "归票"),
+    ("圭票", "归票"),
+)
+
+
+def _format_model_label(backend_name: str, whisper_model: str = "large-v3-turbo", accel: str = "") -> str:
+    suffix = f" · {accel}" if accel else ""
+    if backend_name == "paraformer":
+        return f"Paraformer-Large (int8 ONNX{suffix})"
+    if backend_name == "sensevoice":
+        return f"SenseVoiceSmall (int8 ONNX{suffix})"
+    return f"Faster-Whisper ({whisper_model}{suffix})"
+
+
 # Thread-safe global progress state for pre-game model downloading & initialization
 _progress_lock = threading.Lock()
+_default_backend = ASR_CONFIG.get("backend", "paraformer")
 _download_state: Dict[str, Any] = {
     "status": "not_downloaded",  # "not_downloaded" | "downloading" | "loading" | "ready" | "error"
-    "backend": ASR_CONFIG.get("backend", "sensevoice"),
-    "model": "SenseVoiceSmall (int8 ONNX)"
-    if ASR_CONFIG.get("backend", "sensevoice") == "sensevoice"
-    else f"Faster-Whisper ({ASR_CONFIG.get('whisper_model', 'large-v3-turbo')})",
+    "backend": _default_backend,
+    "model": _format_model_label(
+        _default_backend,
+        ASR_CONFIG.get("whisper_model", "large-v3-turbo"),
+    ),
     "percent": 0.0,
     "downloaded_bytes": 0,
     "total_bytes": 0,
@@ -62,14 +96,34 @@ def get_download_status() -> Dict[str, Any]:
 def is_model_cached(
     backend: Optional[str] = None,
     sensevoice_repo_id: Optional[str] = None,
+    paraformer_repo_id: Optional[str] = None,
     whisper_model: Optional[str] = None,
     cache_dir: Optional[str] = None,
 ) -> bool:
     """Checks whether the selected ASR model files already exist on disk."""
-    backend_name = (backend or ASR_CONFIG.get("backend", "sensevoice")).strip().lower()
+    backend_name = (backend or ASR_CONFIG.get("backend", "paraformer")).strip().lower()
     resolved_cache = cache_dir or ASR_CONFIG.get(
         "cache_dir", os.path.join(os.path.expanduser("~"), ".cache", "werewolf_asr")
     )
+
+    if backend_name == "paraformer":
+        repo_id = paraformer_repo_id or ASR_CONFIG.get(
+            "paraformer_repo_id",
+            "csukuangfj/sherpa-onnx-paraformer-zh-2024-03-09",
+        )
+        if os.path.isdir(repo_id):
+            has_model = os.path.exists(os.path.join(repo_id, "model.int8.onnx")) or os.path.exists(
+                os.path.join(repo_id, "model.onnx")
+            )
+            has_tokens = os.path.exists(os.path.join(repo_id, "tokens.txt"))
+            return has_model and has_tokens
+
+        model_dir = os.path.join(resolved_cache, "paraformer")
+        has_model = os.path.exists(os.path.join(model_dir, "model.int8.onnx")) or os.path.exists(
+            os.path.join(model_dir, "model.onnx")
+        )
+        has_tokens = os.path.exists(os.path.join(model_dir, "tokens.txt"))
+        return has_model and has_tokens and os.path.getsize(os.path.join(model_dir, "tokens.txt")) > 0
 
     if backend_name == "sensevoice":
         repo_id = sensevoice_repo_id or ASR_CONFIG.get(
@@ -126,11 +180,37 @@ def download_file_with_progress(
 
 
 def clean_transcription_text(text: str) -> str:
-    """Removes special ASR control/emotion tags (e.g., <|zh|><|NEUTRAL|><|Speech|>) and normalizes whitespace."""
+    """Removes special ASR control/emotion tags (e.g., <|zh|><|NEUTRAL|><|Speech|>) and normalizes Werewolf terms."""
     if not text:
         return ""
     cleaned = SENSEVOICE_TAG_PATTERN.sub("", text)
-    return re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    for wrong, right in WEREWOLF_HOTWORD_REPLACEMENTS:
+        if wrong in cleaned:
+            cleaned = cleaned.replace(wrong, right)
+    return cleaned
+
+
+def _resolve_sherpa_provider(device: str) -> str:
+    """Resolves the optimal ONNX execution provider ('coreml' on Mac, 'cuda' on NVIDIA, or 'cpu')."""
+    dev = (device or "auto").strip().lower()
+    if dev in ("coreml", "mps", "metal"):
+        return "coreml"
+    if dev in ("cuda", "gpu"):
+        return "cuda"
+    if dev == "cpu":
+        return "cpu"
+    # Auto-detect Mac Apple Silicon / CoreML or CUDA
+    if sys.platform == "darwin":
+        return "coreml"
+    try:
+        import ctranslate2
+
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda"
+    except Exception:
+        pass
+    return "cpu"
 
 
 def load_audio_16k_mono(audio_path: str, target_sr: int = 16000) -> Tuple[np.ndarray, int]:
@@ -210,6 +290,134 @@ def load_audio_16k_mono(audio_path: str, target_sr: int = 16000) -> Tuple[np.nda
     )
 
 
+class ParaformerBackend:
+    """Alibaba FunASR Paraformer-Large backend powered by sherpa-onnx (~220MB int8 ONNX, CoreML/CUDA/CPU)."""
+
+    def __init__(
+        self,
+        repo_id: str,
+        cache_dir: str,
+        num_threads: int = 4,
+        device: str = "auto",
+    ):
+        try:
+            import sherpa_onnx
+        except ImportError as e:
+            raise RuntimeError(
+                "Paraformer-Large backend requires 'sherpa-onnx'. "
+                "Please install audio dependencies via: pip install -r requirements-audio.txt"
+            ) from e
+
+        self.repo_id = repo_id
+        self.cache_dir = cache_dir
+        self.num_threads = max(1, int(num_threads))
+        self.provider = _resolve_sherpa_provider(device)
+
+        model_path, tokens_path = self._ensure_model_files()
+        _update_progress(
+            status="loading",
+            percent=95.0,
+            message=f"Loading Paraformer-Large ({self.provider.upper()})...",
+        )
+        logger.info(
+            f"Loading Paraformer-Large ONNX model from {model_path} "
+            f"(provider={self.provider}, threads={self.num_threads})"
+        )
+        try:
+            self.recognizer = sherpa_onnx.OfflineRecognizer.from_paraformer(
+                paraformer=model_path,
+                tokens=tokens_path,
+                num_threads=self.num_threads,
+                decoding_method="greedy_search",
+                debug=False,
+                provider=self.provider,
+            )
+        except Exception as provider_err:
+            if self.provider != "cpu":
+                logger.warning(
+                    f"Sherpa-ONNX provider '{self.provider}' failed ({provider_err}); falling back to multi-core CPU."
+                )
+                self.provider = "cpu"
+                self.recognizer = sherpa_onnx.OfflineRecognizer.from_paraformer(
+                    paraformer=model_path,
+                    tokens=tokens_path,
+                    num_threads=self.num_threads,
+                    decoding_method="greedy_search",
+                    debug=False,
+                    provider="cpu",
+                )
+            else:
+                raise
+
+    def _ensure_model_files(self) -> Tuple[str, str]:
+        """Downloads or locates Paraformer-Large int8 ONNX model and tokens.txt with real-time byte progress."""
+        if os.path.isdir(self.repo_id):
+            local_dir = self.repo_id
+            int8_candidate = os.path.join(local_dir, "model.int8.onnx")
+            fp32_candidate = os.path.join(local_dir, "model.onnx")
+            model_path = int8_candidate if os.path.exists(int8_candidate) else fp32_candidate
+            tokens_path = os.path.join(local_dir, "tokens.txt")
+            if not os.path.exists(model_path) or not os.path.exists(tokens_path):
+                raise FileNotFoundError(
+                    f"Paraformer model directory '{local_dir}' must contain model.int8.onnx (or model.onnx) and tokens.txt"
+                )
+            return model_path, tokens_path
+
+        target_dir = os.path.join(self.cache_dir, "paraformer")
+        os.makedirs(target_dir, exist_ok=True)
+        model_path = os.path.join(target_dir, "model.int8.onnx")
+        tokens_path = os.path.join(target_dir, "tokens.txt")
+
+        base_url = f"https://huggingface.co/{self.repo_id}/resolve/main"
+
+        if not os.path.exists(tokens_path) or os.path.getsize(tokens_path) == 0:
+            _update_progress(
+                status="downloading",
+                current_file="tokens.txt",
+                percent=2.0,
+                message="Downloading Paraformer tokens.txt...",
+            )
+            download_file_with_progress(f"{base_url}/tokens.txt", tokens_path)
+
+        if not os.path.exists(model_path) or os.path.getsize(model_path) == 0:
+            def on_progress(downloaded: int, total: int) -> None:
+                pct = (downloaded / total * 90.0 + 3.0) if total > 0 else 50.0
+                mb_done = downloaded / (1024 * 1024)
+                mb_total = total / (1024 * 1024) if total > 0 else 225.0
+                _update_progress(
+                    status="downloading",
+                    current_file="model.int8.onnx",
+                    downloaded_bytes=downloaded,
+                    total_bytes=total,
+                    percent=round(min(93.0, pct), 1),
+                    message=f"Downloading Paraformer-Large ({mb_done:.1f} / {mb_total:.1f} MB)...",
+                )
+
+            _update_progress(
+                status="downloading",
+                current_file="model.int8.onnx",
+                percent=3.0,
+                message="Downloading Paraformer-Large (model.int8.onnx)...",
+            )
+            download_file_with_progress(
+                f"{base_url}/model.int8.onnx",
+                model_path,
+                progress_callback=on_progress,
+            )
+
+        return model_path, tokens_path
+
+    def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
+        samples, sample_rate = load_audio_16k_mono(audio_path, target_sr=16000)
+        if samples.size == 0:
+            return ""
+        stream = self.recognizer.create_stream()
+        stream.accept_waveform(sample_rate, samples)
+        self.recognizer.decode_stream(stream)
+        raw_text = getattr(stream.result, "text", "") or ""
+        return clean_transcription_text(raw_text)
+
+
 class SenseVoiceBackend:
     """Alibaba SenseVoiceSmall backend powered by sherpa-onnx (int8 quantized ONNX)."""
 
@@ -243,23 +451,29 @@ class SenseVoiceBackend:
             f"Loading SenseVoiceSmall ONNX model from {model_path} "
             f"(provider={self.provider}, threads={self.num_threads})"
         )
-        self.recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
-            model=model_path,
-            tokens=tokens_path,
-            num_threads=self.num_threads,
-            use_itn=True,
-            debug=False,
-            provider=self.provider,
-        )
+        try:
+            self.recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
+                model=model_path,
+                tokens=tokens_path,
+                num_threads=self.num_threads,
+                use_itn=True,
+                debug=False,
+                provider=self.provider,
+            )
+        except Exception:
+            self.provider = "cpu"
+            self.recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
+                model=model_path,
+                tokens=tokens_path,
+                num_threads=self.num_threads,
+                use_itn=True,
+                debug=False,
+                provider="cpu",
+            )
 
     @staticmethod
     def _resolve_provider(device: str) -> str:
-        if not device or device == "auto":
-            return "cpu"
-        dev = device.lower()
-        if dev in ("cuda", "coreml", "cpu"):
-            return dev
-        return "cpu"
+        return _resolve_sherpa_provider(device)
 
     def _ensure_model_files(self) -> Tuple[str, str]:
         """Downloads or locates SenseVoiceSmall int8 ONNX model and tokens.txt with real-time byte progress."""
@@ -331,7 +545,7 @@ class SenseVoiceBackend:
 
 
 class FasterWhisperBackend:
-    """Whisper backend powered by CTranslate2 (`faster-whisper`)."""
+    """Whisper backend powered by Apple Metal GPU (`mlx-whisper` on Mac arm64) or CTranslate2 (`faster-whisper` on CUDA/CPU)."""
 
     REPO_MAP = {
         "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
@@ -342,6 +556,15 @@ class FasterWhisperBackend:
         "large-v3": "Systran/faster-whisper-large-v3",
     }
 
+    MLX_REPO_MAP = {
+        "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
+        "turbo": "mlx-community/whisper-large-v3-turbo",
+        "large-v3": "mlx-community/whisper-large-v3-mlx",
+        "medium": "mlx-community/whisper-medium-mlx",
+        "small": "mlx-community/whisper-small-mlx",
+        "base": "mlx-community/whisper-base-mlx",
+    }
+
     def __init__(
         self,
         model_size: str = "large-v3-turbo",
@@ -350,18 +573,46 @@ class FasterWhisperBackend:
         num_threads: int = 4,
         cache_dir: Optional[str] = None,
     ):
+        self.model_size = model_size
+        self.cache_dir = cache_dir or os.path.join(os.path.expanduser("~"), ".cache", "werewolf_asr")
+        self.use_mlx = False
+        self.provider = "cpu"
+        self.mlx_repo = self.MLX_REPO_MAP.get(model_size, "mlx-community/whisper-large-v3-turbo")
+
+        # 1. On Apple Silicon Mac (M1/M2/M3/M4), prefer native Metal GPU via mlx-whisper if installed
+        if (
+            sys.platform == "darwin"
+            and platform.machine() == "arm64"
+            and (not device or device.lower() in ("auto", "mps", "metal", "gpu", "mlx"))
+        ):
+            try:
+                import mlx_whisper  # noqa: F401
+
+                self.use_mlx = True
+                self.provider = "metal-gpu"
+                _update_progress(
+                    status="loading",
+                    percent=95.0,
+                    message=f"Loading MLX-Whisper ({model_size}) on Apple Metal GPU...",
+                )
+                logger.info(f"Using Apple Metal GPU acceleration via mlx-whisper ({self.mlx_repo})")
+                return
+            except ImportError:
+                pass
+
+        # 2. Otherwise use CTranslate2 (faster-whisper) with CUDA or multi-threaded CPU
         try:
             from faster_whisper import WhisperModel
         except ImportError as e:
             raise RuntimeError(
-                "Faster-Whisper backend requires 'faster-whisper'. "
+                "Faster-Whisper backend requires 'faster-whisper' (or 'mlx-whisper' on Apple Silicon). "
                 "Please install audio dependencies via: pip install -r requirements-audio.txt"
             ) from e
 
         resolved_device, resolved_compute = self._resolve_device_and_compute(device, compute_type)
-        self.model_size = model_size
-        self.cache_dir = cache_dir or os.path.join(os.path.expanduser("~"), ".cache", "werewolf_asr")
-        local_model_dir = self._ensure_whisper_files(model_size)
+        self.provider = resolved_device
+        self.num_threads = max(1, int(num_threads))
+        self.local_model_dir = self._ensure_whisper_files(model_size)
 
         _update_progress(
             status="loading",
@@ -370,15 +621,31 @@ class FasterWhisperBackend:
         )
         logger.info(
             f"Loading Faster-Whisper model '{model_size}' "
-            f"(device={resolved_device}, compute_type={resolved_compute}, threads={num_threads})"
+            f"(device={resolved_device}, compute_type={resolved_compute}, threads={self.num_threads})"
         )
-        self.model = WhisperModel(
-            local_model_dir,
-            device=resolved_device,
-            compute_type=resolved_compute,
-            cpu_threads=max(1, int(num_threads)),
-            download_root=self.cache_dir,
-        )
+        try:
+            self.model = WhisperModel(
+                self.local_model_dir,
+                device=resolved_device,
+                compute_type=resolved_compute,
+                cpu_threads=self.num_threads,
+                download_root=self.cache_dir,
+            )
+        except Exception as init_err:
+            if resolved_device != "cpu":
+                logger.warning(
+                    f"Faster-Whisper CUDA initialization failed ({init_err}); falling back to CPU int8."
+                )
+                self.provider = "cpu"
+                self.model = WhisperModel(
+                    self.local_model_dir,
+                    device="cpu",
+                    compute_type="int8",
+                    cpu_threads=self.num_threads,
+                    download_root=self.cache_dir,
+                )
+            else:
+                raise
 
     def _ensure_whisper_files(self, model_size: str) -> str:
         if os.path.isdir(model_size):
@@ -434,7 +701,7 @@ class FasterWhisperBackend:
         resolved_device = "cpu"
         if device and device.lower() in ("cuda", "cpu"):
             resolved_device = device.lower()
-        elif not device or device.lower() == "auto":
+        elif not device or device.lower() in ("auto", "gpu"):
             try:
                 import ctranslate2
 
@@ -459,16 +726,58 @@ class FasterWhisperBackend:
 
         prompt = WEREWOLF_DOMAIN_PROMPT_ZH if norm_lang != "en" else WEREWOLF_DOMAIN_PROMPT_EN
 
-        segments, _info = self.model.transcribe(
-            samples,
-            language=None if norm_lang == "auto" else norm_lang,
-            initial_prompt=prompt,
-            vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 400},
-            beam_size=2,
-            condition_on_previous_text=False,
-        )
-        text = " ".join(seg.text.strip() for seg in segments if seg.text and seg.text.strip())
+        if getattr(self, "use_mlx", False):
+            import mlx_whisper
+
+            res = mlx_whisper.transcribe(
+                samples,
+                path_or_hf_repo=self.mlx_repo,
+                language=None if norm_lang == "auto" else norm_lang,
+                initial_prompt=prompt,
+                condition_on_previous_text=False,
+            )
+            return clean_transcription_text(res.get("text", "") if isinstance(res, dict) else str(res))
+
+        try:
+            segments, _info = self.model.transcribe(
+                samples,
+                language=None if norm_lang == "auto" else norm_lang,
+                initial_prompt=prompt,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 400},
+                beam_size=1,
+                without_timestamps=True,
+                condition_on_previous_text=False,
+            )
+            text = " ".join(seg.text.strip() for seg in segments if seg.text and seg.text.strip())
+        except Exception as cuda_err:
+            if getattr(self, "provider", "cpu") == "cuda" and hasattr(self, "local_model_dir"):
+                logger.warning(
+                    f"CUDA runtime error during Whisper transcription ({cuda_err}); switching to CPU int8."
+                )
+                from faster_whisper import WhisperModel
+
+                self.provider = "cpu"
+                self.model = WhisperModel(
+                    self.local_model_dir,
+                    device="cpu",
+                    compute_type="int8",
+                    cpu_threads=getattr(self, "num_threads", 4),
+                    download_root=self.cache_dir,
+                )
+                segments, _info = self.model.transcribe(
+                    samples,
+                    language=None if norm_lang == "auto" else norm_lang,
+                    initial_prompt=prompt,
+                    vad_filter=True,
+                    vad_parameters={"min_silence_duration_ms": 400},
+                    beam_size=1,
+                    without_timestamps=True,
+                    condition_on_previous_text=False,
+                )
+                text = " ".join(seg.text.strip() for seg in segments if seg.text and seg.text.strip())
+            else:
+                raise
         return clean_transcription_text(text)
 
 
@@ -479,21 +788,26 @@ class AudioTranscriber:
         self,
         backend: Optional[str] = None,
         whisper_model: Optional[str] = None,
+        paraformer_repo_id: Optional[str] = None,
         sensevoice_repo_id: Optional[str] = None,
         device: Optional[str] = None,
         compute_type: Optional[str] = None,
         num_threads: Optional[int] = None,
         cache_dir: Optional[str] = None,
     ):
-        self.backend_name = (backend or ASR_CONFIG.get("backend", "sensevoice")).strip().lower()
+        self.backend_name = (backend or ASR_CONFIG.get("backend", "paraformer")).strip().lower()
         self.whisper_model = whisper_model or ASR_CONFIG.get("whisper_model", "large-v3-turbo")
+        self.paraformer_repo_id = paraformer_repo_id or ASR_CONFIG.get(
+            "paraformer_repo_id",
+            "csukuangfj/sherpa-onnx-paraformer-zh-2024-03-09",
+        )
         self.sensevoice_repo_id = sensevoice_repo_id or ASR_CONFIG.get(
             "sensevoice_repo_id",
             "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
         )
         self.device = device or ASR_CONFIG.get("device", "auto")
         self.compute_type = compute_type or ASR_CONFIG.get("compute_type", "int8")
-        self.num_threads = int(num_threads or ASR_CONFIG.get("num_threads", 4))
+        self.num_threads = int(num_threads or ASR_CONFIG.get("num_threads", min(8, os.cpu_count() or 4)))
         self.cache_dir = cache_dir or ASR_CONFIG.get(
             "cache_dir", os.path.join(os.path.expanduser("~"), ".cache", "werewolf_asr")
         )
@@ -510,17 +824,27 @@ class AudioTranscriber:
             error=None,
         )
 
-    def _init_engine(self) -> Union[SenseVoiceBackend, FasterWhisperBackend]:
+    def _init_engine(self) -> Union[ParaformerBackend, SenseVoiceBackend, FasterWhisperBackend]:
         errors = []
-        order = (
-            ["sensevoice", "faster-whisper"]
-            if self.backend_name != "faster-whisper"
-            else ["faster-whisper", "sensevoice"]
-        )
+        if self.backend_name == "faster-whisper":
+            order = ["faster-whisper", "paraformer", "sensevoice"]
+        elif self.backend_name == "sensevoice":
+            order = ["sensevoice", "faster-whisper", "paraformer"]
+        else:
+            order = ["paraformer", "faster-whisper", "sensevoice"]
 
         for candidate in order:
             try:
-                if candidate == "sensevoice":
+                if candidate == "paraformer":
+                    engine = ParaformerBackend(
+                        repo_id=self.paraformer_repo_id,
+                        cache_dir=self.cache_dir,
+                        num_threads=self.num_threads,
+                        device=self.device,
+                    )
+                    self.backend_name = "paraformer"
+                    return engine
+                elif candidate == "sensevoice":
                     engine = SenseVoiceBackend(
                         repo_id=self.sensevoice_repo_id,
                         cache_dir=self.cache_dir,
@@ -553,15 +877,16 @@ class AudioTranscriber:
 
     def get_info(self) -> Dict[str, str]:
         """Returns metadata about the active transcription backend and model."""
-        model_label = (
-            "SenseVoiceSmall (int8 ONNX)"
-            if self.backend_name == "sensevoice"
-            else f"Faster-Whisper ({self.whisper_model})"
+        provider = getattr(self.engine, "provider", "") or ""
+        model_label = _format_model_label(
+            self.backend_name,
+            self.whisper_model,
+            accel=provider.upper() if provider else "",
         )
         return {
             "backend": self.backend_name,
             "model": model_label,
-            "device": self.device,
+            "device": provider or self.device,
         }
 
     def transcribe(self, audio_input: str, language: Optional[str] = None) -> str:
@@ -617,7 +942,7 @@ def start_model_preparation(
 ) -> Dict[str, Any]:
     """Starts downloading and initializing the selected ASR model in a background thread if not already running."""
     global _prepare_thread
-    target_backend = (backend or ASR_CONFIG.get("backend", "sensevoice")).strip().lower()
+    target_backend = (backend or ASR_CONFIG.get("backend", "paraformer")).strip().lower()
     target_whisper = whisper_model or ASR_CONFIG.get("whisper_model", "large-v3-turbo")
 
     current = get_download_status()
@@ -632,11 +957,7 @@ def start_model_preparation(
     ):
         return current
 
-    model_label = (
-        "SenseVoiceSmall (int8 ONNX)"
-        if target_backend == "sensevoice"
-        else f"Faster-Whisper ({target_whisper})"
-    )
+    model_label = _format_model_label(target_backend, target_whisper)
     _update_progress(
         status="downloading",
         backend=target_backend,
